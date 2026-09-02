@@ -82,28 +82,4 @@ The system will use synchronous HTTP communication (REST principles) for all int
 * **Decision 2: Deliberate Omission of Microservices.** We explicitly decided against adding caching layers (Redis) or message queues (RabbitMQ).
 * *Consequence:* For an internal operations tool with predictable traffic, these tools add unnecessary architectural complexity and maintenance costs. The current monolithic API structure handles the load securely and efficiently.
 
-1. What are the major parts and why does each exist?
-The backend API service: Exists to be the sole bouncer and logic engine. It enforces all the rules.
-
-The Relational Database: Exists to reliably track the state machine (Pending -> Completed) and store the immutable audit log.
-
-The Object Storage Bucket: Exists to hold heavy PDF files so they don't bloat and slow down the relational database.
-
-2. What is inside vs outside, and which externals are dependencies?
-Outside (Untrusted): The Client Application (the employee's phone or browser) and the public internet.
-
-Inside (Trusted): The Backend API, the Relational Database, and the Storage Bucket.
-
-External Dependency: The SSO Provider (Identity). It is an external service we rely on but do not control.
-
-3. How does information move, and where do trust / authorization checks matter?
-Information Movement: Information only moves in one direction: from the Client, through the API, and then into Storage/DB.
-
-Where Checks Matter: The authorization check happens exclusively at the API layer. The API acts as the strict Trust Boundary. No data touches the database or the storage bucket until the API verifies the token with the SSO.
-
-4. What happens when a dependency fails, and which spec requirement caused each decision?
-When a dependency fails: If the external SSO Provider goes down, our system fails securely. The API instantly returns a 503 Service Unavailable error, blocking everyone rather than accidentally letting unverified users into the HR portal.
-
-Which requirement caused this: The Security & RBAC requirement dictated the strict SSO validation. The Data Isolation constraint caused the decision to use a private Object Storage bucket. The Auditability requirement caused the decision to use database state locks and append-only logs.
-
 ---
