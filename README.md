@@ -1,6 +1,6 @@
 # Internal Operations Service Hub
 
-A lean, enterprise-grade backend architecture for managing HR requests, state transitions, and secure document fulfillment.
+A lean, enterprise-grade full-stack system architecture for managing HR requests, state transitions, and secure document fulfillment.
 
 ## Repository Structure
 * `/docs/product-spec.md` - Core requirements and acceptance criteria.
