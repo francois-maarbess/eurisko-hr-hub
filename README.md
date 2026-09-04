@@ -1,12 +1,30 @@
-# Internal Operations Service Hub
+# Employee Service Hub
 
-A lean, enterprise-grade full-stack system architecture for managing HR requests, state transitions, and secure document fulfillment.
+An internal service hub for submitting, routing, tracking, and resolving employee requests.
 
-## Repository Structure
-* `/docs/product-spec.md` - Core requirements and acceptance criteria.
-* `/docs/architecture.md` - System boundaries, trust boundaries, and component flow.
-* `/docs/data-model.md` - State lifecycle rules and database access patterns.
-* `/docs/decisions/ADR-001.md` - Architecture decision record for payload storage.
+## What the product does
 
-## Development Setup (Coming Soon)
-*Instructions for setting up the local development environment, including `npm install`, database migrations, and running the dev server, will be added in Week 2 once the initial codebase is bootstrapped.*
+Employees submit one request through a single portal instead of using scattered email and chat messages. They choose a department and request type, describe the issue, set a priority, and track the request until it is resolved.
+
+The initial departments are:
+
+| Department | Example request types |
+| --- | --- |
+| Human Resources | Employment letters, benefits, onboarding, workplace policies |
+| IT & Technical Support | Laptop problems, software, account access, email, VPN, equipment |
+| Facilities & Workplace | Repairs, desks, meeting rooms, badges, supplies |
+| Finance | Expenses, invoices, payment questions |
+| People Operations | Training, performance, employee wellbeing |
+
+Every request type belongs to exactly one department. An IT laptop request is therefore routed to the IT queue and cannot appear in the HR queue.
+
+## Documentation
+
+* `docs/product-spec.md` - Product scope, roles, requirements, API behavior, and acceptance criteria.
+* `docs/data-model.md` - Entities, constraints, state machine, authorization rules, and indexes.
+* `docs/architecture.md` - Components, trust boundaries, flows, failure handling, and operational controls.
+* `docs/decisions/ADR-001.md` - Decision to store document payloads outside the relational database.
+
+## Current repository status
+
+This repository currently contains the finalized product and technical specifications. Application code, migrations, and deployment configuration are intentionally not included in this specification phase.
