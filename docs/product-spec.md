@@ -1,8 +1,36 @@
-# Product Specification: Employee Service Hub
+# Product Specification: Internal Operations Service Hub
 
 ## 1. Purpose
 
-The Employee Service Hub gives employees one reliable place to request help, official documents, workplace services, and technical support. Every request is routed to an accountable department, tracked through a controlled lifecycle, and retained in an auditable history.
+The Internal Operations Service Hub gives employees one reliable place to request help, official documents, workplace services, and technical support. Every request is routed to an accountable department, tracked through a controlled lifecycle, and retained in an auditable history.
+
+### Known facts and constraints
+
+- The system is internal-only and uses company SSO.
+- Employees should not need to know which department owns a request type; routing derives ownership from the catalog.
+- A request belongs to exactly one department and one request type at a time.
+- Department membership is independent from platform role.
+- The system must preserve correctness when storage, database, SSO, or notification dependencies are unavailable.
+- The product is a service hub, not payroll processing, accounting, real-time chat, or automated document generation.
+
+### Do / Don't
+
+**Do**
+
+- Centralize requests in one intake system and make ownership, status, and next steps clear.
+- Enforce authorization and validation on the server for every sensitive operation.
+- Keep state transitions transactional and record meaningful changes in an append-only audit trail.
+- Keep documents private, validate uploads, and broker all downloads through the API.
+- Use durable asynchronous notifications, retries, and reconciliation for downstream work.
+
+**Don't**
+
+- Do not trust client-supplied identity, department ownership, or permission claims.
+- Do not allow cross-user or cross-department access.
+- Do not expose secrets, public storage URLs, document contents, tokens, or sensitive request text in logs.
+- Do not report failed mutations as successful or silently ignore dependency failures.
+- Do not accept unsupported or unsafe files, including video files.
+- Do not use email or chat as the system of record for request status.
 
 ## 2. Actors and stakeholders
 

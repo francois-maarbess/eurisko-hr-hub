@@ -1,4 +1,4 @@
-# Data Model: Employee Service Hub
+# Data Model: Internal Operations Service Hub
 
 ## 1. Entities
 

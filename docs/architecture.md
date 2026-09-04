@@ -1,4 +1,4 @@
-# Architecture: Employee Service Hub
+# Architecture: Internal Operations Service Hub
 
 ## 1. Scope and principles
 
