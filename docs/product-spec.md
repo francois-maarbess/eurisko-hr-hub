@@ -1,60 +1,153 @@
-# Product Specification: Internal Operations Service Hub
+# Product Specification: Employee Service Hub
 
-## 1. Problem / Context
-Employees right now ask for HR papers (like proof of work or pay letters, or even just asking for clarification in a certain topic) through random ways like emails and chat messages. This causes long waits, lost requests, and a total lack of history tracking. The goal is to build one main company website to make these requests the same for everyone and keep track of them.
+## 1. Purpose
 
-## 2. Known Facts
-* Employees request things like documents or ask for help in a specific subject.
-* HR finishing these requests is currently done by hand and not tracked.
-* Employees often need basic official papers, so they request them from the HR.
-* HR must review and approve these requests, and manually provide the documents.
+The Employee Service Hub gives employees one reliable place to request help, official documents, workplace services, and technical support. Every request is routed to an accountable department, tracked through a controlled lifecycle, and retained in an auditable history.
 
-## 3. Actors / Stakeholders
-* **Employee:** Starts requests, tracks progress, and downloads final documents.
-* **HR Administrator:** Looks over the list of requests, changes their status, and uploads the finished files.
-both are actor and stakeholder at the same time.
+## 2. Users and permissions
 
-## 4. Requirements
-### Functional Requirements
-* **Catalog:** Employees can view a standard list of requestable HR documents.
-* **Submission:** Employees can submit a request with optional context/notes, and must select a Priority Level (e.g., Low, Standard, Urgent).
-* **Tracking:** Employees can view the real-time status of their own requests.
-* **Queue Management:** HR Administrators have a centralized dashboard to view all incoming requests, which defaults to sorting by Priority Level so Urgent requests surface immediately.
-* **Cancellation**: employee must be able to cancel a request if its state is strictly "pending".
-* **State Management:** HR Administrators can update request statuses (e.g., *Pending*, *In Progress*, *Completed*, *Rejected*) and *Canceled* for employees.
-* **Fulfillment:** HR Administrators can upload the final document to a completed request, making it available for the employee to download, or another way to mark the request as "complete" is by simply writing a resolution note or an answer to a question from the employee(like clarification in a certain topic or if they're asking for help).
-* **Document Management:** HR Administrators can delete an uploaded document from a completed request (e.g., if the wrong file was uploaded), which securely purges the file and allows a replacement upload.
-* **Notifications:** The system integrates with Firebase Cloud Messaging to send real-time push notifications to employees and HR Administrators when a request status changes (e.g., Completed, Cancelled), ensuring they are alerted even if the application is closed.
+| Role | Permissions |
+| --- | --- |
+| Employee | Browse the catalog, create requests, view and cancel their own pending requests, download their own resolutions |
+| Department agent | View, claim, work on, reject, and resolve requests in assigned departments |
+| Department manager | All agent permissions plus manage department members and request types and re-route requests within policy |
+| System administrator | Configure all departments, members, catalogs, and requests; access cross-department reporting |
 
-### Non-Functional Requirements
-* **Security & RBAC:** Strict Role-Based Access Control ensuring standard users cannot access HR administrative functions.
-* **Data Isolation:** The backend logic must strictly isolate records; an API token must only be able to query the user's own historical data.
-* **Auditability:** The system architecture must include an unchangeable audit log for every state transition of a request (who changed what, and when). e.g if the hr approves the request then denies it later, the history log still shows both actions in the database, like this:
-{ request_id: 105, old_state: "PENDING", new_state: "COMPLETED", updated_by: "hr_admin_42", timestamp: "2026-08-25T14:30:00Z" }
-* **Rate limits**: the api must include strict rate limiting, for example 5 requests per minute, to prevent overwhelming the database.
-* **Data Retention:** To optimize storage costs and minimize security risks, the system must enforce an automated 30-day retention policy, permanently purging any document payloads in the storage bucket 30 days after fulfillment.
+Users authenticate through company SSO. Department membership is separate from the platform role, so one person may be an agent in more than one department.
 
-## 5. Assumptions, Constraints, & Unknowns
-* **Assumptions:** The system will use the company's existing identity provider / Single Sign-On (SSO) for authentication. The system operates entirely within the corporate intranet or behind a corporate VPN, meaning traffic is restricted to internal employees and authenticated HR personnel.
-* **Constraints:** Document payloads must reside exclusively in a private object storage bucket with public internet access completely disabled. Direct client-to-storage access is strictly prohibited; all file retrieval must be brokered and authorized dynamically through the backend API.
-* **Unknowns:** What are the strict Service Level Agreements (SLAs) for HR turnaround times? (time the HR is allowed to take to finish a request).
+## 3. Initial department catalog
 
-## 6. Non-Goals
-* **NO** automated document generation (HR will manually create and upload the PDFs for now).
-* **NO** paycheck handling, tracking money spent, or managing vacation days.
-* **NO** complex frontend UI animations; focus is strictly on data flow and state management. 
-* **NO** Live chat; The app will not include a real-time messaging system between HR and employees (communications are limited strictly to optional request notes).
+All catalog entries are active by default and have a stable identifier, description, owning department, and default priority.
 
-## 7. Acceptance Criteria
-* **Correct Behavior (Submission):** When an employee submits a request, it immediately appears in the HR Admin queue marked as "Pending".
-* **Correct Behavior (Fulfillment):** When an HR Admin attaches a file and updates the status to "Completed", the initiating employee can successfully download the file.
-* **Correct Behavior (Security):** If an employee attempts to query a request ID belonging to a different user, the backend strictly returns a 403 Forbidden error.
-* **Correct Behavior (Upload Limits)**: If an HR Admin attempts to upload an unsupported file type (like an .mp4 video), the system blocks the upload and returns an error.
-* **Correct Behavior (Cancellation)**: Given a request has a status of PENDING, When the initiating employee clicks "Cancel", Then the backend updates the state to CANCELLED and returns HTTP 200 OK.
-* **Correct Behavior (State Machine Enforcement):** Given a request has a status of IN_PROGRESS or COMPLETED, When the initiating employee attempts to cancel it, Then the backend rejects the action and returns an HTTP 400 Bad Request.
-* **Correct Behavior (Concurrency):** Given a PENDING request, When two HR Administrators attempt to claim the request at the exact same millisecond, Then the database locks the row, processing the first request and returning an HTTP 409 Conflict to the second administrator.
-* **Correct Behavior (Resolution Validation):** When an HR Administrator attempts to mark a request as COMPLETED, but the payload contains neither an attached file nor a resolution note, Then the API blocks the state transition and returns an HTTP 400 Bad Request.
-* **Correct Behavior (Storage Mismatch):** Given a request marked COMPLETED, When an employee attempts to download a file that was permanently deleted from the external storage bucket, Then the API handles the error and returns a 404 Not Found.
-* **Correct Behavior (Priority Routing):** Given multiple PENDING requests, When the HR Administrator opens their dashboard, Then the API returns the list sorted by Priority (Urgent first, then Standard, then Low) so critical issues are handled immediately.
-* **Correct Behavior (Data Lifecycle):** Given a document payload has existed in the external storage bucket for exactly 30 days, Then the storage system automatically and permanently deletes the file without requiring human intervention.
-* **Correct Behavior (Document Deletion):** When an HR Admin deletes an uploaded document, Then the system permanently shreds the file from the private storage bucket, clears the file reference text in the database, and records the deletion in the audit log.
+### Human Resources (`HR`)
+
+* Employment verification and employment letters
+* Payroll and payslip questions
+* Benefits and insurance
+* Onboarding and offboarding
+* Workplace policy questions
+
+### IT & Technical Support (`IT`)
+
+* Laptop or desktop problem
+* Software installation or update
+* Account or password access
+* Email or calendar problem
+* VPN or network access
+* Equipment request or replacement
+
+### Facilities & Workplace (`FAC`)
+
+* Office repair or maintenance
+* Desk or meeting-room problem
+* Access badge or building access
+* Office supplies
+* Workspace move or setup
+
+### Finance (`FIN`)
+
+* Expense reimbursement
+* Invoice or vendor question
+* Payment or banking question
+* Budget clarification
+
+### People Operations (`PEO`)
+
+* Training request
+* Performance support
+* Employee wellbeing
+* Workplace experience feedback
+
+## 4. Core workflow
+
+1. Employee selects an active department and request type.
+2. The API verifies that the request type belongs to that department and creates the request as `PENDING`.
+3. The owning department receives the request in its queue.
+4. An authorized agent claims the request, changing it to `IN_PROGRESS`.
+5. The agent adds a resolution note and/or an approved document.
+6. The agent marks it `COMPLETED`; at least one resolution artifact is required.
+7. The employee is notified and can read the resolution or download the document.
+
+### Statuses and transitions
+
+* `PENDING -> IN_PROGRESS`: owning department agent or manager claims the request.
+* `PENDING -> CANCELLED`: requesting employee cancels it.
+* `PENDING -> REJECTED`: owning department agent or manager rejects it with a reason.
+* `IN_PROGRESS -> COMPLETED`: owning department agent or manager supplies a resolution note or document.
+* `IN_PROGRESS -> REJECTED`: owning department agent or manager rejects it with a reason.
+* `COMPLETED`, `REJECTED`, and `CANCELLED` are terminal.
+
+Every transition records the actor, timestamp, previous status, new status, and reason or note where applicable.
+
+## 5. Functional requirements
+
+* **Catalog:** Employees can list active departments and request types. Inactive entries cannot receive new requests.
+* **Routing:** The request's `department_id` and `request_type_id` are stored at creation and validated together.
+* **Priority:** Employees choose `LOW`, `STANDARD`, or `URGENT`; queues sort urgent requests first, then oldest creation time.
+* **Employee history:** Employees can list and inspect only their own requests.
+* **Department queue:** Agents and managers can list only requests belonging to their assigned departments.
+* **Claiming:** Claiming is atomic; only one agent can claim an unclaimed request.
+* **Cancellation:** Employees can cancel only their own `PENDING` requests.
+* **Resolution:** Completion requires a non-empty resolution note, a document, or both.
+* **Documents:** Only authorized department staff can upload or delete a document. Downloads are brokered by the API.
+* **Notifications:** Notify the employee on creation, claim, rejection, completion, and cancellation. Notify department staff on new or re-routed requests.
+* **Audit:** Audit entries are append-only and cover creation, assignment, claims, status changes, document operations, membership changes, and catalog changes.
+
+## 6. Security and operational requirements
+
+* Enforce SSO token validation on every API request.
+* Enforce platform and department-scoped RBAC server-side; never trust a department ID supplied by the client.
+* Return `403 Forbidden` for cross-user or cross-department access.
+* Apply rate limits per authenticated identity and endpoint class; limits must be configurable rather than hard-coded to one universal value.
+* Keep documents in private object storage. Do not expose public URLs or direct client storage credentials.
+* Validate file size, MIME type, extension, and content signature. Reject unsupported types such as video files.
+* Retain document payloads for 30 days after completion, then permanently purge them through an automated job.
+* Log security-relevant failures without logging document contents, tokens, or sensitive request text.
+
+## 7. API behavior contract
+
+The implementation should expose equivalent REST operations:
+
+* `GET /departments` and `GET /departments/{id}/request-types`
+* `POST /requests`
+* `GET /requests` (employee-owned history or department-scoped queue)
+* `GET /requests/{id}`
+* `POST /requests/{id}/claim`
+* `POST /requests/{id}/cancel`
+* `PATCH /requests/{id}/status`
+* `POST /requests/{id}/documents`
+* `DELETE /requests/{id}/documents/{documentId}`
+* `GET /requests/{id}/documents/{documentId}/download`
+* `GET /requests/{id}/audit`
+
+Use `400` for invalid transitions or payloads, `403` for authorization failures, `404` when a resource is not visible or does not exist, `409` for concurrent claims, `413` for oversized files, and `503` when a required dependency is unavailable.
+
+## 8. Acceptance criteria
+
+1. An employee submitting an IT laptop request sees it in the IT queue as `PENDING`; it is absent from HR, Finance, and Facilities queues.
+2. A user without IT membership cannot read, claim, update, or download an IT request belonging to another employee.
+3. A user without ownership cannot read another employee's request, even if they know its identifier.
+4. Two simultaneous claims result in one successful claim and one `409 Conflict`.
+5. Completion without a resolution note and without a document returns `400 Bad Request`.
+6. Employees can cancel their own pending request and cannot cancel an in-progress or terminal request.
+7. Unsupported files, including `.mp4`, are rejected before storage.
+8. Deleting a document removes the storage object, clears its database reference, and creates an audit entry.
+9. A missing storage object returns `404 Not Found` rather than a broken download.
+10. Department queues sort `URGENT` before `STANDARD` before `LOW`, then oldest first.
+11. Completed documents are automatically deleted after 30 days.
+12. Every status transition has an immutable audit record.
+
+## 9. Non-goals
+
+* Automated document generation
+* Payroll processing, expense payment, or accounting
+* Real-time chat
+* Replacing the company identity provider
+* Complex animation or presentation-focused UI work
+
+## 10. Open decisions before implementation
+
+* Department-specific service-level targets
+* Maximum attachment size and allowed document formats
+* Notification preferences and escalation rules
+* Production hosting, backup, and disaster-recovery targets
