@@ -10,7 +10,7 @@
 - For the UI demo, the backend also needs `GET /requests` so the dashboard can render the full in-memory queue instead of a single hardcoded request card.
 
 ## Direct
-- I expanded the in-memory request model so each request includes `title`, `description`, `priority`, `status`, and optional `resolution_note`.
+- I expanded the in-memory request model so each request includes `title`, `description`, `priority`, `status`, and `resolution_note`.
 - I added `GET /requests` in `RequestsController` to return the full seeded queue (`req-1`, `req-2`, `req-3`).
 - I updated `RequestsService` to support `CANCELLED` as a valid state and to enforce the bounded state-machine rules.
 - I built a React queue dashboard in `frontend/src/TicketStatusManager.tsx` that renders cards for all requests, supports claim/resolve actions, accepts inline resolution notes, and shows per-card inline errors.
