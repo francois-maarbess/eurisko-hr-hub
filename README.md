@@ -54,3 +54,85 @@ Every request type belongs to exactly one department. An IT laptop request is th
 ## Current repository status
 
 This repository currently contains the finalized product and technical specifications. Application code, migrations, and deployment configuration are intentionally not included in this specification phase.
+
+## Run / Verify Instructions
+
+1. Install the backend dependencies:
+
+   ```bash
+   cd C:\EuriskoFinal
+   npm install
+   ```
+
+2. Install the frontend dependencies:
+
+   ```bash
+   cd C:\EuriskoFinal\frontend
+   npm install
+   ```
+
+3. Start the NestJS server in one terminal:
+
+   ```bash
+   cd C:\EuriskoFinal
+   npm run start:dev
+   ```
+
+4. Start the Vite frontend in a separate terminal:
+
+   ```bash
+   cd C:\EuriskoFinal\frontend
+   npm run dev
+   ```
+
+5. Open the frontend in a browser at `http://localhost:5173` and confirm the app loads.
+
+6. In a separate terminal, test the valid `PENDING -> CANCELLED` transition on a fresh server instance (restart the server first, because `req-1` starts as `PENDING` only on a clean boot):
+
+   ```bash
+   cd C:\EuriskoFinal
+   node -e "fetch('http://localhost:3000/requests/req-1/status', {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({status:'CANCELLED'})}).then(async r => { console.log('status', r.status); console.log(await r.text()); });"
+   ```
+
+7. Test the valid `PENDING -> IN_PROGRESS` transition:
+
+   ```bash
+   cd C:\EuriskoFinal
+   node -e "fetch('http://localhost:3000/requests/req-1/status', {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({status:'IN_PROGRESS'})}).then(async r => { console.log('status', r.status); console.log(await r.text()); });"
+   ```
+
+8. Test the valid `IN_PROGRESS -> COMPLETED` transition with a resolution note:
+
+   ```bash
+   cd C:\EuriskoFinal
+   node -e "fetch('http://localhost:3000/requests/req-2/status', {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({status:'COMPLETED', resolution_note:'Resolved successfully.'})}).then(async r => { console.log('status', r.status); console.log(await r.text()); });"
+   ```
+
+9. Test the invalid backward transition from a terminal state:
+
+   ```bash
+   cd C:\EuriskoFinal
+   node -e "fetch('http://localhost:3000/requests/req-3/status', {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({status:'PENDING'})}).then(async r => { console.log('status', r.status); console.log(await r.text()); });"
+   ```
+
+10. Test the invariant enforcement for completion without a `resolution_note`:
+
+   ```bash
+   cd C:\EuriskoFinal
+   node -e "fetch('http://localhost:3000/requests/req-1/status', {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({status:'COMPLETED'})}).then(async r => { console.log('status', r.status); console.log(await r.text()); });"
+   ```
+
+11. Test the invalid skip transition `PENDING -> COMPLETED` on a fresh server instance (restart the server first, because `req-1` starts as `PENDING` only on a clean boot):
+
+   ```bash
+   cd C:\EuriskoFinal
+   node -e "fetch('http://localhost:3000/requests/req-1/status', {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({status:'COMPLETED', resolution_note:'Note'})}).then(async r => { console.log('status', r.status); console.log(await r.text()); });"
+   ```
+
+Expected results:
+- The backend runs on `http://localhost:3000`.
+- The frontend runs on `http://localhost:5173`.
+- Valid transitions return `200 OK`.
+- `PENDING -> CANCELLED` is accepted and results in `CANCELLED`.
+- Invalid transitions return `400 Bad Request`.
+- Completion without `resolution_note` returns `400 Bad Request`.

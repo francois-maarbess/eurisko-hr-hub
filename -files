@@ -1,0 +1,64 @@
+[1mdiff --git a/README.md b/README.md[m
+[1mindex f986d60..827753d 100644[m
+[1m--- a/README.md[m
+[1m+++ b/README.md[m
+[36m@@ -54,3 +54,59 @@[m [mEvery request type belongs to exactly one department. An IT laptop request is th[m
+ ## Current repository status[m
+ [m
+ This repository currently contains the finalized product and technical specifications. Application code, migrations, and deployment configuration are intentionally not included in this specification phase.[m
+[32m+[m
+[32m+[m[32m## Run / Verify Instructions[m
+[32m+[m
+[32m+[m[32m1. Install dependencies:[m
+[32m+[m
+[32m+[m[32m   ```bash[m
+[32m+[m[32m   cd C:\EuriskoFinal[m
+[32m+[m[32m   npm install[m
+[32m+[m[32m   ```[m
+[32m+[m
+[32m+[m[32m2. Start the NestJS server:[m
+[32m+[m
+[32m+[m[32m   ```bash[m
+[32m+[m[32m   cd C:\EuriskoFinal[m
+[32m+[m[32m   npm start[m
+[32m+[m[32m   ```[m
+[32m+[m
+[32m+[m[32m3. In a separate terminal, test the valid `PENDING -> IN_PROGRESS` transition:[m
+[32m+[m
+[32m+[m[32m   ```bash[m
+[32m+[m[32m   cd C:\EuriskoFinal[m
+[32m+[m[32m   node -e "fetch('http://localhost:3000/requests/req-1/status', {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({status:'IN_PROGRESS'})}).then(async r => { console.log('status', r.status); console.log(await r.text()); });"[m
+[32m+[m[32m   ```[m
+[32m+[m
+[32m+[m[32m4. Test the valid `IN_PROGRESS -> COMPLETED` transition with a resolution note:[m
+[32m+[m
+[32m+[m[32m   ```bash[m
+[32m+[m[32m   cd C:\EuriskoFinal[m
+[32m+[m[32m   node -e "fetch('http://localhost:3000/requests/req-2/status', {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({status:'COMPLETED', resolution_note:'Resolved successfully.'})}).then(async r => { console.log('status', r.status); console.log(await r.text()); });"[m
+[32m+[m[32m   ```[m
+[32m+[m
+[32m+[m[32m5. Test the invalid backward transition from a terminal state:[m
+[32m+[m
+[32m+[m[32m   ```bash[m
+[32m+[m[32m   cd C:\EuriskoFinal[m
+[32m+[m[32m   node -e "fetch('http://localhost:3000/requests/req-3/status', {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({status:'PENDING'})}).then(async r => { console.log('status', r.status); console.log(await r.text()); });"[m
+[32m+[m[32m   ```[m
+[32m+[m
+[32m+[m[32m6. Test the invariant enforcement for completion without a `resolution_note`:[m
+[32m+[m
+[32m+[m[32m   ```bash[m
+[32m+[m[32m   cd C:\EuriskoFinal[m
+[32m+[m[32m   node -e "fetch('http://localhost:3000/requests/req-1/status', {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({status:'COMPLETED'})}).then(async r => { console.log('status', r.status); console.log(await r.text()); });"[m
+[32m+[m[32m   ```[m
+[32m+[m
+[32m+[m[32m7. Test the invalid skip transition `PENDING -> COMPLETED` on a fresh server instance (restart the server first, because `req-1` starts as `PENDING` only on a clean boot):[m
+[32m+[m
+[32m+[m[32m   ```bash[m
+[32m+[m[32m   cd C:\EuriskoFinal[m
+[32m+[m[32m   node -e "fetch('http://localhost:3000/requests/req-1/status', {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({status:'COMPLETED', resolution_note:'Note'})}).then(async r => { console.log('status', r.status); console.log(await r.text()); });"[m
+[32m+[m[32m   ```[m
+[32m+[m
+[32m+[m[32mExpected results:[m
+[32m+[m[32m- Valid transitions return `200 OK`.[m
+[32m+[m[32m- Invalid transitions return `400 Bad Request`.[m
+[32m+[m[32m- Completion without `resolution_note` returns `400 Bad Request`.[m
