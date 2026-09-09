@@ -138,3 +138,7 @@ Expected results:
 - `PENDING -> CANCELLED` is accepted and results in `CANCELLED`.
 - Invalid transitions return `400 Bad Request`.
 - Completion without `resolution_note` returns `400 Bad Request`.
+
+
+<img width="1919" height="902" alt="image" src="https://github.com/user-attachments/assets/150ab9ae-0abe-4dbc-a561-33ff9d8e3a55" />
+
