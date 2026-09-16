@@ -1,17 +1,12 @@
 import { Provider } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 
+export const PRISMA_CLIENT_TOKEN = 'PRISMA_CLIENT';
 export type PrismaService = PrismaClient;
 
 export const PrismaServiceProvider: Provider = {
-  provide: PrismaClient,
+  provide: PRISMA_CLIENT_TOKEN,
   useFactory: () => {
-    return new PrismaClient({
-      datasources: {
-        db: {
-          url: process.env.DATABASE_URL || 'file:./prisma/dev.db',
-        },
-      },
-    });
+    return new PrismaClient();
   },
 };

@@ -1,12 +1,10 @@
 import { PrismaClient } from '@prisma/client';
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 
 describe('Database Integration', () => {
   let prisma: PrismaClient;
 
   beforeAll(async () => {
-    const adapter = new PrismaBetterSqlite3({ url: 'file:./prisma/dev.db' });
-    prisma = new PrismaClient({ adapter });
+    prisma = new PrismaClient();
   });
 
   afterAll(async () => {

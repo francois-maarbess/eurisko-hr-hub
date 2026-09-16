@@ -1,12 +1,13 @@
-import { Controller, Post, Body, Get, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Request, Inject } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaClient } from '@prisma/client';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { PRISMA_CLIENT_TOKEN } from '../prisma.service';
 
 @Controller('auth')
 export class AuthController {
   constructor(
-    private readonly prisma: PrismaClient,
+    @Inject(PRISMA_CLIENT_TOKEN) private readonly prisma: PrismaClient,
     private readonly jwtService: JwtService,
   ) {}
 

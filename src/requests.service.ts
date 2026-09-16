@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, Inject } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
+import { PRISMA_CLIENT_TOKEN } from './prisma.service';
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   PENDING: ['IN_PROGRESS', 'CANCELLED', 'REJECTED'],
@@ -10,7 +11,7 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
 
 @Injectable()
 export class RequestsService {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(@Inject(PRISMA_CLIENT_TOKEN) private readonly prisma: PrismaClient) {}
 
   async findAll() {
     return this.prisma.request.findMany({

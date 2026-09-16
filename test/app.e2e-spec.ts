@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import { JwtService } from '@nestjs/jwt';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
@@ -15,11 +14,11 @@ describe('Service Request Flow (E2E)', () => {
   let agentToken: string;
 
   beforeAll(async () => {
-    process.env.DATABASE_URL = 'file:./prisma/dev.db';
+    const dbPath = require('path').resolve(__dirname, '..', 'prisma', 'dev.db');
+    process.env.DATABASE_URL = `file:${dbPath}`;
     process.env.JWT_SECRET = JWT_SECRET;
 
-    const adapter = new PrismaBetterSqlite3({ url: process.env.DATABASE_URL });
-    prisma = new PrismaClient({ adapter });
+    prisma = new PrismaClient();
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
