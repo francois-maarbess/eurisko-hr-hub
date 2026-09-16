@@ -14,18 +14,15 @@ An internal service hub for submitting, routing, tracking, and resolving employe
 ```bash
 git clone https://github.com/francois-maarbess/eurisko-hr-hub.git
 cd eurisko-hr-hub
-
-# Backend
 npm install
-
-# Frontend
 cd frontend && npm install && cd ..
 ```
 
 ### 2. Set up the database
 
 ```bash
-npx prisma migrate dev --name init
+npx prisma generate
+npx prisma migrate dev
 npx tsx prisma/seed.ts
 ```
 
