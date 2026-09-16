@@ -1,9 +1,14 @@
 node_modules
 /dist
+/generated
 npm-debug.log*
 
+# Database
+dev.db
+*.db
+*.db-journal
+
 # Prisma
-/generated/prisma
 prisma/*.db
 prisma/*.db-journal
 
@@ -19,7 +24,7 @@ prisma/*.db-journal
 .DS_Store
 Thumbs.db
 
-# AI agent skill files
+# AI agent tool files
 .agents/
 .claude/
 .cursor/
