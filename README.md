@@ -9,17 +9,17 @@ An internal service hub for submitting, routing, tracking, and resolving employe
 - Node.js 18+
 - npm
 
-### 1. Install dependencies
+### 1. Clone and install
 
 ```bash
+git clone https://github.com/francois-maarbess/eurisko-hr-hub.git
+cd eurisko-hr-hub
+
 # Backend
-cd eurisko-hr-hub-main
 npm install
 
 # Frontend
-cd frontend
-npm install
-cd ..
+cd frontend && npm install && cd ..
 ```
 
 ### 2. Set up the database
@@ -29,24 +29,17 @@ npx prisma migrate dev --name init
 npx tsx prisma/seed.ts
 ```
 
-### 3. Start the backend (terminal 1)
+### 3. Start the app
 
 ```bash
+# Terminal 1 — Backend (port 3000)
 npm run start:dev
+
+# Terminal 2 — Frontend (port 5173)
+cd frontend && npm run dev
 ```
 
-Backend runs on `http://localhost:3000`.
-
-### 4. Start the frontend (terminal 2)
-
-```bash
-cd frontend
-npm run dev
-```
-
-Frontend runs on `http://localhost:5173`.
-
-### 5. Use the app
+### 4. Use the app
 
 1. Open `http://localhost:5173`
 2. Log in as `alice@acme.com` (employee) or `bob@acme.com` (IT agent)
@@ -58,10 +51,10 @@ Frontend runs on `http://localhost:5173`.
 npm test
 ```
 
-This runs:
-- **Unit test**: Status transition business rules (10 cases)
-- **Integration test**: Prisma ↔ SQLite database lifecycle
-- **E2E test**: Full HTTP flow with auth, create, claim, complete, authorization, validation, regression
+23 tests covering:
+- **Unit**: Status transition business rules (10 cases)
+- **Integration**: Prisma ↔ SQLite database lifecycle
+- **E2E**: Full HTTP flow with auth, create, claim, complete, authorization, validation, regression
 
 ## API Endpoints
 
@@ -92,7 +85,7 @@ This runs:
 │   └── migrations/
 ├── test/
 │   ├── app.e2e-spec.ts    # E2E tests
-│   └── integration.spec.ts # Integration tests
+│   └── integration.spec.ts
 ├── frontend/
 │   └── src/
 │       ├── App.tsx
