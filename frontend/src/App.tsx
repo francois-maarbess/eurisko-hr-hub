@@ -38,7 +38,7 @@ export default function App() {
             Signed in as <strong>{user.name}</strong> ({user.email}) · {user.platformRole}
           </div>
         </div>
-        <button onClick={handleLogout} style={{ padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}>Sign Out</button>
+        <button onClick={handleLogout} style={{ padding: '0.5rem 1rem', borderRadius: '8px', border: 'none', background: '#dc3545', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>Sign Out</button>
       </div>
 
       <CreateRequestForm token={token} onCreated={() => setRefreshKey((k) => k + 1)} />

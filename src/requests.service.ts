@@ -62,6 +62,11 @@ export class RequestsService {
       throw new BadRequestException('Only PENDING requests can be claimed');
     }
 
+    // The request owner cannot claim their own request
+    if (request.employeeId === userId) {
+      throw new ConflictException('You cannot claim your own request');
+    }
+
     // Authorization: user must be a member of the request's department
     const membership = await this.prisma.departmentMember.findUnique({
       where: {
@@ -103,6 +108,23 @@ export class RequestsService {
     // Rejection requires reason
     if (dto.status === 'REJECTED' && (!dto.rejectionReason || dto.rejectionReason.trim() === '')) {
       throw new BadRequestException('A rejection reason is required when rejecting a request');
+    }
+
+    // The request owner cannot resolve their own request — only department agents can
+    if (dto.status === 'COMPLETED' || dto.status === 'REJECTED') {
+      if (request.employeeId === userId) {
+        throw new ConflictException('You cannot resolve your own request');
+      }
+
+      // Must be a department member
+      const membership = await this.prisma.departmentMember.findUnique({
+        where: {
+          userId_departmentId: { userId, departmentId: request.departmentId },
+        },
+      });
+      if (!membership || !membership.active) {
+        throw new ConflictException('You are not a member of this department');
+      }
     }
 
     const updateData: Record<string, any> = { status: dto.status };
