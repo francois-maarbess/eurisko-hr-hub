@@ -17,9 +17,6 @@ describe('Service Request Flow (E2E)', () => {
     const dbPath = require('path').resolve(__dirname, '..', 'prisma', 'dev.db');
     process.env.DATABASE_URL = `file:${dbPath}`;
     process.env.JWT_SECRET = JWT_SECRET;
-    // Deterministic AI path: e2e must not depend on network or a real key
-    // (Prisma auto-loads .env, which may contain GROQ_API_KEY locally).
-    delete process.env['GROQ_API_KEY'];
 
     prisma = new PrismaClient();
 
@@ -30,6 +27,11 @@ describe('Service Request Flow (E2E)', () => {
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
     await app.init();
+
+    // Deterministic AI path: e2e must not depend on network or a real key.
+    // Deleted AFTER init because PrismaClient construction reloads .env
+    // (which may contain GROQ_API_KEY on a dev machine).
+    delete process.env['GROQ_API_KEY'];
 
     const emp = await prisma.user.findFirst({ where: { email: 'alice@acme.com' } });
     const agent = await prisma.user.findFirst({ where: { email: 'bob@acme.com' } });
