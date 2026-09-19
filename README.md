@@ -14,9 +14,15 @@ An internal service hub for submitting, routing, tracking, and resolving employe
 ```bash
 git clone https://github.com/francois-maarbess/eurisko-hr-hub.git
 cd eurisko-hr-hub
+cp .env.example .env   # Windows CMD: copy .env.example .env
 npm install
 cd frontend && npm install && cd ..
 ```
+
+> The real `.env` is gitignored and never committed — only `.env.example`
+> is in the repo. Optional: set `GROQ_API_KEY` in `.env` (free key from
+> https://console.groq.com) to enable the LLM provider for AI intake.
+> Without it, the built-in offline extractor handles everything.
 
 ### 2. Set up the database
 

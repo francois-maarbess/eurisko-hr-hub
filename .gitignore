@@ -12,7 +12,8 @@ dev.db
 prisma/*.db
 prisma/*.db-journal
 
-# Environment
+# Environment (real secrets stay on your machine, never in git)
+.env
 .env.local
 
 # IDE
