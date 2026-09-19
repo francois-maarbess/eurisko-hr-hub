@@ -17,11 +17,19 @@ export class GroqAiProvider implements AiProvider {
       .map((d) => `- ${d.code} (${d.name}): ${d.types.map((t) => `${t.code} (${t.name})`).join(', ') || 'no categories'}`)
       .join('\n');
 
-    const res = await fetch('https://api.groq.com/openai/chat/completions', {
+    // Model is env-overridable because Groq retires model IDs aggressively;
+    // a future sunset is then a one-line .env change, not a code change.
+    const model = process.env['GROQ_MODEL'] || 'openai/gpt-oss-20b';
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+        // Groq sits behind Cloudflare, which rejects non-browser clients.
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+      },
       body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
+        model,
         temperature: 0,
         response_format: { type: 'json_object' },
         messages: [
