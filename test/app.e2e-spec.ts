@@ -238,4 +238,40 @@ describe('Service Request Flow (E2E)', () => {
       });
     expect(res.status).toBe(400);
   });
+
+  it('AI draft structures free text into a validated candidate (advisory, creates nothing)', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+    const before = await prisma.request.count();
+
+    const res = await request(app.getHttpServer())
+      .post('/requests/ai-draft')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ text: 'My laptop screen is cracked and I need a replacement ASAP' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.departmentId).toBe(dept!.id);
+    expect(res.body.requestTypeId).toBe(rt!.id);
+    expect(res.body.priority).toBe('URGENT');
+    expect(res.body.confidence).toBe('high');
+    expect(res.body.provider).toBe('local');
+    expect(res.body.title.length).toBeGreaterThanOrEqual(3);
+    expect(res.body.description.length).toBeGreaterThanOrEqual(10);
+
+    // Advisory only: no request row was created.
+    expect(await prisma.request.count()).toBe(before);
+  });
+
+  it('AI draft rejects empty text and requires auth', async () => {
+    const empty = await request(app.getHttpServer())
+      .post('/requests/ai-draft')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ text: '   ' });
+    expect(empty.status).toBe(400);
+
+    const anon = await request(app.getHttpServer())
+      .post('/requests/ai-draft')
+      .send({ text: 'my laptop is broken' });
+    expect(anon.status).toBe(401);
+  });
 });

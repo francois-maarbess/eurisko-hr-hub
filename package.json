@@ -14,7 +14,8 @@
     "prisma:studio": "prisma studio",
     "lint": "echo \"No lint configured\"",
     "test": "jest --forceExit --detectOpenHandles",
-    "test:cov": "jest --coverage --forceExit"
+    "test:cov": "jest --coverage --forceExit",
+    "eval:ai": "npx tsx scripts/eval-ai.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",

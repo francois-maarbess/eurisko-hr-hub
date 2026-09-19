@@ -18,6 +18,50 @@ export default function CreateRequestForm({ token, onCreated }: CreateRequestFor
   const [priority, setPriority] = useState<'LOW' | 'STANDARD' | 'URGENT'>('STANDARD');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [aiText, setAiText] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiNote, setAiNote] = useState('');
+
+  const handleAiDraft = async () => {
+    if (!aiText.trim()) {
+      setAiNote('Describe your issue in a few words first.');
+      return;
+    }
+    setAiLoading(true);
+    setAiNote('');
+    try {
+      const res = await fetch('http://localhost:3000/requests/ai-draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ text: aiText }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAiNote(data.message || 'AI could not structure that. Try describing the issue.');
+        return;
+      }
+      const dept = departments.find((d) => d.id === data.departmentId);
+      if (dept) {
+        setSelectedDept(dept.id);
+        const type = requestTypes.find((t) => t.id === data.requestTypeId);
+        setSelectedType(type ? type.id : '');
+      }
+      setTitle(data.title || '');
+      setDescription(data.description || '');
+      if (['LOW', 'STANDARD', 'URGENT'].includes(data.priority)) {
+        setPriority(data.priority);
+      }
+      setAiNote(
+        data.confidence === 'high'
+          ? 'AI suggestion applied — review it, then Submit below.'
+          : 'AI is unsure about this one — please double-check every field before submitting.',
+      );
+    } catch {
+      setAiNote('Cannot reach the server');
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetch('http://localhost:3000/requests', { headers: { Authorization: `Bearer ${token}` } })
@@ -80,6 +124,25 @@ export default function CreateRequestForm({ token, onCreated }: CreateRequestFor
   return (
     <div style={{ background: '#f8f9fa', borderRadius: '12px', padding: '1.25rem', marginBottom: '1.5rem' }}>
       <h3 style={{ margin: '0 0 1rem' }}>New Service Request</h3>
+      <div style={{ background: '#eef4ff', border: '1px solid #c9dcff', borderRadius: '10px', padding: '0.9rem', marginBottom: '1rem' }}>
+        <div style={{ fontWeight: 700, marginBottom: '0.5rem' }}>✨ Describe it in your own words</div>
+        <textarea
+          value={aiText}
+          onChange={(e) => setAiText(e.target.value)}
+          placeholder="e.g. my laptop screen is cracked, need a replacement ASAP"
+          rows={2}
+          style={{ width: '100%', boxSizing: 'border-box', padding: '0.6rem', borderRadius: '8px', border: '1px solid #ccc', resize: 'vertical' }}
+        />
+        <button
+          type="button"
+          onClick={handleAiDraft}
+          disabled={aiLoading}
+          style={{ marginTop: '0.5rem', padding: '0.6rem 1rem', borderRadius: '8px', border: 'none', background: '#4a3aff', color: '#fff', cursor: 'pointer' }}
+        >
+          {aiLoading ? 'Drafting...' : '✨ Draft with AI'}
+        </button>
+        {aiNote && <div style={{ marginTop: '0.5rem', fontSize: '0.9rem', color: '#333' }}>{aiNote}</div>}
+      </div>
       <form onSubmit={handleSubmit}>
         <div style={{ display: 'grid', gap: '0.75rem' }}>
           <select value={selectedDept} onChange={(e) => { setSelectedDept(e.target.value); setSelectedType(''); }} required style={{ padding: '0.6rem', borderRadius: '8px', border: '1px solid #ccc' }}>

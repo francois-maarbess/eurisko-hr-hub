@@ -45,13 +45,26 @@ cd frontend && npm run dev
 ## Running Tests
 
 ```bash
-npm test
+npm test      # 33 tests (all deterministic, SQLite)
+npm run eval:ai  # 6 AI eval cases (offline, no key, no DB)
 ```
 
-23 tests covering:
-- **Unit**: Status transition business rules (10 cases)
+33 tests covering:
+- **Unit**: Status transition business rules (10 cases) + AI extractor/validation/fallback (8 cases)
 - **Integration**: Prisma ↔ SQLite database lifecycle
-- **E2E**: Full HTTP flow with auth, create, claim, complete, authorization, validation, regression
+- **E2E**: Full HTTP flow with auth, create, claim, complete, authorization, validation, regression + AI draft endpoint
+
+## AI-Assisted Intake (Week 4)
+
+Type rough words in the **✨ Draft with AI** box and the backend returns a
+structured draft candidate (department, type, title, description, priority,
+confidence). You review it, then Submit creates the request through the
+normal validated flow — the AI never creates anything.
+
+- Default provider is a built-in offline extractor (no key, no network).
+- Set `GROQ_API_KEY` to use an LLM provider instead (any failure falls back
+  to the offline extractor).
+- Details: `docs/week4-production-ai.md`
 
 ## API Endpoints
 
@@ -62,6 +75,7 @@ npm test
 | `GET` | `/requests` | Yes | List all requests |
 | `GET` | `/requests/:id` | Yes | Get single request |
 | `POST` | `/requests` | Yes | Create a new request |
+| `POST` | `/requests/ai-draft` | Yes | Draft a ticket from free text (advisory, creates nothing) |
 | `PATCH` | `/requests/:id/claim` | Yes | Claim a pending request (dept members only) |
 | `PATCH` | `/requests/:id/status` | Yes | Update request status |
 
@@ -69,6 +83,7 @@ npm test
 
 ```
 ├── src/
+│   ├── ai/                # Week 4: intake providers, validation, draft endpoint
 │   ├── auth/              # JWT auth (strategy, guard, controller, module)
 │   ├── dto/               # Request validation DTOs
 │   ├── prisma.service.ts  # Prisma client factory
@@ -76,6 +91,8 @@ npm test
 │   ├── requests.controller.ts
 │   ├── requests.service.ts
 │   └── main.ts
+├── scripts/
+│   └── eval-ai.ts         # 6 AI eval cases (`npm run eval:ai`)
 ├── prisma/
 │   ├── schema.prisma      # Database schema
 │   ├── seed.ts            # Seed data
@@ -90,7 +107,8 @@ npm test
 │       ├── CreateRequestForm.tsx
 │       └── TicketStatusManager.tsx
 └── docs/
-    └── week3-full-stack-delivery.md
+    ├── week3-full-stack-delivery.md
+    └── week4-production-ai.md
 ```
 
 ## Documentation
@@ -99,3 +117,4 @@ npm test
 - `docs/data-model.md` — Entities, constraints, and state machine
 - `docs/architecture.md` — Components and flows
 - `docs/week3-full-stack-delivery.md` — Week 3 delivery details
+- `docs/week4-production-ai.md` — Week 4 AI intake details + eval guide
