@@ -17,6 +17,9 @@ describe('Service Request Flow (E2E)', () => {
     const dbPath = require('path').resolve(__dirname, '..', 'prisma', 'dev.db');
     process.env.DATABASE_URL = `file:${dbPath}`;
     process.env.JWT_SECRET = JWT_SECRET;
+    // Deterministic AI path: e2e must not depend on network or a real key
+    // (Prisma auto-loads .env, which may contain GROQ_API_KEY locally).
+    delete process.env['GROQ_API_KEY'];
 
     prisma = new PrismaClient();
 
