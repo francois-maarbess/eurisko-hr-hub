@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button, ErrorBox } from './components/ui';
 
 interface LoginPageProps {
   onLogin: (token: string, user: { id: string; email: string; name: string; platformRole: string }) => void;
@@ -43,52 +44,57 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   };
 
   return (
-    <div style={{ fontFamily: 'sans-serif', padding: '2rem', maxWidth: '400px', margin: '0 auto' }}>
-      <h2>Internal Operations Service Hub</h2>
-      <p style={{ color: '#666' }}>Sign in with your company email</p>
-
-      <form onSubmit={handleLogin} style={{ marginTop: '1.5rem' }}>
-        <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Email</label>
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="alice@acme.com"
-          required
-          style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ccc', boxSizing: 'border-box', fontSize: '1rem' }}
-        />
-        <label style={{ display: 'block', margin: '0.75rem 0 0.5rem', fontWeight: 600 }}>Password</label>
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Your password"
-          required
-          style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ccc', boxSizing: 'border-box', fontSize: '1rem' }}
-        />
-        <button
-          type="submit"
-          disabled={loading}
-          style={{ marginTop: '1rem', width: '100%', padding: '0.75rem', borderRadius: '8px', border: 'none', background: '#007bff', color: '#fff', fontSize: '1rem', cursor: 'pointer' }}
-        >
-          {loading ? 'Signing in...' : 'Sign In'}
-        </button>
-      </form>
-
-      {error && (
-        <div style={{ marginTop: '1rem', background: '#f8d7da', color: '#721c24', padding: '0.75rem', borderRadius: '8px' }}>
-          {error}
+    <div className="login-wrap">
+      <div className="card login-card">
+        <div className="brand" style={{ marginBottom: '0.5rem' }}>
+          <span className="brand-mark">H</span>
+          Internal Operations Hub
         </div>
-      )}
+        <p className="card-sub">Sign in with your company email</p>
 
-      <div style={{ marginTop: '2rem', padding: '1rem', background: '#f8f9fa', borderRadius: '8px', fontSize: '0.85rem', color: '#555' }}>
-        <strong>Demo accounts</strong> (password for all: <code>Password123!</code>):
-        <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.2rem' }}>
-          <li><code>alice@acme.com</code> — Employee (can create requests)</li>
-          <li><code>bob@acme.com</code> — IT + HR Agent (can claim & resolve)</li>
-          <li><code>carol@acme.com</code> — Finance Agent</li>
-          <li><code>admin@acme.com</code> — System Admin (can manage users)</li>
-        </ul>
+        <form onSubmit={handleLogin}>
+          <div className="field">
+            <label>Email</label>
+            <input
+              className="input"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="alice@acme.com"
+              required
+            />
+          </div>
+          <div className="field">
+            <label>Password</label>
+            <input
+              className="input"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Your password"
+              required
+            />
+          </div>
+          <Button type="submit" block disabled={loading}>
+            {loading ? 'Signing in...' : 'Sign In'}
+          </Button>
+        </form>
+
+        {error && (
+          <div style={{ marginTop: '1rem' }}>
+            <ErrorBox message={error} />
+          </div>
+        )}
+
+        <div className="note-info" style={{ marginTop: '1.25rem' }}>
+          <strong>Demo accounts</strong> (password for all: <code>Password123!</code>)
+          <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.2rem' }}>
+            <li><code>alice@acme.com</code> — Employee</li>
+            <li><code>bob@acme.com</code> — IT + HR Agent</li>
+            <li><code>carol@acme.com</code> — Finance Agent</li>
+            <li><code>admin@acme.com</code> — System Admin</li>
+          </ul>
+        </div>
       </div>
     </div>
   );

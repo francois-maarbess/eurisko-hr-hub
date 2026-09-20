@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Badge, Button, EmptyState, ErrorBox, Field, Tabs } from './components/ui';
 
 type TicketStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'REJECTED';
 type TicketPriority = 'LOW' | 'STANDARD' | 'URGENT';
@@ -30,18 +31,18 @@ interface CardErrorState {
   [ticketId: string]: string | null;
 }
 
-const statusColors: Record<TicketStatus, { background: string; color: string }> = {
-  PENDING: { background: '#fff3cd', color: '#856404' },
-  IN_PROGRESS: { background: '#d1ecf1', color: '#0c5460' },
-  COMPLETED: { background: '#d4edda', color: '#155724' },
-  CANCELLED: { background: '#f8d7da', color: '#721c24' },
-  REJECTED: { background: '#f8d7da', color: '#721c24' },
+const STATUS_COLORS: Record<TicketStatus, { background: string; color: string }> = {
+  PENDING: { background: 'var(--warning-bg)', color: 'var(--warning)' },
+  IN_PROGRESS: { background: 'var(--info-bg)', color: '#1d4ed8' },
+  COMPLETED: { background: 'var(--success-bg)', color: 'var(--success)' },
+  CANCELLED: { background: '#f1f5f9', color: 'var(--muted)' },
+  REJECTED: { background: 'var(--danger-bg)', color: 'var(--danger)' },
 };
 
-const priorityColors: Record<TicketPriority, { background: string; color: string }> = {
-  LOW: { background: '#e2e3e5', color: '#383d41' },
-  STANDARD: { background: '#cce5ff', color: '#004085' },
-  URGENT: { background: '#f8d7da', color: '#721c24' },
+const PRIORITY_COLORS: Record<TicketPriority, { background: string; color: string }> = {
+  LOW: { background: '#f1f5f9', color: 'var(--muted)' },
+  STANDARD: { background: 'var(--info-bg)', color: '#1d4ed8' },
+  URGENT: { background: 'var(--danger-bg)', color: 'var(--danger)' },
 };
 
 type View = 'mine' | 'queue' | 'claimed';
@@ -64,6 +65,10 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
 
   const authHeaders = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
   const isAdmin = platformRole === 'SYSTEM_ADMIN';
+  // Staff-only tabs: plain employees see just their own requests. The backend
+  // enforces the same boundary (empty lists); hiding the tabs keeps the UI
+  // from promising what the user may not open.
+  const isStaff = isAdmin || memberships.length > 0;
   const memberDeptIds = new Set(memberships.map((m) => m.departmentId));
 
   const fetchTickets = async (v: View) => {
@@ -153,103 +158,134 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
     setShowReject((c) => ({ ...c, [ticket.id]: false }));
   };
 
-  const tabBtn = (v: View, label: string) => (
-    <button
-      key={v}
-      onClick={() => setView(v)}
-      style={{
-        padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer',
-        border: '1px solid #ccc', background: view === v ? '#007bff' : '#fff',
-        color: view === v ? '#fff' : '#333', fontWeight: 600,
-      }}
-    >
-      {label}
-    </button>
-  );
+  const tabOptions = [
+    { value: 'mine' as View, label: 'My Requests' },
+    ...(isStaff
+      ? [
+          { value: 'queue' as View, label: 'Department Queue' },
+          { value: 'claimed' as View, label: 'Claimed by Me' },
+        ]
+      : []),
+  ];
 
   return (
     <div style={{ display: 'grid', gap: '1rem' }}>
-      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-        {tabBtn('mine', 'My Requests')}
-        {tabBtn('queue', 'Department Queue')}
-        {tabBtn('claimed', 'Claimed by Me')}
-      </div>
+      <Tabs options={tabOptions} value={view} onChange={setView} />
 
-      {cardErrors.global && (
-        <div style={{ background: '#f8d7da', color: '#721c24', padding: '0.75rem', borderRadius: '8px' }}>
-          {cardErrors.global}
-        </div>
+      {cardErrors.global && <ErrorBox message={cardErrors.global} />}
+
+      {tickets.length === 0 && (
+        <EmptyState
+          message={
+            view === 'queue'
+              ? 'No open requests in your departments.'
+              : view === 'claimed'
+                ? 'No claimed requests yet.'
+                : 'No requests yet. Create one above.'
+          }
+        />
       )}
 
       {tickets.map((ticket) => {
-        const statusStyle = statusColors[ticket.status];
-        const priorityStyle = priorityColors[ticket.priority];
-        const ticketError = cardErrors[ticket.id];
         const isOwner = ticket.employeeId === userId;
         const inMyDept = memberDeptIds.has(ticket.departmentId);
         const canClaim = (inMyDept || isAdmin) && ticket.status === 'PENDING' && !ticket.claimedById && !isOwner;
         const canCancel = isOwner && ticket.status === 'PENDING';
         const canWork = (inMyDept || isAdmin) && !isOwner && ticket.status === 'IN_PROGRESS';
+        const ticketError = cardErrors[ticket.id];
 
         return (
-          <div key={ticket.id} style={{ border: '1px solid #d9d9d9', borderRadius: '12px', padding: '1rem', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <div className="card" key={ticket.id}>
+            <div className="row" style={{ justifyContent: 'space-between' }}>
               <div>
-                <div style={{ fontSize: '0.8rem', color: '#666', marginBottom: '0.25rem' }}>
+                <div className="muted" style={{ marginBottom: '0.25rem' }}>
                   {ticket.id} {ticket.department && `· ${ticket.department.code}`}
                 </div>
-                <h3 style={{ margin: 0 }}>{ticket.title}</h3>
-                {ticket.owner && <div style={{ fontSize: '0.8rem', color: '#888' }}>by {ticket.owner.displayName}</div>}
+                <div style={{ fontWeight: 800, fontSize: '1.05rem' }}>{ticket.title}</div>
+                {ticket.owner && <div className="muted">by {ticket.owner.displayName}</div>}
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                <span style={{ padding: '0.3rem 0.6rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 700, background: priorityStyle.background, color: priorityStyle.color }}>{ticket.priority}</span>
-                <span style={{ padding: '0.3rem 0.6rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 700, background: statusStyle.background, color: statusStyle.color }}>{ticket.status}</span>
+              <div className="pill-group">
+                <Badge bg={PRIORITY_COLORS[ticket.priority].background} color={PRIORITY_COLORS[ticket.priority].color}>
+                  {ticket.priority}
+                </Badge>
+                <Badge bg={STATUS_COLORS[ticket.status].background} color={STATUS_COLORS[ticket.status].color}>
+                  {ticket.status}
+                </Badge>
               </div>
             </div>
 
-            <p style={{ margin: '0.75rem 0', color: '#333', lineHeight: 1.5 }}>{ticket.description}</p>
+            <p style={{ margin: '0.75rem 0', lineHeight: 1.5 }}>{ticket.description}</p>
 
-            {ticket.claimant && <div style={{ fontSize: '0.8rem', color: '#0c5460' }}>Claimed by: {ticket.claimant.displayName}</div>}
+            {ticket.claimant && (
+              <p className="muted">Claimed by: {ticket.claimant.displayName}</p>
+            )}
 
             {canWork && (
-              <div style={{ marginTop: '0.75rem', display: 'grid', gap: '0.5rem' }}>
-                <label style={{ fontWeight: 600 }}>Resolution note</label>
-                <input type="text" value={resolutionInputs[ticket.id] ?? ''} onChange={(e) => setResolutionInputs((c) => ({ ...c, [ticket.id]: e.target.value }))} placeholder="Enter resolution note" style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid #cfcfcf', boxSizing: 'border-box' }} />
+              <div style={{ display: 'grid', gap: '0.5rem', marginTop: '0.75rem' }}>
+                <Field label="Resolution note">
+                  <input
+                    className="input"
+                    type="text"
+                    value={resolutionInputs[ticket.id] ?? ''}
+                    onChange={(e) => setResolutionInputs((c) => ({ ...c, [ticket.id]: e.target.value }))}
+                    placeholder="Enter resolution note"
+                  />
+                </Field>
                 {showReject[ticket.id] && (
-                  <input type="text" value={rejectionInputs[ticket.id] ?? ''} onChange={(e) => setRejectionInputs((c) => ({ ...c, [ticket.id]: e.target.value }))} placeholder="Enter rejection reason" style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid #cfcfcf', boxSizing: 'border-box' }} />
+                  <Field label="Rejection reason">
+                    <input
+                      className="input"
+                      type="text"
+                      value={rejectionInputs[ticket.id] ?? ''}
+                      onChange={(e) => setRejectionInputs((c) => ({ ...c, [ticket.id]: e.target.value }))}
+                      placeholder="Enter rejection reason"
+                    />
+                  </Field>
                 )}
               </div>
             )}
 
             {ticket.resolutionNote && (
-              <div style={{ marginTop: '0.75rem', background: '#d4edda', borderRadius: '8px', padding: '0.6rem 0.75rem' }}>
+              <div className="note-info" style={{ background: 'var(--success-bg)', border: 'none', marginTop: '0.75rem' }}>
                 <strong>Resolution:</strong> {ticket.resolutionNote}
               </div>
             )}
             {ticket.rejectionReason && (
-              <div style={{ marginTop: '0.75rem', background: '#f8d7da', borderRadius: '8px', padding: '0.6rem 0.75rem' }}>
+              <div className="alert-error" style={{ marginTop: '0.75rem' }}>
                 <strong>Rejected:</strong> {ticket.rejectionReason}
               </div>
             )}
 
             {ticketError && (
-              <div style={{ marginTop: '0.75rem', background: '#f8d7da', color: '#721c24', borderRadius: '8px', padding: '0.6rem 0.75rem' }}>{ticketError}</div>
+              <div style={{ marginTop: '0.75rem' }}>
+                <ErrorBox message={ticketError} />
+              </div>
             )}
 
-            <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <div className="row" style={{ marginTop: '1rem' }}>
               {canClaim && (
-                <button onClick={() => handleClaim(ticket)} disabled={loading} style={{ padding: '0.6rem 1rem', borderRadius: '8px', border: 'none', background: '#007bff', color: '#fff', cursor: 'pointer' }}>{loading ? '...' : 'Claim'}</button>
+                <Button variant="primary" small onClick={() => handleClaim(ticket)} disabled={loading}>
+                  {loading ? '...' : 'Claim'}
+                </Button>
               )}
               {canCancel && (
-                <button onClick={() => handleCancel(ticket)} disabled={loading} style={{ padding: '0.6rem 1rem', borderRadius: '8px', border: 'none', background: '#6c757d', color: '#fff', cursor: 'pointer' }}>{loading ? '...' : 'Cancel'}</button>
+                <Button variant="ghost" small onClick={() => handleCancel(ticket)} disabled={loading}>
+                  {loading ? '...' : 'Cancel'}
+                </Button>
               )}
               {canWork && (
                 <>
-                  <button onClick={() => handleResolve(ticket)} disabled={loading} style={{ padding: '0.6rem 1rem', borderRadius: '8px', border: 'none', background: '#28a745', color: '#fff', cursor: 'pointer' }}>{loading ? '...' : 'Resolve'}</button>
+                  <Button variant="success" small onClick={() => handleResolve(ticket)} disabled={loading}>
+                    {loading ? '...' : 'Resolve'}
+                  </Button>
                   {!showReject[ticket.id] ? (
-                    <button onClick={() => setShowReject((c) => ({ ...c, [ticket.id]: true }))} disabled={loading} style={{ padding: '0.6rem 1rem', borderRadius: '8px', border: '1px solid #dc3545', background: '#fff', color: '#dc3545', cursor: 'pointer' }}>Reject</button>
+                    <Button variant="danger-outline" small onClick={() => setShowReject((c) => ({ ...c, [ticket.id]: true }))} disabled={loading}>
+                      Reject
+                    </Button>
                   ) : (
-                    <button onClick={() => handleReject(ticket)} disabled={loading} style={{ padding: '0.6rem 1rem', borderRadius: '8px', border: 'none', background: '#dc3545', color: '#fff', cursor: 'pointer' }}>{loading ? '...' : 'Confirm Reject'}</button>
+                    <Button variant="danger" small onClick={() => handleReject(ticket)} disabled={loading}>
+                      {loading ? '...' : 'Confirm Reject'}
+                    </Button>
                   )}
                 </>
               )}

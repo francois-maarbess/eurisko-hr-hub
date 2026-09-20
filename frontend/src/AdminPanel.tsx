@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Button, ErrorBox, Field } from './components/ui';
 
 interface AdminPanelProps {
   token: string;
@@ -19,14 +20,6 @@ interface Department {
   name: string;
 }
 
-const inputStyle = {
-  padding: '0.6rem',
-  borderRadius: '8px',
-  border: '1px solid #ccc',
-  width: '100%',
-  boxSizing: 'border-box' as const,
-};
-
 export default function AdminPanel({ token }: AdminPanelProps) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -39,64 +32,6 @@ export default function AdminPanel({ token }: AdminPanelProps) {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [memberDrafts, setMemberDrafts] = useState<Record<string, { deptId: string; role: string }>>({});
-
-  const changeRole = async (u: AdminUser, platformRole: string) => {
-    try {
-      const res = await fetch(`http://localhost:3000/auth/users/${u.id}/role`, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({ platformRole }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        setMessage(data.message || 'Could not change role');
-        return;
-      }
-      await load();
-    } catch {
-      setMessage('Cannot reach the server');
-    }
-  };
-
-  const addMembership = async (u: AdminUser) => {
-    const draft = memberDrafts[u.id] || { deptId: '', role: 'AGENT' };
-    if (!draft.deptId) {
-      setMessage('Pick a department first.');
-      return;
-    }
-    try {
-      const res = await fetch(`http://localhost:3000/auth/users/${u.id}/memberships`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ departmentId: draft.deptId, departmentRole: draft.role }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        setMessage(data.message || 'Could not add membership');
-        return;
-      }
-      await load();
-    } catch {
-      setMessage('Cannot reach the server');
-    }
-  };
-
-  const removeMembership = async (u: AdminUser, departmentId: string) => {
-    try {
-      const res = await fetch(`http://localhost:3000/auth/users/${u.id}/memberships/${departmentId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        setMessage(data.message || 'Could not remove membership');
-        return;
-      }
-      await load();
-    } catch {
-      setMessage('Cannot reach the server');
-    }
-  };
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
@@ -170,104 +105,176 @@ export default function AdminPanel({ token }: AdminPanelProps) {
     }
   };
 
+  const changeRole = async (u: AdminUser, platformRole: string) => {
+    try {
+      const res = await fetch(`http://localhost:3000/auth/users/${u.id}/role`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ platformRole }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setMessage(data.message || 'Could not change role');
+        return;
+      }
+      await load();
+    } catch {
+      setMessage('Cannot reach the server');
+    }
+  };
+
+  const addMembership = async (u: AdminUser) => {
+    const draft = memberDrafts[u.id] || { deptId: '', role: 'AGENT' };
+    if (!draft.deptId) {
+      setMessage('Pick a department first.');
+      return;
+    }
+    try {
+      const res = await fetch(`http://localhost:3000/auth/users/${u.id}/memberships`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ departmentId: draft.deptId, departmentRole: draft.role }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setMessage(data.message || 'Could not add membership');
+        return;
+      }
+      await load();
+    } catch {
+      setMessage('Cannot reach the server');
+    }
+  };
+
+  const removeMembership = async (u: AdminUser, departmentId: string) => {
+    try {
+      const res = await fetch(`http://localhost:3000/auth/users/${u.id}/memberships/${departmentId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setMessage(data.message || 'Could not remove membership');
+        return;
+      }
+      await load();
+    } catch {
+      setMessage('Cannot reach the server');
+    }
+  };
+
   return (
-    <div style={{ background: '#fff8e6', border: '1px solid #f0d48a', borderRadius: '12px', padding: '1.25rem', marginBottom: '1.5rem' }}>
-      <h3 style={{ margin: '0 0 0.25rem' }}>Administration</h3>
-      <p style={{ margin: '0 0 1rem', fontSize: '0.9rem', color: '#666' }}>
-        System admins only. Create accounts and activate or deactivate them.
-      </p>
+    <div className="admin-zone">
+      <span className="admin-tag">ADMIN ONLY</span>
+      <h3 className="card-title">Administration</h3>
+      <p className="card-sub">Create accounts, assign roles and departments, activate or deactivate users.</p>
 
       <form onSubmit={handleCreate}>
-        <div style={{ display: 'grid', gap: '0.6rem' }}>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="New user email" required style={inputStyle} />
-          <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Display name (optional)" style={inputStyle} />
-          <div style={{ display: 'flex', gap: '0.6rem' }}>
-            <select value={role} onChange={(e) => setRole(e.target.value)} style={{ ...inputStyle, flex: 1 }}>
-              <option value="EMPLOYEE">Employee</option>
-              <option value="SYSTEM_ADMIN">System Admin</option>
-            </select>
-            <select value={deptRole} onChange={(e) => setDeptRole(e.target.value)} style={{ ...inputStyle, flex: 1 }}>
-              <option value="AGENT">Agent</option>
-              <option value="MANAGER">Manager</option>
-            </select>
+        <Field label="Email *">
+          <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@acme.com" required />
+        </Field>
+        <Field label="Display name">
+          <input className="input" type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Full Name" />
+        </Field>
+        <div className="row">
+          <div style={{ flex: 1 }}>
+            <Field label="Platform role">
+              <select className="select" value={role} onChange={(e) => setRole(e.target.value)}>
+                <option value="EMPLOYEE">Employee</option>
+                <option value="SYSTEM_ADMIN">System Admin</option>
+              </select>
+            </Field>
           </div>
-          <select value={deptId} onChange={(e) => setDeptId(e.target.value)} style={inputStyle}>
+          <div style={{ flex: 1 }}>
+            <Field label="Department role">
+              <select className="select" value={deptRole} onChange={(e) => setDeptRole(e.target.value)}>
+                <option value="AGENT">Agent</option>
+                <option value="MANAGER">Manager</option>
+              </select>
+            </Field>
+          </div>
+        </div>
+        <Field label="Department">
+          <select className="select" value={deptId} onChange={(e) => setDeptId(e.target.value)}>
             <option value="">No department membership</option>
             {departments.map((d) => (
               <option key={d.id} value={d.id}>{d.name}</option>
             ))}
           </select>
-          <input type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Initial password (min 8 chars)" required minLength={8} style={inputStyle} />
-          <button type="submit" disabled={busy} style={{ padding: '0.7rem', borderRadius: '8px', border: 'none', background: '#6f42c1', color: '#fff', cursor: 'pointer' }}>
-            {busy ? 'Creating...' : 'Create User'}
-          </button>
-        </div>
+        </Field>
+        <Field label="Initial password *">
+          <input className="input" type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min 8 characters" required minLength={8} />
+        </Field>
+        <Button type="submit" disabled={busy} block>
+          {busy ? 'Creating...' : 'Create User'}
+        </Button>
       </form>
 
-      {message && <div style={{ marginTop: '0.75rem', fontSize: '0.9rem', color: '#333' }}>{message}</div>}
+      {message && <p className="muted" style={{ marginTop: '0.75rem' }}>{message}</p>}
 
-      <h4 style={{ margin: '1.25rem 0 0.5rem' }}>Users ({users.length})</h4>
-      <div style={{ display: 'grid', gap: '0.5rem' }}>
+      <h4 style={{ margin: '1.25rem 0 0.5rem', color: 'var(--navy)' }}>Users ({users.length})</h4>
+      <div style={{ display: 'grid', gap: '0.6rem' }}>
         {users.map((u) => {
           const draft = memberDrafts[u.id] || { deptId: '', role: 'AGENT' };
           return (
-            <div key={u.id} style={{ background: '#fff', borderRadius: '8px', padding: '0.6rem 0.75rem', border: '1px solid #eee' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                <div style={{ flex: 1, opacity: u.active ? 1 : 0.5 }}>
-                  <div style={{ fontWeight: 600 }}>{u.displayName} {!u.active && <span style={{ color: '#dc3545' }}>(deactivated)</span>}</div>
-                  <div style={{ fontSize: '0.8rem', color: '#666' }}>{u.email}</div>
+            <div className="admin-row" key={u.id} style={{ opacity: u.active ? 1 : 0.6 }}>
+              <div className="row" style={{ justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontWeight: 700 }}>
+                    {u.displayName} {!u.active && <span style={{ color: 'var(--danger)' }}>(deactivated)</span>}
+                  </div>
+                  <div className="muted">{u.email}</div>
                 </div>
-                <select
-                  value={u.platformRole}
-                  onChange={(e) => changeRole(u, e.target.value)}
-                  style={{ padding: '0.4rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '0.8rem' }}
-                >
-                  <option value="EMPLOYEE">Employee</option>
-                  <option value="SYSTEM_ADMIN">System Admin</option>
-                </select>
-                <button
-                  onClick={() => toggleActive(u)}
-                  style={{ padding: '0.4rem 0.7rem', borderRadius: '6px', border: '1px solid #ccc', background: '#fff', cursor: 'pointer', fontSize: '0.8rem' }}
-                >
-                  {u.active ? 'Deactivate' : 'Reactivate'}
-                </button>
+                <div className="row">
+                  <select
+                    className="select"
+                    style={{ width: 'auto', padding: '0.4rem 0.6rem', fontSize: '0.82rem' }}
+                    value={u.platformRole}
+                    onChange={(e) => changeRole(u, e.target.value)}
+                  >
+                    <option value="EMPLOYEE">Employee</option>
+                    <option value="SYSTEM_ADMIN">System Admin</option>
+                  </select>
+                  <Button variant="ghost" small onClick={() => toggleActive(u)}>
+                    {u.active ? 'Deactivate' : 'Reactivate'}
+                  </Button>
+                </div>
               </div>
-              <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <div className="row" style={{ marginTop: '0.5rem' }}>
                 {u.memberships.filter((m) => m.active).map((m) => (
-                  <span key={m.departmentId} style={{ fontSize: '0.75rem', background: '#eef4ff', borderRadius: '999px', padding: '0.25rem 0.5rem' }}>
+                  <span className="badge" key={m.departmentId} style={{ background: 'var(--blue-pale)', color: '#1d4ed8', textTransform: 'none' }}>
                     {m.departmentCode || '?'} · {m.departmentRole}{' '}
                     <button
                       onClick={() => removeMembership(u, m.departmentId)}
-                      style={{ border: 'none', background: 'none', color: '#dc3545', cursor: 'pointer', fontWeight: 700 }}
+                      style={{ border: 'none', background: 'none', color: 'var(--danger)', cursor: 'pointer', fontWeight: 800 }}
                     >
                       ×
                     </button>
                   </span>
                 ))}
                 <select
+                  className="select"
+                  style={{ width: 'auto', padding: '0.3rem 0.5rem', fontSize: '0.78rem' }}
                   value={draft.deptId}
                   onChange={(e) => setMemberDrafts((c) => ({ ...c, [u.id]: { ...draft, deptId: e.target.value } }))}
-                  style={{ padding: '0.3rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '0.75rem' }}
                 >
-                  <option value="">+ Department…</option>
+                  <option value="">+ Dept…</option>
                   {departments.map((d) => (
                     <option key={d.id} value={d.id}>{d.code}</option>
                   ))}
                 </select>
                 <select
+                  className="select"
+                  style={{ width: 'auto', padding: '0.3rem 0.5rem', fontSize: '0.78rem' }}
                   value={draft.role}
                   onChange={(e) => setMemberDrafts((c) => ({ ...c, [u.id]: { ...draft, role: e.target.value } }))}
-                  style={{ padding: '0.3rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '0.75rem' }}
                 >
                   <option value="AGENT">Agent</option>
                   <option value="MANAGER">Manager</option>
                 </select>
-                <button
-                  onClick={() => addMembership(u)}
-                  style={{ padding: '0.3rem 0.6rem', borderRadius: '6px', border: 'none', background: '#28a745', color: '#fff', cursor: 'pointer', fontSize: '0.75rem' }}
-                >
+                <Button variant="success" small onClick={() => addMembership(u)}>
                   Add
-                </button>
+                </Button>
               </div>
             </div>
           );

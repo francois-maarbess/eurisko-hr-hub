@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Button, Card, ErrorBox, Field } from './components/ui';
 
 interface CreateRequestFormProps {
   token: string;
@@ -21,6 +22,23 @@ export default function CreateRequestForm({ token, onCreated }: CreateRequestFor
   const [aiText, setAiText] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiNote, setAiNote] = useState('');
+
+  useEffect(() => {
+    // Pickers load from the product catalog — one option per department and
+    // type, no matter how many tickets exist.
+    const headers = { Authorization: `Bearer ${token}` };
+    Promise.all([
+      fetch('http://localhost:3000/catalog/departments', { headers }).then((r) => r.json()),
+      fetch('http://localhost:3000/catalog/request-types', { headers }).then((r) => r.json()),
+    ])
+      .then(([depts, types]) => {
+        if (Array.isArray(depts)) setDepartments(depts);
+        if (Array.isArray(types)) setRequestTypes(types);
+      })
+      .catch(() => {});
+  }, [token]);
+
+  const filteredTypes = requestTypes.filter((t) => t.departmentId === selectedDept);
 
   const handleAiDraft = async () => {
     if (!aiText.trim()) {
@@ -63,23 +81,6 @@ export default function CreateRequestForm({ token, onCreated }: CreateRequestFor
     }
   };
 
-  useEffect(() => {
-    // Pickers load from the product catalog — one option per department and
-    // type, no matter how many tickets exist.
-    const headers = { Authorization: `Bearer ${token}` };
-    Promise.all([
-      fetch('http://localhost:3000/catalog/departments', { headers }).then((r) => r.json()),
-      fetch('http://localhost:3000/catalog/request-types', { headers }).then((r) => r.json()),
-    ])
-      .then(([depts, types]) => {
-        if (Array.isArray(depts)) setDepartments(depts);
-        if (Array.isArray(types)) setRequestTypes(types);
-      })
-      .catch(() => {});
-  }, [token]);
-
-  const filteredTypes = requestTypes.filter((t) => t.departmentId === selectedDept);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -117,56 +118,94 @@ export default function CreateRequestForm({ token, onCreated }: CreateRequestFor
   };
 
   return (
-    <div style={{ background: '#f8f9fa', borderRadius: '12px', padding: '1.25rem', marginBottom: '1.5rem' }}>
-      <h3 style={{ margin: '0 0 1rem' }}>New Service Request</h3>
-      <div style={{ background: '#eef4ff', border: '1px solid #c9dcff', borderRadius: '10px', padding: '0.9rem', marginBottom: '1rem' }}>
-        <div style={{ fontWeight: 700, marginBottom: '0.5rem' }}>✨ Describe it in your own words</div>
-        <textarea
-          value={aiText}
-          onChange={(e) => setAiText(e.target.value)}
-          placeholder="e.g. my laptop screen is cracked, need a replacement ASAP"
-          rows={2}
-          style={{ width: '100%', boxSizing: 'border-box', padding: '0.6rem', borderRadius: '8px', border: '1px solid #ccc', resize: 'vertical' }}
-        />
-        <button
-          type="button"
+    <Card title="New Service Request">
+      <div className="note-ai">
+        <div className="note-ai-title">✨ Describe it in your own words</div>
+        <Field label="">
+          <textarea
+            className="textarea"
+            value={aiText}
+            onChange={(e) => setAiText(e.target.value)}
+            placeholder="e.g. my laptop screen is cracked, need a replacement ASAP"
+            rows={2}
+          />
+        </Field>
+        <Button
+          variant="ghost"
           onClick={handleAiDraft}
           disabled={aiLoading}
-          style={{ marginTop: '0.5rem', padding: '0.6rem 1rem', borderRadius: '8px', border: 'none', background: '#4a3aff', color: '#fff', cursor: 'pointer' }}
+          small
         >
           {aiLoading ? 'Drafting...' : '✨ Draft with AI'}
-        </button>
-        {aiNote && <div style={{ marginTop: '0.5rem', fontSize: '0.9rem', color: '#333' }}>{aiNote}</div>}
+        </Button>
+        {aiNote && <p className="muted" style={{ marginTop: '0.5rem' }}>{aiNote}</p>}
       </div>
+
       <form onSubmit={handleSubmit}>
-        <div style={{ display: 'grid', gap: '0.75rem' }}>
-          <select value={selectedDept} onChange={(e) => { setSelectedDept(e.target.value); setSelectedType(''); }} required style={{ padding: '0.6rem', borderRadius: '8px', border: '1px solid #ccc' }}>
+        <Field label="Department *">
+          <select
+            className="select"
+            value={selectedDept}
+            onChange={(e) => { setSelectedDept(e.target.value); setSelectedType(''); }}
+            required
+          >
             <option value="">Select Department</option>
             {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
+        </Field>
 
-          <select value={selectedType} onChange={(e) => setSelectedType(e.target.value)} required style={{ padding: '0.6rem', borderRadius: '8px', border: '1px solid #ccc' }}>
+        <Field label="Request Type *">
+          <select
+            className="select"
+            value={selectedType}
+            onChange={(e) => setSelectedType(e.target.value)}
+            required
+          >
             <option value="">Select Request Type</option>
             {filteredTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
+        </Field>
 
-          <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title (min 3 chars)" minLength={3} required style={{ padding: '0.6rem', borderRadius: '8px', border: '1px solid #ccc' }} />
+        <Field label="Title *">
+          <input
+            className="input"
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Title (min 3 chars)"
+            minLength={3}
+            required
+          />
+        </Field>
 
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description (min 10 chars)" minLength={10} rows={3} required style={{ padding: '0.6rem', borderRadius: '8px', border: '1px solid #ccc', resize: 'vertical' }} />
+        <Field label="Description *">
+          <textarea
+            className="textarea"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Description (min 10 chars)"
+            minLength={10}
+            rows={3}
+            required
+          />
+        </Field>
 
-          <select value={priority} onChange={(e) => setPriority(e.target.value as any)} style={{ padding: '0.6rem', borderRadius: '8px', border: '1px solid #ccc' }}>
+        <Field label="Priority">
+          <select className="select" value={priority} onChange={(e) => setPriority(e.target.value as any)}>
             <option value="LOW">Low</option>
             <option value="STANDARD">Standard</option>
             <option value="URGENT">Urgent</option>
           </select>
+        </Field>
 
-          {error && <div style={{ background: '#f8d7da', color: '#721c24', padding: '0.6rem', borderRadius: '8px' }}>{error}</div>}
+        {error && <ErrorBox message={error} />}
 
-          <button type="submit" disabled={loading} style={{ padding: '0.75rem', borderRadius: '8px', border: 'none', background: '#28a745', color: '#fff', fontSize: '1rem', cursor: 'pointer' }}>
+        <div style={{ marginTop: '1rem' }}>
+          <Button type="submit" variant="success" block disabled={loading}>
             {loading ? 'Submitting...' : 'Submit Request'}
-          </button>
+          </Button>
         </div>
       </form>
-    </div>
+    </Card>
   );
 }

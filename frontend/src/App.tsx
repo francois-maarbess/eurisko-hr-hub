@@ -3,6 +3,7 @@ import LoginPage from './LoginPage';
 import CreateRequestForm from './CreateRequestForm';
 import TicketStatusManager from './TicketStatusManager';
 import AdminPanel from './AdminPanel';
+import { Button } from './components/ui';
 
 interface User {
   id: string;
@@ -31,23 +32,32 @@ export default function App() {
   }
 
   return (
-    <div style={{ fontFamily: 'sans-serif', padding: '1rem', maxWidth: '900px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div>
-          <h2 style={{ margin: 0 }}>Service Request Hub</h2>
-          <div style={{ fontSize: '0.85rem', color: '#666' }}>
-            Signed in as <strong>{user.name}</strong> ({user.email}) · {user.platformRole}
+    <>
+      <header className="topbar">
+        <div className="topbar-inner">
+          <div className="brand">
+            <span className="brand-mark">H</span>
+            <span>Service Request Hub</span>
+          </div>
+          <div className="row">
+            <span className="muted">
+              {user.name} · {user.platformRole}
+            </span>
+            <Button variant="danger" small onClick={handleLogout}>
+              Sign Out
+            </Button>
           </div>
         </div>
-        <button onClick={handleLogout} style={{ padding: '0.5rem 1rem', borderRadius: '8px', border: 'none', background: '#dc3545', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>Sign Out</button>
-      </div>
+      </header>
 
-      <CreateRequestForm token={token} onCreated={() => setRefreshKey((k) => k + 1)} />
+      <main className="container">
+        <CreateRequestForm token={token} onCreated={() => setRefreshKey((k) => k + 1)} />
 
-      {user.platformRole === 'SYSTEM_ADMIN' && <AdminPanel token={token} />}
+        {user.platformRole === 'SYSTEM_ADMIN' && <AdminPanel token={token} />}
 
-      <h3 style={{ marginBottom: '0.75rem' }}>Request Queue</h3>
-      <TicketStatusManager key={refreshKey} token={token} userId={user.id} platformRole={user.platformRole} />
-    </div>
+        <h3 style={{ margin: '1.5rem 0 0.75rem', color: 'var(--navy)' }}>Request Queue</h3>
+        <TicketStatusManager key={refreshKey} token={token} userId={user.id} platformRole={user.platformRole} />
+      </main>
+    </>
   );
 }
