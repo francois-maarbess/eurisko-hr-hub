@@ -13,6 +13,7 @@ describe('Service Request Flow (E2E)', () => {
   let employeeToken: string;
   let agentToken: string;
   let adminToken: string;
+  let financeToken: string;
 
   beforeAll(async () => {
     const dbPath = require('path').resolve(__dirname, '..', 'prisma', 'dev.db');
@@ -37,7 +38,8 @@ describe('Service Request Flow (E2E)', () => {
     const emp = await prisma.user.findFirst({ where: { email: 'alice@acme.com' } });
     const agent = await prisma.user.findFirst({ where: { email: 'bob@acme.com' } });
     const admin = await prisma.user.findFirst({ where: { email: 'admin@acme.com' } });
-    expect(emp && agent && admin).toBeTruthy();
+    const finance = await prisma.user.findFirst({ where: { email: 'carol@acme.com' } });
+    expect(emp && agent && admin && finance).toBeTruthy();
 
     // Sign tokens using the same JWT secret
     const jwt = app.get(JwtService);
@@ -51,6 +53,10 @@ describe('Service Request Flow (E2E)', () => {
     );
     adminToken = jwt.sign(
       { sub: admin!.id, email: admin!.email, name: admin!.displayName, role: admin!.platformRole },
+      { secret: JWT_SECRET },
+    );
+    financeToken = jwt.sign(
+      { sub: finance!.id, email: finance!.email, name: finance!.displayName, role: finance!.platformRole },
       { secret: JWT_SECRET },
     );
   }, 30000);
@@ -426,6 +432,250 @@ describe('Service Request Flow (E2E)', () => {
       .set('Authorization', `Bearer ${employeeToken}`)
       .send({ departmentId: it!.id });
     expect(empMember.status).toBe(403);
+  });
+
+  it('cross-user reads are forbidden, owners/members/admins pass (acceptance 2/3)', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+    const created = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        departmentId: dept!.id,
+        requestTypeId: rt!.id,
+        title: 'Private Read Test',
+        description: 'Only the owner, IT staff, or admin may read this ticket',
+        priority: 'STANDARD',
+      });
+    const id = created.body.id;
+
+    const owner = await request(app.getHttpServer())
+      .get(`/requests/${id}`)
+      .set('Authorization', `Bearer ${employeeToken}`);
+    expect(owner.status).toBe(200);
+
+    const stranger = await request(app.getHttpServer())
+      .get(`/requests/${id}`)
+      .set('Authorization', `Bearer ${financeToken}`);
+    expect(stranger.status).toBe(403);
+
+    const admin = await request(app.getHttpServer())
+      .get(`/requests/${id}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(admin.status).toBe(200);
+  });
+
+  it('queue sorts URGENT before STANDARD before LOW, oldest first (acceptance 10)', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/requests?view=queue')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    const rank: Record<string, number> = { URGENT: 0, STANDARD: 1, LOW: 2 };
+    for (let i = 1; i < res.body.length; i++) {
+      const a = res.body[i - 1];
+      const b = res.body[i];
+      const ra = rank[a.priority] * 1e15 + new Date(a.createdAt).getTime();
+      const rb = rank[b.priority] * 1e15 + new Date(b.createdAt).getTime();
+      expect(ra).toBeLessThanOrEqual(rb);
+    }
+  });
+
+  it('documents: staff upload, mp4 rejected, download works, delete clears (acceptance 7/8/9)', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+    const created = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        departmentId: dept!.id,
+        requestTypeId: rt!.id,
+        title: 'Doc Flow Test',
+        description: 'Testing the document lifecycle end to end here',
+        priority: 'STANDARD',
+      });
+    const id = created.body.id;
+
+    const pdf = Buffer.from('%PDF-1.4 fake-id-badge\n%PDF');
+    const up = await request(app.getHttpServer())
+      .post(`/requests/${id}/documents`)
+      .set('Authorization', `Bearer ${agentToken}`)
+      .attach('file', pdf, { filename: 'badge.pdf', contentType: 'application/pdf' });
+    expect(up.status).toBe(201);
+    expect(up.body.checksum).toBeTruthy();
+
+    const mp4 = await request(app.getHttpServer())
+      .post(`/requests/${id}/documents`)
+      .set('Authorization', `Bearer ${agentToken}`)
+      .attach('file', Buffer.from('ftypisom....'), { filename: 'clip.mp4', contentType: 'video/mp4' });
+    expect(mp4.status).toBe(400);
+
+    const nonMember = await request(app.getHttpServer())
+      .post(`/requests/${id}/documents`)
+      .set('Authorization', `Bearer ${financeToken}`)
+      .attach('file', pdf, { filename: 'badge.pdf', contentType: 'application/pdf' });
+    expect(nonMember.status).toBe(403);
+
+    const list = await request(app.getHttpServer())
+      .get(`/requests/${id}/documents`)
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(list.status).toBe(200);
+    expect(list.body.length).toBe(1);
+
+    const docId = list.body[0].id;
+    const dl = await request(app.getHttpServer())
+      .get(`/requests/${id}/documents/${docId}/download`)
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(dl.status).toBe(200);
+
+    const del = await request(app.getHttpServer())
+      .delete(`/requests/${id}/documents/${docId}`)
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(del.status).toBe(200);
+
+    const gone = await request(app.getHttpServer())
+      .get(`/requests/${id}/documents/${docId}/download`)
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(gone.status).toBe(404);
+
+    const audits = await prisma.auditLog.findMany({ where: { requestId: id } });
+    const actions = audits.map((a) => a.action);
+    expect(actions).toContain('REQUEST_CREATED');
+    expect(actions).toContain('DOCUMENT_UPLOADED');
+    expect(actions).toContain('DOCUMENT_DELETED');
+  });
+
+  it('completing with a document but no note succeeds (acceptance 5)', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'VPN' } });
+    const created = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        departmentId: dept!.id,
+        requestTypeId: rt!.id,
+        title: 'Doc Instead Of Note',
+        description: 'Resolution will be delivered as an attached document file',
+        priority: 'STANDARD',
+      });
+    const id = created.body.id;
+    await request(app.getHttpServer())
+      .patch(`/requests/${id}/claim`)
+      .set('Authorization', `Bearer ${agentToken}`);
+
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+    await request(app.getHttpServer())
+      .post(`/requests/${id}/documents`)
+      .set('Authorization', `Bearer ${agentToken}`)
+      .attach('file', png, { filename: 'proof.png', contentType: 'image/png' });
+
+    const done = await request(app.getHttpServer())
+      .patch(`/requests/${id}/status`)
+      .set('Authorization', `Bearer ${agentToken}`)
+      .send({ status: 'COMPLETED' });
+    expect(done.status).toBe(200);
+    expect(done.body.status).toBe('COMPLETED');
+  });
+
+  it('notifications: creation notifies staff, inbox and counts work', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+    const created = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        departmentId: dept!.id,
+        requestTypeId: rt!.id,
+        title: 'Notify Flow Test',
+        description: 'Checking that department staff get inbox notifications',
+        priority: 'STANDARD',
+      });
+    const id = created.body.id;
+
+    const inbox = await request(app.getHttpServer())
+      .get('/notifications')
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(inbox.status).toBe(200);
+    expect(inbox.body.some((n: any) => n.requestId === id && n.type === 'request.created')).toBe(true);
+
+    const count = await request(app.getHttpServer())
+      .get('/notifications/unread-count')
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(count.status).toBe(200);
+    expect(count.body.count).toBeGreaterThanOrEqual(1);
+
+    const readAll = await request(app.getHttpServer())
+      .patch('/notifications/read-all')
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(readAll.status).toBe(200);
+
+    const after = await request(app.getHttpServer())
+      .get('/notifications/unread-count')
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(after.body.count).toBe(0);
+  });
+
+  it('duplicate check warns on twins and stays silent otherwise', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const res = await request(app.getHttpServer())
+      .post('/requests/check-duplicates')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ departmentId: dept!.id, title: 'VPN access for travel' });
+    expect(res.status).toBe(200);
+    expect(res.body.length).toBeGreaterThanOrEqual(1);
+
+    const clean = await request(app.getHttpServer())
+      .post('/requests/check-duplicates')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ departmentId: dept!.id, title: 'Zebra juggling championship finals' });
+    expect(clean.status).toBe(200);
+    expect(clean.body).toEqual([]);
+
+    const anon = await request(app.getHttpServer())
+      .post('/requests/check-duplicates')
+      .send({ departmentId: dept!.id, title: 'Laptop screen cracked badly' });
+    expect(anon.status).toBe(401);
+  });
+
+  it('admin report aggregates status and departments; employees forbidden', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/requests/report')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.byStatus.PENDING).toBeGreaterThanOrEqual(1);
+    expect(res.body.departments.some((d: any) => d.code === 'IT')).toBe(true);
+
+    const denied = await request(app.getHttpServer())
+      .get('/requests/report')
+      .set('Authorization', `Bearer ${employeeToken}`);
+    expect(denied.status).toBe(403);
+  });
+
+  it('department managers manage their own members; agents and outsiders cannot', async () => {
+    const it = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const target = await prisma.user.findFirst({ where: { email: 'carol@acme.com' } });
+
+    const added = await request(app.getHttpServer())
+      .post(`/departments/${it!.id}/members`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ userId: target!.id, departmentRole: 'AGENT' });
+    expect([200, 201].includes(added.status)).toBe(true);
+
+    const listed = await request(app.getHttpServer())
+      .get(`/departments/${it!.id}/members`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(listed.status).toBe(200);
+    expect(listed.body.some((m: any) => m.userId === target!.id)).toBe(true);
+
+    const agentDenied = await request(app.getHttpServer())
+      .post(`/departments/${it!.id}/members`)
+      .set('Authorization', `Bearer ${agentToken}`)
+      .send({ userId: target!.id });
+    expect(agentDenied.status).toBe(403);
+
+    const removed = await request(app.getHttpServer())
+      .delete(`/departments/${it!.id}/members/${target!.id}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(removed.status).toBe(200);
   });
 
   it('deactivated users cannot log in until reactivated', async () => {

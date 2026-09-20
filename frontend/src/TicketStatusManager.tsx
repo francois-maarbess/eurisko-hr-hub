@@ -27,6 +27,14 @@ interface Membership {
   departmentRole: string;
 }
 
+interface DocMeta {
+  id: string;
+  originalFilename: string;
+  mimeType: string;
+  byteSize: number;
+  createdAt: string;
+}
+
 interface CardErrorState {
   [ticketId: string]: string | null;
 }
@@ -62,6 +70,9 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
   const [resolutionInputs, setResolutionInputs] = useState<Record<string, string>>({});
   const [rejectionInputs, setRejectionInputs] = useState<Record<string, string>>({});
   const [showReject, setShowReject] = useState<Record<string, boolean>>({});
+  const [docsOpen, setDocsOpen] = useState<Record<string, boolean>>({});
+  const [docsCache, setDocsCache] = useState<Record<string, DocMeta[]>>({});
+  const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
 
   const authHeaders = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
   const isAdmin = platformRole === 'SYSTEM_ADMIN';
@@ -142,6 +153,81 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
     );
   };
 
+  const loadDocs = async (ticketId: string) => {
+    try {
+      const res = await fetch(`http://localhost:3000/requests/${ticketId}/documents`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const docs = await res.json();
+      setDocsCache((c) => ({ ...c, [ticketId]: docs }));
+    } catch {
+      // Attachments panel is best-effort; the card stays usable.
+    }
+  };
+
+  const toggleDocs = (ticketId: string) => {
+    setDocsOpen((c) => {
+      const next = !c[ticketId];
+      if (next && !docsCache[ticketId]) void loadDocs(ticketId);
+      return { ...c, [ticketId]: next };
+    });
+  };
+
+  const handleUpload = async (ticket: TicketState, file: File) => {
+    setUploadingDoc(ticket.id);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch(`http://localhost:3000/requests/${ticket.id}/documents`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCardErrors((current) => ({ ...current, [ticket.id]: data?.message || 'Upload failed.' }));
+        return;
+      }
+      await loadDocs(ticket.id);
+    } catch {
+      setCardErrors((current) => ({ ...current, [ticket.id]: 'Upload failed.' }));
+    } finally {
+      setUploadingDoc(null);
+    }
+  };
+
+  const handleDownload = async (ticket: TicketState, doc: DocMeta) => {
+    try {
+      const res = await fetch(`http://localhost:3000/requests/${ticket.id}/documents/${doc.id}/download`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        setCardErrors((current) => ({ ...current, [ticket.id]: 'Download failed.' }));
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = doc.originalFilename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setCardErrors((current) => ({ ...current, [ticket.id]: 'Download failed.' }));
+    }
+  };
+
+  const handleDeleteDoc = async (ticket: TicketState, doc: DocMeta) => {
+    await mutate(ticket, () =>
+      fetch(`http://localhost:3000/requests/${ticket.id}/documents/${doc.id}`, {
+        method: 'DELETE',
+        headers: authHeaders,
+      }),
+    );
+    await loadDocs(ticket.id);
+  };
+
   const handleReject = async (ticket: TicketState) => {
     const reason = (rejectionInputs[ticket.id] ?? '').trim();
     if (!reason) {
@@ -189,9 +275,12 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
       {tickets.map((ticket) => {
         const isOwner = ticket.employeeId === userId;
         const inMyDept = memberDeptIds.has(ticket.departmentId);
+        const isTerminal = ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(ticket.status);
         const canClaim = (inMyDept || isAdmin) && ticket.status === 'PENDING' && !ticket.claimedById && !isOwner;
         const canCancel = isOwner && ticket.status === 'PENDING';
         const canWork = (inMyDept || isAdmin) && !isOwner && ticket.status === 'IN_PROGRESS';
+        const canManageDocs = inMyDept || isAdmin;
+        const canDownloadDocs = canManageDocs || (isOwner && isTerminal);
         const ticketError = cardErrors[ticket.id];
 
         return (
@@ -218,6 +307,65 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
 
             {ticket.claimant && (
               <p className="muted">Claimed by: {ticket.claimant.displayName}</p>
+            )}
+
+            {(canManageDocs || canDownloadDocs) && (
+              <div style={{ marginTop: '0.5rem' }}>
+                <button
+                  onClick={() => toggleDocs(ticket.id)}
+                  style={{ border: 'none', background: 'none', color: 'var(--blue)', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700, padding: 0 }}
+                >
+                  {docsOpen[ticket.id] ? '▾ Attachments' : '▸ Attachments'}
+                </button>
+                {docsOpen[ticket.id] && (
+                  <div style={{ marginTop: '0.4rem', display: 'grid', gap: '0.35rem' }}>
+                    {(docsCache[ticket.id] || []).map((d) => (
+                      <div key={d.id} className="row" style={{ justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: '0.85rem' }}>
+                          📎 {d.originalFilename} <span className="muted">({Math.round(d.byteSize / 1024)} KB)</span>
+                        </span>
+                        <span className="row">
+                          {canDownloadDocs && (
+                            <button
+                              onClick={() => handleDownload(ticket, d)}
+                              style={{ border: 'none', background: 'none', color: 'var(--blue)', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 700 }}
+                            >
+                              Download
+                            </button>
+                          )}
+                          {canManageDocs && (
+                            <button
+                              onClick={() => handleDeleteDoc(ticket, d)}
+                              style={{ border: 'none', background: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 700 }}
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                    {(docsCache[ticket.id] || []).length === 0 && (
+                      <span className="muted" style={{ fontSize: '0.85rem' }}>No attachments yet.</span>
+                    )}
+                    {canManageDocs && !isTerminal && (
+                      <label style={{ fontSize: '0.85rem', color: 'var(--blue)', cursor: 'pointer', fontWeight: 700 }}>
+                        {uploadingDoc === ticket.id ? 'Uploading…' : '+ Attach PDF / PNG / JPEG (max 5MB)'}
+                        <input
+                          type="file"
+                          accept=".pdf,.png,.jpg,.jpeg"
+                          style={{ display: 'none' }}
+                          disabled={uploadingDoc === ticket.id}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            e.target.value = '';
+                            if (f) void handleUpload(ticket, f);
+                          }}
+                        />
+                      </label>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
 
             {canWork && (

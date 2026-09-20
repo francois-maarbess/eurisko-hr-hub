@@ -19,7 +19,17 @@ const TYPE_SYNONYMS: Record<string, string[]> = {
   LEAVE: ['leave', 'vacation', 'holiday', 'holidays', 'timeoff', 'time-off', 'absence', 'pto', 'sick'],
   BUDGET: ['budget', 'budgets', 'funding', 'allocation', 'approve', 'approval'],
   MAINTENANCE: ['maintenance', 'repair', 'repairs', 'broken', 'facility', 'facilities', 'plumbing', 'electrical', 'cleaning', 'hvac', 'cooling', 'heating'],
-  SUPPLIES: ['supplies', 'supply', 'stationery', 'paper', 'furniture', 'chair', 'desk', 'equipment', 'stock'],
+  SUPPLIES: ['supplies', 'supply', 'stationery', 'paper', 'furniture', 'chair', 'equipment', 'stock'],
+  PAYROLL: ['payroll', 'payslip', 'salary', 'overtime', 'wage'],
+  BENEFITS: ['benefits', 'benefit', 'insurance', 'health', 'coverage'],
+  EMAIL: ['email', 'emails', 'mailbox', 'mail', 'calendar', 'outlook', 'inbox'],
+  EQUIPMENT: ['equipment', 'hardware', 'desktop', 'monitor', 'docking', 'dock'],
+  PAYMENT: ['payment', 'payments', 'banking', 'bank', 'transfer', 'paid'],
+  BADGE: ['badge', 'badges', 'building', 'entry', 'entrance', 'gate'],
+  DESK: ['desk', 'meeting', 'room', 'workspace', 'office', 'setup', 'move'],
+  TRAINING: ['training', 'course', 'courses', 'workshop', 'certification', 'learn', 'excel'],
+  WELLBEING: ['wellbeing', 'wellness', 'health', 'support', 'stress', 'mental'],
+  FEEDBACK: ['feedback', 'suggestion', 'suggestions', 'experience', 'improve', 'idea'],
 };
 
 function words(text: string): string[] {

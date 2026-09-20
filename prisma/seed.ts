@@ -29,10 +29,16 @@ async function main() {
     create: { code: 'FINANCE', name: 'Finance', description: 'Expenses, invoices, budgets and reimbursements' },
   });
 
-  const operations = await prisma.department.upsert({
-    where: { code: 'OPERATIONS' },
+  const fac = await prisma.department.upsert({
+    where: { code: 'FAC' },
     update: {},
-    create: { code: 'OPERATIONS', name: 'Operations & Facilities', description: 'Maintenance, repairs, office supplies and facilities' },
+    create: { code: 'FAC', name: 'Facilities & Workplace', description: 'Maintenance, repairs, supplies, badges and workspace' },
+  });
+
+  const peo = await prisma.department.upsert({
+    where: { code: 'PEO' },
+    update: {},
+    create: { code: 'PEO', name: 'People Operations', description: 'Training, performance, wellbeing and feedback' },
   });
 
   // Users (all password-protected; see README demo accounts)
@@ -153,15 +159,75 @@ async function main() {
   });
 
   const maintenanceType = await prisma.requestType.upsert({
-    where: { departmentId_code: { departmentId: operations.id, code: 'MAINTENANCE' } },
+    where: { departmentId_code: { departmentId: fac.id, code: 'MAINTENANCE' } },
     update: {},
-    create: { departmentId: operations.id, code: 'MAINTENANCE', name: 'Maintenance Request', description: 'Repairs, plumbing, electrical and facility issues' },
+    create: { departmentId: fac.id, code: 'MAINTENANCE', name: 'Maintenance Request', description: 'Repairs, plumbing, electrical and facility issues' },
   });
 
   const suppliesType = await prisma.requestType.upsert({
-    where: { departmentId_code: { departmentId: operations.id, code: 'SUPPLIES' } },
+    where: { departmentId_code: { departmentId: fac.id, code: 'SUPPLIES' } },
     update: {},
-    create: { departmentId: operations.id, code: 'SUPPLIES', name: 'Office Supplies', description: 'Order stationery, furniture and office stock' },
+    create: { departmentId: fac.id, code: 'SUPPLIES', name: 'Office Supplies', description: 'Order stationery, furniture and office stock' },
+  });
+
+  const badgeType = await prisma.requestType.upsert({
+    where: { departmentId_code: { departmentId: fac.id, code: 'BADGE' } },
+    update: {},
+    create: { departmentId: fac.id, code: 'BADGE', name: 'Badge & Building Access', description: 'Access badges and building entry' },
+  });
+
+  const deskType = await prisma.requestType.upsert({
+    where: { departmentId_code: { departmentId: fac.id, code: 'DESK' } },
+    update: {},
+    create: { departmentId: fac.id, code: 'DESK', name: 'Desk & Meeting Room', description: 'Desk issues, meeting rooms and workspace moves' },
+  });
+
+  const payrollType = await prisma.requestType.upsert({
+    where: { departmentId_code: { departmentId: hr.id, code: 'PAYROLL' } },
+    update: {},
+    create: { departmentId: hr.id, code: 'PAYROLL', name: 'Payroll & Payslip', description: 'Payroll questions and payslip copies' },
+  });
+
+  const benefitsType = await prisma.requestType.upsert({
+    where: { departmentId_code: { departmentId: hr.id, code: 'BENEFITS' } },
+    update: {},
+    create: { departmentId: hr.id, code: 'BENEFITS', name: 'Benefits & Insurance', description: 'Health insurance and employee benefits' },
+  });
+
+  const emailType = await prisma.requestType.upsert({
+    where: { departmentId_code: { departmentId: it.id, code: 'EMAIL' } },
+    update: {},
+    create: { departmentId: it.id, code: 'EMAIL', name: 'Email & Calendar', description: 'Email and calendar problems' },
+  });
+
+  const equipmentType = await prisma.requestType.upsert({
+    where: { departmentId_code: { departmentId: it.id, code: 'EQUIPMENT' } },
+    update: {},
+    create: { departmentId: it.id, code: 'EQUIPMENT', name: 'Equipment Request', description: 'Request or replace non-laptop hardware' },
+  });
+
+  const paymentType = await prisma.requestType.upsert({
+    where: { departmentId_code: { departmentId: finance.id, code: 'PAYMENT' } },
+    update: {},
+    create: { departmentId: finance.id, code: 'PAYMENT', name: 'Payment & Banking', description: 'Payment and banking questions' },
+  });
+
+  const trainingType = await prisma.requestType.upsert({
+    where: { departmentId_code: { departmentId: peo.id, code: 'TRAINING' } },
+    update: {},
+    create: { departmentId: peo.id, code: 'TRAINING', name: 'Training Request', description: 'Courses, certifications and workshops' },
+  });
+
+  const wellbeingType = await prisma.requestType.upsert({
+    where: { departmentId_code: { departmentId: peo.id, code: 'WELLBEING' } },
+    update: {},
+    create: { departmentId: peo.id, code: 'WELLBEING', name: 'Employee Wellbeing', description: 'Wellbeing support and resources' },
+  });
+
+  const feedbackType = await prisma.requestType.upsert({
+    where: { departmentId_code: { departmentId: peo.id, code: 'FEEDBACK' } },
+    update: {},
+    create: { departmentId: peo.id, code: 'FEEDBACK', name: 'Workplace Feedback', description: 'Suggestions about the workplace experience' },
   });
 
   // Requests across every state for a lived-in demo queue
@@ -281,7 +347,7 @@ async function main() {
     create: {
       id: 'req-8',
       employeeId: employee.id,
-      departmentId: operations.id,
+      departmentId: fac.id,
       requestTypeId: maintenanceType.id,
       title: 'AC Not Cooling',
       description: 'The air conditioning in meeting room B stopped cooling yesterday.',
@@ -344,13 +410,76 @@ async function main() {
     create: {
       id: 'req-12',
       employeeId: employee.id,
-      departmentId: operations.id,
+      departmentId: fac.id,
       requestTypeId: suppliesType.id,
       title: 'Standing Desk',
       description: 'Requesting a standing desk converter for back pain.',
       priority: 'STANDARD',
       status: 'REJECTED',
       rejectionReason: 'Furniture budget frozen until next quarter.',
+    },
+  });
+
+  await prisma.request.upsert({
+    where: { id: 'req-13' },
+    update: {},
+    create: {
+      id: 'req-13',
+      employeeId: employee.id,
+      departmentId: peo.id,
+      requestTypeId: trainingType.id,
+      title: 'Advanced Excel Training',
+      description: 'Requesting a seat in next month’s advanced Excel workshop.',
+      priority: 'LOW',
+      status: 'PENDING',
+    },
+  });
+
+  await prisma.request.upsert({
+    where: { id: 'req-14' },
+    update: {},
+    create: {
+      id: 'req-14',
+      employeeId: employee.id,
+      departmentId: it.id,
+      requestTypeId: emailType.id,
+      title: 'Shared Mailbox Access',
+      description: 'Need access to the support shared mailbox starting Monday.',
+      priority: 'STANDARD',
+      status: 'IN_PROGRESS',
+      claimedById: agent.id,
+    },
+  });
+
+  await prisma.request.upsert({
+    where: { id: 'req-15' },
+    update: {},
+    create: {
+      id: 'req-15',
+      employeeId: employee.id,
+      departmentId: hr.id,
+      requestTypeId: payrollType.id,
+      title: 'Missing Overtime Line',
+      description: 'October payslip is missing the overtime line for week 42.',
+      priority: 'STANDARD',
+      status: 'COMPLETED',
+      claimedById: agent.id,
+      resolutionNote: 'Payroll rerun issued, corrected slip sent.',
+    },
+  });
+
+  await prisma.request.upsert({
+    where: { id: 'req-16' },
+    update: {},
+    create: {
+      id: 'req-16',
+      employeeId: employee.id,
+      departmentId: fac.id,
+      requestTypeId: badgeType.id,
+      title: 'Replacement Badge',
+      description: 'Lost access badge, need a replacement before Monday.',
+      priority: 'URGENT',
+      status: 'PENDING',
     },
   });
 

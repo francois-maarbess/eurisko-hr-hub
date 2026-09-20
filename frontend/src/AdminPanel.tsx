@@ -32,6 +32,12 @@ export default function AdminPanel({ token }: AdminPanelProps) {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [memberDrafts, setMemberDrafts] = useState<Record<string, { deptId: string; role: string }>>({});
+  const [report, setReport] = useState<{ byStatus: Record<string, number>; departments: { code: string; name: string; open: number; total: number }[] } | null>(null);
+  const [newDeptCode, setNewDeptCode] = useState('');
+  const [newDeptName, setNewDeptName] = useState('');
+  const [newTypeDept, setNewTypeDept] = useState('');
+  const [newTypeCode, setNewTypeCode] = useState('');
+  const [newTypeName, setNewTypeName] = useState('');
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
@@ -43,6 +49,7 @@ export default function AdminPanel({ token }: AdminPanelProps) {
       ]);
       if (uRes.ok) setUsers(await uRes.json());
       if (dRes.ok) setDepartments(await dRes.json());
+      void loadReport();
     } catch {
       setMessage('Cannot reach the server');
     }
@@ -146,6 +153,65 @@ export default function AdminPanel({ token }: AdminPanelProps) {
     }
   };
 
+  const loadReport = async () => {
+    try {
+      const res = await fetch('http://localhost:3000/requests/report', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setReport(await res.json());
+    } catch {
+      // Reporting is informational; the panel stays usable without it.
+    }
+  };
+
+  const createDepartment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await fetch('http://localhost:3000/departments', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ code: newDeptCode, name: newDeptName }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMessage(data.message || 'Could not create department');
+        return;
+      }
+      setNewDeptCode('');
+      setNewDeptName('');
+      setMessage(`Department ${data.code} created.`);
+      await load();
+    } catch {
+      setMessage('Cannot reach the server');
+    }
+  };
+
+  const createRequestType = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTypeDept) {
+      setMessage('Pick a department for the new type.');
+      return;
+    }
+    try {
+      const res = await fetch(`http://localhost:3000/departments/${newTypeDept}/request-types`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ code: newTypeCode, name: newTypeName }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMessage(data.message || 'Could not create request type');
+        return;
+      }
+      setNewTypeCode('');
+      setNewTypeName('');
+      setMessage(`Request type ${data.code} created.`);
+      await load();
+    } catch {
+      setMessage('Cannot reach the server');
+    }
+  };
+
   const removeMembership = async (u: AdminUser, departmentId: string) => {
     try {
       const res = await fetch(`http://localhost:3000/auth/users/${u.id}/memberships/${departmentId}`, {
@@ -167,7 +233,44 @@ export default function AdminPanel({ token }: AdminPanelProps) {
     <div className="admin-zone">
       <span className="admin-tag">ADMIN ONLY</span>
       <h3 className="card-title">Administration</h3>
-      <p className="card-sub">Create accounts, assign roles and departments, activate or deactivate users.</p>
+      <p className="card-sub">Create accounts, assign roles and departments, manage the catalog, activate or deactivate users.</p>
+
+      {report && (
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+          {Object.entries(report.byStatus).map(([status, count]) => (
+            <span key={status} className="badge" style={{ background: 'var(--navy)', color: '#fff' }}>
+              {status}: {count}
+            </span>
+          ))}
+          {report.departments.map((d) => (
+            <span key={d.code} className="badge" style={{ background: 'var(--blue-pale)', color: '#1d4ed8' }}>
+              {d.code}: {d.open} open / {d.total}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <h4 style={{ margin: '0 0 0.5rem', color: 'var(--navy)' }}>Catalog</h4>
+      <form onSubmit={createDepartment}>
+        <div className="row">
+          <input className="input" style={{ flex: 1 }} value={newDeptCode} onChange={(e) => setNewDeptCode(e.target.value)} placeholder="CODE (e.g. LEGAL)" />
+          <input className="input" style={{ flex: 2 }} value={newDeptName} onChange={(e) => setNewDeptName(e.target.value)} placeholder="Department name" />
+          <Button type="submit" variant="ghost" small>Add Dept</Button>
+        </div>
+      </form>
+      <form onSubmit={createRequestType} style={{ marginTop: '0.5rem' }}>
+        <div className="row">
+          <select className="select" style={{ flex: 1 }} value={newTypeDept} onChange={(e) => setNewTypeDept(e.target.value)}>
+            <option value="">Dept…</option>
+            {departments.map((d) => (
+              <option key={d.id} value={d.id}>{d.code}</option>
+            ))}
+          </select>
+          <input className="input" style={{ flex: 1 }} value={newTypeCode} onChange={(e) => setNewTypeCode(e.target.value)} placeholder="TYPE_CODE" />
+          <input className="input" style={{ flex: 2 }} value={newTypeName} onChange={(e) => setNewTypeName(e.target.value)} placeholder="Type name" />
+          <Button type="submit" variant="ghost" small>Add Type</Button>
+        </div>
+      </form>
 
       <form onSubmit={handleCreate}>
         <Field label="Email *">

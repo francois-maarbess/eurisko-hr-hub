@@ -55,14 +55,14 @@ cd frontend && npm run dev
 ## Running Tests
 
 ```bash
-npm test      # 42 tests (all deterministic, SQLite)
+npm test      # 55 tests (all deterministic, SQLite)
 npm run eval:ai  # 6 AI eval cases (offline, no key, no DB)
 ```
 
-42 tests covering:
-- **Unit**: Status transition business rules (10) + AI extractor/validation/fallback (8) + password accounts (6)
+55 tests covering:
+- **Unit**: Status transitions (10) + AI extractor/validation/fallback (8) + password accounts (6) + purge & duplicate scoring (3)
 - **Integration**: Prisma ↔ SQLite database lifecycle
-- **E2E**: Full HTTP flow with auth, create, claim, complete, authorization, validation, regression + AI draft endpoint + catalog + admin user lifecycle
+- **E2E**: Full HTTP flow with auth, scoped views, create, claim, complete, documents lifecycle, notifications, duplicates, report, manager memberships, validation, regression + AI draft endpoint + catalog + admin user lifecycle
 
 ## AI-Assisted Intake (Week 4)
 
@@ -91,6 +91,23 @@ normal validated flow — the AI never creates anything.
 | `GET` | `/auth/memberships` | Yes | My active department memberships |
 | `GET` | `/catalog/departments` | Yes | List active departments |
 | `GET` | `/catalog/request-types` | Yes | List active request types (filterable by department) |
+| `POST` | `/departments` | Admin | Create a department |
+| `PATCH` | `/departments/:id` | Admin | Edit a department (name, description, active) |
+| `POST` | `/departments/:id/request-types` | Admin | Create a request type in a department |
+| `PATCH` | `/departments/:deptId/request-types/:typeId` | Admin | Edit a request type (incl. active flag) |
+| `GET` | `/departments/:id/members` | Manager | List department members |
+| `POST` | `/departments/:id/members` | Manager | Add/update a member (AGENT/MANAGER) |
+| `DELETE` | `/departments/:id/members/:userId` | Manager | Remove a member |
+| `POST` | `/requests/:id/documents` | Staff | Upload PDF/PNG/JPEG (max 5MB, content-verified) |
+| `GET` | `/requests/:id/documents` | Staff/owner* | List attachments (*owner only when terminal) |
+| `GET` | `/requests/:id/documents/:docId/download` | Staff/owner* | Download brokered by the API, never public |
+| `DELETE` | `/requests/:id/documents/:docId` | Staff | Delete (payload purged, audit kept) |
+| `POST` | `/requests/check-duplicates` | Yes | Warn about similar open tickets (advisory) |
+| `GET` | `/requests/report` | Admin | Counts by status + per-department open/total |
+| `GET` | `/notifications` | Yes | My inbox (newest first) |
+| `GET` | `/notifications/unread-count` | Yes | Unread badge number |
+| `PATCH` | `/notifications/:id/read` | Yes | Mark one read |
+| `PATCH` | `/notifications/read-all` | Yes | Mark all read |
 | `GET` | `/requests` | Yes | My requests (default); `?view=queue` (dept staff) or `?view=claimed` |
 | `GET` | `/requests/:id` | Yes | Get single request |
 | `POST` | `/requests` | Yes | Create a new request |
@@ -149,3 +166,4 @@ normal validated flow — the AI never creates anything.
 - `docs/week3-full-stack-delivery.md` — Week 3 delivery details
 - `docs/week4-production-ai.md` — Week 4 AI intake details + eval guide
 - `docs/decisions/ADR-002.md` — Password auth + single-company scope (SSO deferred)
+- `docs/decisions/ADR-003.md` — Document storage backend (DB bytea on localhost, S3 seam)

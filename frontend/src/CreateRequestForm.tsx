@@ -22,6 +22,8 @@ export default function CreateRequestForm({ token, onCreated }: CreateRequestFor
   const [aiText, setAiText] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiNote, setAiNote] = useState('');
+  const [dupLoading, setDupLoading] = useState(false);
+  const [duplicates, setDuplicates] = useState<{ id: string; title: string; status: string }[] | null>(null);
 
   useEffect(() => {
     // Pickers load from the product catalog — one option per department and
@@ -78,6 +80,27 @@ export default function CreateRequestForm({ token, onCreated }: CreateRequestFor
       setAiNote('Cannot reach the server');
     } finally {
       setAiLoading(false);
+    }
+  };
+
+  const handleCheckDuplicates = async () => {
+    if (!selectedDept || title.trim().length < 4) {
+      setDuplicates(null);
+      return;
+    }
+    setDupLoading(true);
+    try {
+      const res = await fetch('http://localhost:3000/requests/check-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ departmentId: selectedDept, title, description }),
+      });
+      const data = await res.json();
+      setDuplicates(res.ok && Array.isArray(data) ? data : []);
+    } catch {
+      setDuplicates([]);
+    } finally {
+      setDupLoading(false);
     }
   };
 
@@ -189,6 +212,26 @@ export default function CreateRequestForm({ token, onCreated }: CreateRequestFor
             required
           />
         </Field>
+
+        <div style={{ marginBottom: '0.8rem' }}>
+          <Button variant="ghost" small onClick={handleCheckDuplicates} disabled={dupLoading} type="button">
+            {dupLoading ? 'Checking…' : 'Check for duplicates'}
+          </Button>
+          {duplicates !== null && (
+            duplicates.length === 0 ? (
+              <p className="muted" style={{ marginTop: '0.4rem' }}>No similar open requests. Good to go.</p>
+            ) : (
+              <div className="note-info" style={{ background: 'var(--warning-bg)', border: 'none', marginTop: '0.5rem' }}>
+                <strong>{duplicates.length} similar open request{duplicates.length > 1 ? 's' : ''}:</strong>
+                <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.2rem' }}>
+                  {duplicates.map((d) => (
+                    <li key={d.id}>{d.title} <span className="muted">({d.status})</span></li>
+                  ))}
+                </ul>
+              </div>
+            )
+          )}
+        </div>
 
         <Field label="Priority">
           <select className="select" value={priority} onChange={(e) => setPriority(e.target.value as any)}>

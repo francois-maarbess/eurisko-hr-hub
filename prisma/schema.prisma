@@ -20,6 +20,8 @@ model User {
   departmentMemberships DepartmentMember[]
   ownedRequests         Request[]         @relation("RequestOwner")
   claimedRequests       Request[]         @relation("RequestClaimant")
+  documents             Document[]
+  notifications         Notification[]
 }
 
 model Department {
@@ -86,7 +88,74 @@ model Request {
   claimant    User?        @relation("RequestClaimant", fields: [claimedById], references: [id])
   department  Department   @relation(fields: [departmentId], references: [id])
   requestType RequestType  @relation(fields: [requestTypeId], references: [id])
+  documents   Document[]
+  auditLogs   AuditLog[]
 
   @@index([employeeId, createdAt(sort: Desc)])
   @@index([departmentId, status, priority, createdAt])
+}
+
+model Document {
+  id               String    @id @default(cuid())
+  requestId        String
+  storageKey       String
+  originalFilename String
+  mimeType         String
+  byteSize         Int
+  checksum         String
+  data             Bytes?
+  uploadedBy       String
+  purgeAt          DateTime
+  deletedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  request  Request @relation(fields: [requestId], references: [id])
+  uploader User    @relation(fields: [uploadedBy], references: [id])
+
+  @@index([requestId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  requestId String?
+  actorId   String
+  action    String
+  oldValue  String?
+  newValue  String?
+  createdAt DateTime @default(now())
+
+  request Request? @relation(fields: [requestId], references: [id])
+
+  @@index([requestId])
+  @@index([actorId])
+}
+
+model NotificationEvent {
+  id             String    @id @default(cuid())
+  requestId      String?
+  eventType      String
+  payload        String    @default("{}")
+  status         String    @default("PENDING")
+  attempts       Int       @default(0)
+  lastError      String?
+  idempotencyKey String    @unique
+  sentAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([status, createdAt])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  requestId String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

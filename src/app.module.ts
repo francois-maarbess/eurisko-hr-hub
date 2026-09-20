@@ -5,10 +5,22 @@ import { RequestsController } from './requests.controller';
 import { RequestsService } from './requests.service';
 import { AiModule } from './ai/ai.module';
 import { CatalogController } from './catalog.controller';
+import { DocumentsController } from './documents.controller';
+import { DocumentsService } from './documents.service';
+import { NotificationsController } from './notifications.controller';
+import { NotificationsService } from './notifications.service';
+import { DepartmentsController } from './departments.controller';
+import { AuditService } from './audit.service';
 
 @Module({
   imports: [PrismaModule, AuthModule, AiModule],
-  controllers: [RequestsController, CatalogController],
-  providers: [RequestsService],
+  controllers: [
+    RequestsController,
+    CatalogController,
+    DocumentsController,
+    NotificationsController,
+    DepartmentsController,
+  ],
+  providers: [RequestsService, AuditService, NotificationsService, DocumentsService],
 })
 export class AppModule {}
