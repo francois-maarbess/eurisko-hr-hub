@@ -6,6 +6,7 @@ interface LoginPageProps {
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -18,12 +19,12 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       const res = await fetch('http://localhost:3000/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
 
       if (!res.ok || data.error) {
-        setError(data.error || data.hint || 'Login failed');
+        setError(data.error || data.message || data.hint || 'Login failed');
         return;
       }
 
@@ -56,6 +57,15 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           required
           style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ccc', boxSizing: 'border-box', fontSize: '1rem' }}
         />
+        <label style={{ display: 'block', margin: '0.75rem 0 0.5rem', fontWeight: 600 }}>Password</label>
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Your password"
+          required
+          style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #ccc', boxSizing: 'border-box', fontSize: '1rem' }}
+        />
         <button
           type="submit"
           disabled={loading}
@@ -72,11 +82,12 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       )}
 
       <div style={{ marginTop: '2rem', padding: '1rem', background: '#f8f9fa', borderRadius: '8px', fontSize: '0.85rem', color: '#555' }}>
-        <strong>Demo accounts:</strong>
+        <strong>Demo accounts</strong> (password for all: <code>Password123!</code>):
         <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.2rem' }}>
           <li><code>alice@acme.com</code> — Employee (can create requests)</li>
-          <li><code>bob@acme.com</code> — IT Agent (can claim & resolve)</li>
-          <li><code>admin@acme.com</code> — System Admin</li>
+          <li><code>bob@acme.com</code> — IT + HR Agent (can claim & resolve)</li>
+          <li><code>carol@acme.com</code> — Finance Agent</li>
+          <li><code>admin@acme.com</code> — System Admin (can manage users)</li>
         </ul>
       </div>
     </div>

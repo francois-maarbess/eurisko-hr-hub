@@ -1,8 +1,15 @@
 import { PrismaClient } from '@prisma/client';
+import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+// Demo password for every seeded account (documented in README + login page).
+// Real accounts get their own password from an admin (see AuthService).
+const DEMO_PASSWORD = 'Password123!';
+
 async function main() {
+  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
+
   // Departments
   const it = await prisma.department.upsert({
     where: { code: 'IT' },
@@ -16,26 +23,38 @@ async function main() {
     create: { code: 'HR', name: 'Human Resources', description: 'Employment letters, benefits, onboarding' },
   });
 
-  // Users
+  const finance = await prisma.department.upsert({
+    where: { code: 'FINANCE' },
+    update: {},
+    create: { code: 'FINANCE', name: 'Finance', description: 'Expenses, invoices, budgets and reimbursements' },
+  });
+
+  // Users (all password-protected; see README demo accounts)
   const employee = await prisma.user.upsert({
     where: { email: 'alice@acme.com' },
-    update: {},
-    create: { email: 'alice@acme.com', displayName: 'Alice Employee', platformRole: 'EMPLOYEE' },
+    update: { passwordHash },
+    create: { email: 'alice@acme.com', displayName: 'Alice Employee', platformRole: 'EMPLOYEE', passwordHash },
   });
 
   const agent = await prisma.user.upsert({
     where: { email: 'bob@acme.com' },
-    update: {},
-    create: { email: 'bob@acme.com', displayName: 'Bob Agent', platformRole: 'EMPLOYEE' },
+    update: { passwordHash },
+    create: { email: 'bob@acme.com', displayName: 'Bob Agent', platformRole: 'EMPLOYEE', passwordHash },
   });
 
   const admin = await prisma.user.upsert({
     where: { email: 'admin@acme.com' },
-    update: {},
-    create: { email: 'admin@acme.com', displayName: 'Admin User', platformRole: 'SYSTEM_ADMIN' },
+    update: { passwordHash },
+    create: { email: 'admin@acme.com', displayName: 'Admin User', platformRole: 'SYSTEM_ADMIN', passwordHash },
   });
 
-  // Department memberships
+  const financeAgent = await prisma.user.upsert({
+    where: { email: 'carol@acme.com' },
+    update: { passwordHash },
+    create: { email: 'carol@acme.com', displayName: 'Carol Agent', platformRole: 'EMPLOYEE', passwordHash },
+  });
+
+  // Department memberships (one person may serve several departments)
   await prisma.departmentMember.upsert({
     where: { userId_departmentId: { userId: agent.id, departmentId: it.id } },
     update: {},
@@ -43,9 +62,21 @@ async function main() {
   });
 
   await prisma.departmentMember.upsert({
+    where: { userId_departmentId: { userId: agent.id, departmentId: hr.id } },
+    update: {},
+    create: { userId: agent.id, departmentId: hr.id, departmentRole: 'AGENT' },
+  });
+
+  await prisma.departmentMember.upsert({
     where: { userId_departmentId: { userId: admin.id, departmentId: it.id } },
     update: {},
     create: { userId: admin.id, departmentId: it.id, departmentRole: 'MANAGER' },
+  });
+
+  await prisma.departmentMember.upsert({
+    where: { userId_departmentId: { userId: financeAgent.id, departmentId: finance.id } },
+    update: {},
+    create: { userId: financeAgent.id, departmentId: finance.id, departmentRole: 'AGENT' },
   });
 
   // Request types
@@ -61,13 +92,43 @@ async function main() {
     create: { departmentId: it.id, code: 'VPN', name: 'VPN Access', description: 'Request VPN access' },
   });
 
+  const softwareType = await prisma.requestType.upsert({
+    where: { departmentId_code: { departmentId: it.id, code: 'SOFTWARE' } },
+    update: {},
+    create: { departmentId: it.id, code: 'SOFTWARE', name: 'Software Request', description: 'Request software installation or licenses' },
+  });
+
+  const accessType = await prisma.requestType.upsert({
+    where: { departmentId_code: { departmentId: it.id, code: 'ACCESS' } },
+    update: {},
+    create: { departmentId: it.id, code: 'ACCESS', name: 'Account Access', description: 'Request account creation, reset, or permissions' },
+  });
+
   const empLetterType = await prisma.requestType.upsert({
     where: { departmentId_code: { departmentId: hr.id, code: 'EMP_LETTER' } },
     update: {},
     create: { departmentId: hr.id, code: 'EMP_LETTER', name: 'Employment Letter', description: 'Request employment verification letter' },
   });
 
-  // Initial requests
+  const onboardingType = await prisma.requestType.upsert({
+    where: { departmentId_code: { departmentId: hr.id, code: 'ONBOARDING' } },
+    update: {},
+    create: { departmentId: hr.id, code: 'ONBOARDING', name: 'Onboarding Request', description: 'Onboarding checklist for a new joiner' },
+  });
+
+  const expenseType = await prisma.requestType.upsert({
+    where: { departmentId_code: { departmentId: finance.id, code: 'EXPENSE' } },
+    update: {},
+    create: { departmentId: finance.id, code: 'EXPENSE', name: 'Expense Reimbursement', description: 'Claim reimbursement for work expenses' },
+  });
+
+  const invoiceType = await prisma.requestType.upsert({
+    where: { departmentId_code: { departmentId: finance.id, code: 'INVOICE' } },
+    update: {},
+    create: { departmentId: finance.id, code: 'INVOICE', name: 'Invoice Request', description: 'Request or dispute a vendor invoice' },
+  });
+
+  // Requests across every state for a lived-in demo queue
   await prisma.request.upsert({
     where: { id: 'req-1' },
     update: {},
@@ -112,6 +173,69 @@ async function main() {
       priority: 'LOW',
       status: 'COMPLETED',
       resolutionNote: 'Letter sent to employee email.',
+    },
+  });
+
+  await prisma.request.upsert({
+    where: { id: 'req-4' },
+    update: {},
+    create: {
+      id: 'req-4',
+      employeeId: employee.id,
+      departmentId: it.id,
+      requestTypeId: softwareType.id,
+      title: 'Design Software License',
+      description: 'Employee needs a Figma professional license for the new project.',
+      priority: 'STANDARD',
+      status: 'PENDING',
+    },
+  });
+
+  await prisma.request.upsert({
+    where: { id: 'req-5' },
+    update: {},
+    create: {
+      id: 'req-5',
+      employeeId: employee.id,
+      departmentId: finance.id,
+      requestTypeId: expenseType.id,
+      title: 'Travel Expense Claim',
+      description: 'Reimbursement for client-site travel: flights and hotel.',
+      priority: 'STANDARD',
+      status: 'PENDING',
+    },
+  });
+
+  await prisma.request.upsert({
+    where: { id: 'req-6' },
+    update: {},
+    create: {
+      id: 'req-6',
+      employeeId: employee.id,
+      departmentId: hr.id,
+      requestTypeId: onboardingType.id,
+      title: 'New Joiner Onboarding',
+      description: 'Onboarding checklist for a new backend developer starting Monday.',
+      priority: 'URGENT',
+      status: 'IN_PROGRESS',
+      claimedById: agent.id,
+    },
+  });
+
+  await prisma.request.upsert({
+    where: { id: 'req-7' },
+    update: {},
+    create: {
+      id: 'req-7',
+      employeeId: employee.id,
+      departmentId: finance.id,
+      requestTypeId: invoiceType.id,
+      title: 'Vendor Invoice Dispute',
+      description: 'Invoice #INV-2041 charged twice for the same license seat.',
+      priority: 'STANDARD',
+      status: 'COMPLETED',
+      claimedById: financeAgent.id,
+      resolutionNote: 'Vendor credited the duplicate charge.',
     },
   });
 

@@ -45,20 +45,24 @@ cd frontend && npm run dev
 ### 4. Use the app
 
 1. Open `http://localhost:5173`
-2. Log in as `alice@acme.com` (employee) or `bob@acme.com` (IT agent)
-3. Create a request, claim it, resolve it
+2. Log in with email + password (demo password for all seeded accounts: `Password123!`):
+   - `alice@acme.com` — Employee (creates requests)
+   - `bob@acme.com` — IT + HR Agent (claims & resolves)
+   - `carol@acme.com` — Finance Agent
+   - `admin@acme.com` — System Admin (manages users in the Administration panel)
+3. Create a request (or draft one with ✨ AI), claim it as an agent, resolve it
 
 ## Running Tests
 
 ```bash
-npm test      # 33 tests (all deterministic, SQLite)
+npm test      # 42 tests (all deterministic, SQLite)
 npm run eval:ai  # 6 AI eval cases (offline, no key, no DB)
 ```
 
-33 tests covering:
-- **Unit**: Status transition business rules (10 cases) + AI extractor/validation/fallback (8 cases)
+42 tests covering:
+- **Unit**: Status transition business rules (10) + AI extractor/validation/fallback (8) + password accounts (6)
 - **Integration**: Prisma ↔ SQLite database lifecycle
-- **E2E**: Full HTTP flow with auth, create, claim, complete, authorization, validation, regression + AI draft endpoint
+- **E2E**: Full HTTP flow with auth, create, claim, complete, authorization, validation, regression + AI draft endpoint + catalog + admin user lifecycle
 
 ## AI-Assisted Intake (Week 4)
 
@@ -76,8 +80,13 @@ normal validated flow — the AI never creates anything.
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| `POST` | `/auth/login` | No | Login, returns JWT |
+| `POST` | `/auth/login` | No | Login with email + password, returns JWT |
 | `GET` | `/auth/me` | Yes | Get current user profile |
+| `GET` | `/auth/users` | Admin | List all users (no password hashes) |
+| `POST` | `/auth/users` | Admin | Create a user with password + optional department |
+| `PATCH` | `/auth/users/:id` | Admin | Activate/deactivate a user |
+| `GET` | `/catalog/departments` | Yes | List active departments |
+| `GET` | `/catalog/request-types` | Yes | List active request types (filterable by department) |
 | `GET` | `/requests` | Yes | List all requests |
 | `GET` | `/requests/:id` | Yes | Get single request |
 | `POST` | `/requests` | Yes | Create a new request |
@@ -85,12 +94,22 @@ normal validated flow — the AI never creates anything.
 | `PATCH` | `/requests/:id/claim` | Yes | Claim a pending request (dept members only) |
 | `PATCH` | `/requests/:id/status` | Yes | Update request status |
 
+## Accounts & Authorization
+
+- Passwords are bcrypt-hashed (pure-JS `bcryptjs`, no native toolchain).
+- Login rejects unknown users, wrong passwords, inactive and passwordless
+  accounts with the same 401 (no account enumeration).
+- `SYSTEM_ADMIN` (via `@Roles`) manages users; department membership
+  (`AGENT`/`MANAGER`) gates claiming; owners can never resolve their own
+  requests. One person may serve several departments.
+
 ## Project Structure
 
 ```
 ├── src/
 │   ├── ai/                # Week 4: intake providers, validation, draft endpoint
-│   ├── auth/              # JWT auth (strategy, guard, controller, module)
+│   ├── auth/              # Password accounts, JWT, roles guard
+│   ├── catalog.controller.ts  # Departments + request types (form pickers)
 │   ├── dto/               # Request validation DTOs
 │   ├── prisma.service.ts  # Prisma client factory
 │   ├── prisma.module.ts   # Global Prisma module
@@ -109,9 +128,10 @@ normal validated flow — the AI never creates anything.
 ├── frontend/
 │   └── src/
 │       ├── App.tsx
-│       ├── LoginPage.tsx
-│       ├── CreateRequestForm.tsx
-│       └── TicketStatusManager.tsx
+│       ├── LoginPage.tsx          # Email + password login
+│       ├── CreateRequestForm.tsx  # Catalog pickers + ✨ AI draft box
+│       ├── TicketStatusManager.tsx
+│       └── AdminPanel.tsx         # Admin-only user management
 └── docs/
     ├── week3-full-stack-delivery.md
     └── week4-production-ai.md

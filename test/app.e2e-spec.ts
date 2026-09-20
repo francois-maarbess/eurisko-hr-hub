@@ -12,6 +12,7 @@ describe('Service Request Flow (E2E)', () => {
   let prisma: PrismaClient;
   let employeeToken: string;
   let agentToken: string;
+  let adminToken: string;
 
   beforeAll(async () => {
     const dbPath = require('path').resolve(__dirname, '..', 'prisma', 'dev.db');
@@ -35,7 +36,8 @@ describe('Service Request Flow (E2E)', () => {
 
     const emp = await prisma.user.findFirst({ where: { email: 'alice@acme.com' } });
     const agent = await prisma.user.findFirst({ where: { email: 'bob@acme.com' } });
-    expect(emp && agent).toBeTruthy();
+    const admin = await prisma.user.findFirst({ where: { email: 'admin@acme.com' } });
+    expect(emp && agent && admin).toBeTruthy();
 
     // Sign tokens using the same JWT secret
     const jwt = app.get(JwtService);
@@ -45,6 +47,10 @@ describe('Service Request Flow (E2E)', () => {
     );
     agentToken = jwt.sign(
       { sub: agent!.id, email: agent!.email, name: agent!.displayName, role: agent!.platformRole },
+      { secret: JWT_SECRET },
+    );
+    adminToken = jwt.sign(
+      { sub: admin!.id, email: admin!.email, name: admin!.displayName, role: admin!.platformRole },
       { secret: JWT_SECRET },
     );
   }, 30000);
@@ -278,5 +284,86 @@ describe('Service Request Flow (E2E)', () => {
       .post('/requests/ai-draft')
       .send({ text: 'my laptop is broken' });
     expect(anon.status).toBe(401);
+  });
+
+  it('catalog lists departments and filters types without duplicates', async () => {
+    const depts = await request(app.getHttpServer())
+      .get('/catalog/departments')
+      .set('Authorization', `Bearer ${employeeToken}`);
+    expect(depts.status).toBe(200);
+    const codes = depts.body.map((d: any) => d.code);
+    expect(codes).toEqual(expect.arrayContaining(['IT', 'HR', 'FINANCE']));
+
+    const it = depts.body.find((d: any) => d.code === 'IT');
+    const types = await request(app.getHttpServer())
+      .get(`/catalog/request-types?departmentId=${it.id}`)
+      .set('Authorization', `Bearer ${employeeToken}`);
+    expect(types.status).toBe(200);
+    const typeCodes = types.body.map((t: any) => t.code);
+    expect(typeCodes).toEqual(expect.arrayContaining(['LAPTOP', 'VPN', 'SOFTWARE', 'ACCESS']));
+    expect(new Set(typeCodes).size).toBe(typeCodes.length);
+
+    const anon = await request(app.getHttpServer()).get('/catalog/departments');
+    expect(anon.status).toBe(401);
+  });
+
+  it('admin creates a user who can log in; employees cannot; wrong password fails', async () => {
+    const email = `e2e-${Date.now()}@acme.com`;
+    const created = await request(app.getHttpServer())
+      .post('/auth/users')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ email, displayName: 'E2E User', password: 'e2e-password-123' });
+    expect(created.status).toBe(201);
+    expect(created.body.email).toBe(email);
+    expect((created.body as any).passwordHash).toBeUndefined();
+
+    const login = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email, password: 'e2e-password-123' });
+    expect(login.status).toBe(201);
+    expect(login.body.accessToken).toBeTruthy();
+
+    const wrongPw = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email, password: 'nope-nope-nope' });
+    expect(wrongPw.status).toBe(401);
+
+    const forbidden = await request(app.getHttpServer())
+      .post('/auth/users')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ email: `other-${Date.now()}@acme.com`, password: 'e2e-password-123' });
+    expect(forbidden.status).toBe(403);
+  });
+
+  it('deactivated users cannot log in until reactivated', async () => {
+    const email = `deact-${Date.now()}@acme.com`;
+    const created = await request(app.getHttpServer())
+      .post('/auth/users')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ email, password: 'e2e-password-123' });
+    expect(created.status).toBe(201);
+
+    const off = await request(app.getHttpServer())
+      .patch(`/auth/users/${created.body.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ active: false });
+    expect(off.status).toBe(200);
+    expect(off.body.active).toBe(false);
+
+    const loginOff = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email, password: 'e2e-password-123' });
+    expect(loginOff.status).toBe(401);
+
+    const on = await request(app.getHttpServer())
+      .patch(`/auth/users/${created.body.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ active: true });
+    expect(on.status).toBe(200);
+
+    const loginOn = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email, password: 'e2e-password-123' });
+    expect(loginOn.status).toBe(201);
   });
 });

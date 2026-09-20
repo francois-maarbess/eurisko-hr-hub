@@ -11,6 +11,7 @@ model User {
   id           String   @id @default(cuid())
   email        String   @unique
   displayName  String
+  passwordHash String?  // bcrypt hash; null = account not yet activated with a password
   platformRole String   @default("EMPLOYEE") // EMPLOYEE | SYSTEM_ADMIN
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())

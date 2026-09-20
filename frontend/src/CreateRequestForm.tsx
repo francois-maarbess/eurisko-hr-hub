@@ -64,21 +64,16 @@ export default function CreateRequestForm({ token, onCreated }: CreateRequestFor
   };
 
   useEffect(() => {
-    fetch('http://localhost:3000/requests', { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => r.json())
-      .then((data) => {
-        const deptMap = new Map<string, Department>();
-        const types: RequestType[] = [];
-        for (const req of data) {
-          if (req.department && !deptMap.has(req.department.id)) {
-            deptMap.set(req.department.id, req.department);
-          }
-          if (req.requestType) {
-            types.push(req.requestType);
-          }
-        }
-        setDepartments(Array.from(deptMap.values()));
-        setRequestTypes(types);
+    // Pickers load from the product catalog — one option per department and
+    // type, no matter how many tickets exist.
+    const headers = { Authorization: `Bearer ${token}` };
+    Promise.all([
+      fetch('http://localhost:3000/catalog/departments', { headers }).then((r) => r.json()),
+      fetch('http://localhost:3000/catalog/request-types', { headers }).then((r) => r.json()),
+    ])
+      .then(([depts, types]) => {
+        if (Array.isArray(depts)) setDepartments(depts);
+        if (Array.isArray(types)) setRequestTypes(types);
       })
       .catch(() => {});
   }, [token]);

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import LoginPage from './LoginPage';
 import CreateRequestForm from './CreateRequestForm';
 import TicketStatusManager from './TicketStatusManager';
+import AdminPanel from './AdminPanel';
 
 interface User {
   id: string;
@@ -42,6 +43,8 @@ export default function App() {
       </div>
 
       <CreateRequestForm token={token} onCreated={() => setRefreshKey((k) => k + 1)} />
+
+      {user.platformRole === 'SYSTEM_ADMIN' && <AdminPanel token={token} />}
 
       <h3 style={{ marginBottom: '0.75rem' }}>Request Queue</h3>
       <TicketStatusManager key={refreshKey} token={token} />

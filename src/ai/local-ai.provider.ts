@@ -9,7 +9,12 @@ const URGENT_HINTS = [
 const TYPE_SYNONYMS: Record<string, string[]> = {
   LAPTOP: ['laptop', 'computer', 'notebook', 'macbook', 'screen', 'keyboard', 'device', 'pc', 'monitor', 'mouse'],
   VPN: ['vpn', 'remote', 'tunnel', 'network', 'wifi', 'login', 'password', 'account', 'access', 'signin', 'sign-in'],
+  SOFTWARE: ['software', 'install', 'installation', 'license', 'licence', 'application', 'program', 'tool', 'figma', 'adobe'],
+  ACCESS: ['access', 'account', 'permission', 'permissions', 'reset', 'credentials'],
   EMP_LETTER: ['letter', 'employment', 'proof', 'visa', 'verification', 'certificate', 'embassy', 'salary', 'income', 'document'],
+  ONBOARDING: ['onboard', 'onboarding', 'orientation', 'welcome', 'induction', 'starter', 'joiner', 'newcomer', 'hire'],
+  EXPENSE: ['expense', 'expenses', 'reimbursement', 'reimburse', 'travel', 'receipt', 'receipts', 'budget', 'claim'],
+  INVOICE: ['invoice', 'vendor', 'billing', 'bill', 'payment', 'dispute', 'charged', 'invoice'],
 };
 
 function words(text: string): string[] {
