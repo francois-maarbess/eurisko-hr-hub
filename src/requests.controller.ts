@@ -5,6 +5,7 @@ import {
   Post,
   Patch,
   Param,
+  Query,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -21,8 +22,8 @@ export class RequestsController {
   constructor(private readonly requestsService: RequestsService) {}
 
   @Get()
-  findAll() {
-    return this.requestsService.findAll();
+  findAll(@CurrentUser() user: any, @Query('view') view?: string) {
+    return this.requestsService.findAll(user.id, view);
   }
 
   @Get(':id')

@@ -47,7 +47,7 @@ export default function App() {
       {user.platformRole === 'SYSTEM_ADMIN' && <AdminPanel token={token} />}
 
       <h3 style={{ marginBottom: '0.75rem' }}>Request Queue</h3>
-      <TicketStatusManager key={refreshKey} token={token} />
+      <TicketStatusManager key={refreshKey} token={token} userId={user.id} platformRole={user.platformRole} />
     </div>
   );
 }

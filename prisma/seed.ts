@@ -29,6 +29,12 @@ async function main() {
     create: { code: 'FINANCE', name: 'Finance', description: 'Expenses, invoices, budgets and reimbursements' },
   });
 
+  const operations = await prisma.department.upsert({
+    where: { code: 'OPERATIONS' },
+    update: {},
+    create: { code: 'OPERATIONS', name: 'Operations & Facilities', description: 'Maintenance, repairs, office supplies and facilities' },
+  });
+
   // Users (all password-protected; see README demo accounts)
   const employee = await prisma.user.upsert({
     where: { email: 'alice@acme.com' },
@@ -126,6 +132,36 @@ async function main() {
     where: { departmentId_code: { departmentId: finance.id, code: 'INVOICE' } },
     update: {},
     create: { departmentId: finance.id, code: 'INVOICE', name: 'Invoice Request', description: 'Request or dispute a vendor invoice' },
+  });
+
+  const printerType = await prisma.requestType.upsert({
+    where: { departmentId_code: { departmentId: it.id, code: 'PRINTER' } },
+    update: {},
+    create: { departmentId: it.id, code: 'PRINTER', name: 'Printer & Peripherals', description: 'Printer setup, toner, scanners and peripherals' },
+  });
+
+  const leaveType = await prisma.requestType.upsert({
+    where: { departmentId_code: { departmentId: hr.id, code: 'LEAVE' } },
+    update: {},
+    create: { departmentId: hr.id, code: 'LEAVE', name: 'Leave Request', description: 'Vacation, sick leave and time off' },
+  });
+
+  const budgetType = await prisma.requestType.upsert({
+    where: { departmentId_code: { departmentId: finance.id, code: 'BUDGET' } },
+    update: {},
+    create: { departmentId: finance.id, code: 'BUDGET', name: 'Budget Approval', description: 'Request budget approval or allocation' },
+  });
+
+  const maintenanceType = await prisma.requestType.upsert({
+    where: { departmentId_code: { departmentId: operations.id, code: 'MAINTENANCE' } },
+    update: {},
+    create: { departmentId: operations.id, code: 'MAINTENANCE', name: 'Maintenance Request', description: 'Repairs, plumbing, electrical and facility issues' },
+  });
+
+  const suppliesType = await prisma.requestType.upsert({
+    where: { departmentId_code: { departmentId: operations.id, code: 'SUPPLIES' } },
+    update: {},
+    create: { departmentId: operations.id, code: 'SUPPLIES', name: 'Office Supplies', description: 'Order stationery, furniture and office stock' },
   });
 
   // Requests across every state for a lived-in demo queue
@@ -236,6 +272,85 @@ async function main() {
       status: 'COMPLETED',
       claimedById: financeAgent.id,
       resolutionNote: 'Vendor credited the duplicate charge.',
+    },
+  });
+
+  await prisma.request.upsert({
+    where: { id: 'req-8' },
+    update: {},
+    create: {
+      id: 'req-8',
+      employeeId: employee.id,
+      departmentId: operations.id,
+      requestTypeId: maintenanceType.id,
+      title: 'AC Not Cooling',
+      description: 'The air conditioning in meeting room B stopped cooling yesterday.',
+      priority: 'URGENT',
+      status: 'PENDING',
+    },
+  });
+
+  await prisma.request.upsert({
+    where: { id: 'req-9' },
+    update: {},
+    create: {
+      id: 'req-9',
+      employeeId: employee.id,
+      departmentId: hr.id,
+      requestTypeId: leaveType.id,
+      title: 'Summer Vacation',
+      description: 'Requesting five days off in August for a family trip.',
+      priority: 'LOW',
+      status: 'PENDING',
+    },
+  });
+
+  await prisma.request.upsert({
+    where: { id: 'req-10' },
+    update: {},
+    create: {
+      id: 'req-10',
+      employeeId: employee.id,
+      departmentId: finance.id,
+      requestTypeId: budgetType.id,
+      title: 'Q4 Team Budget',
+      description: 'Approval needed for the Q4 contractor budget of $12,000.',
+      priority: 'STANDARD',
+      status: 'IN_PROGRESS',
+      claimedById: financeAgent.id,
+    },
+  });
+
+  await prisma.request.upsert({
+    where: { id: 'req-11' },
+    update: {},
+    create: {
+      id: 'req-11',
+      employeeId: employee.id,
+      departmentId: it.id,
+      requestTypeId: printerType.id,
+      title: 'Printer Toner',
+      description: 'The second-floor printer is out of black toner.',
+      priority: 'LOW',
+      status: 'COMPLETED',
+      claimedById: agent.id,
+      resolutionNote: 'Toner cartridge replaced.',
+    },
+  });
+
+  await prisma.request.upsert({
+    where: { id: 'req-12' },
+    update: {},
+    create: {
+      id: 'req-12',
+      employeeId: employee.id,
+      departmentId: operations.id,
+      requestTypeId: suppliesType.id,
+      title: 'Standing Desk',
+      description: 'Requesting a standing desk converter for back pain.',
+      priority: 'STANDARD',
+      status: 'REJECTED',
+      rejectionReason: 'Furniture budget frozen until next quarter.',
     },
   });
 

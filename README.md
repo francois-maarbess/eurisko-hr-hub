@@ -85,9 +85,13 @@ normal validated flow — the AI never creates anything.
 | `GET` | `/auth/users` | Admin | List all users (no password hashes) |
 | `POST` | `/auth/users` | Admin | Create a user with password + optional department |
 | `PATCH` | `/auth/users/:id` | Admin | Activate/deactivate a user |
+| `PATCH` | `/auth/users/:id/role` | Admin | Change platform role (EMPLOYEE/SYSTEM_ADMIN) |
+| `POST` | `/auth/users/:id/memberships` | Admin | Add/update a department membership |
+| `DELETE` | `/auth/users/:id/memberships/:departmentId` | Admin | Remove a department membership |
+| `GET` | `/auth/memberships` | Yes | My active department memberships |
 | `GET` | `/catalog/departments` | Yes | List active departments |
 | `GET` | `/catalog/request-types` | Yes | List active request types (filterable by department) |
-| `GET` | `/requests` | Yes | List all requests |
+| `GET` | `/requests` | Yes | My requests (default); `?view=queue` (dept staff) or `?view=claimed` |
 | `GET` | `/requests/:id` | Yes | Get single request |
 | `POST` | `/requests` | Yes | Create a new request |
 | `POST` | `/requests/ai-draft` | Yes | Draft a ticket from free text (advisory, creates nothing) |
@@ -144,3 +148,4 @@ normal validated flow — the AI never creates anything.
 - `docs/architecture.md` — Components and flows
 - `docs/week3-full-stack-delivery.md` — Week 3 delivery details
 - `docs/week4-production-ai.md` — Week 4 AI intake details + eval guide
+- `docs/decisions/ADR-002.md` — Password auth + single-company scope (SSO deferred)

@@ -13,9 +13,59 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
 export class RequestsService {
   constructor(@Inject(PRISMA_CLIENT_TOKEN) private readonly prisma: PrismaClient) {}
 
-  async findAll() {
+  private openWhere() {
+    return { status: { notIn: ['COMPLETED', 'CANCELLED', 'REJECTED'] } };
+  }
+
+  private readonly fullInclude = {
+    department: true,
+    requestType: true,
+    owner: true,
+    claimant: true,
+  } as const;
+
+  /**
+   * Scoped views (single company, no tenancy here — scoping is by person).
+   * - mine (default): only requests I created. Nobody sees other people's
+   *   tickets unless they have a reason to.
+   * - queue: open tickets in MY departments (agents), everything open (admin).
+   * - claimed: open tickets claimed by me.
+   */
+  async findAll(userId: string, view?: string) {
+    if (view === 'claimed') {
+      return this.prisma.request.findMany({
+        where: { claimedById: userId, ...this.openWhere() },
+        include: this.fullInclude,
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+
+    if (view === 'queue') {
+      const user = await this.prisma.user.findUnique({ where: { id: userId } });
+      if (user?.platformRole === 'SYSTEM_ADMIN') {
+        return this.prisma.request.findMany({
+          where: this.openWhere(),
+          include: this.fullInclude,
+          orderBy: { createdAt: 'desc' },
+        });
+      }
+      const memberships = await this.prisma.departmentMember.findMany({
+        where: { userId, active: true },
+      });
+      if (memberships.length === 0) return [];
+      return this.prisma.request.findMany({
+        where: {
+          departmentId: { in: memberships.map((m) => m.departmentId) },
+          ...this.openWhere(),
+        },
+        include: this.fullInclude,
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+
     return this.prisma.request.findMany({
-      include: { department: true, requestType: true, owner: true, claimant: true },
+      where: { employeeId: userId },
+      include: this.fullInclude,
       orderBy: { createdAt: 'desc' },
     });
   }

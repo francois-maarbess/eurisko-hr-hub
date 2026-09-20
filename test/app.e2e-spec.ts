@@ -335,6 +335,99 @@ describe('Service Request Flow (E2E)', () => {
     expect(forbidden.status).toBe(403);
   });
 
+  it('scoped views: mine by default, queue by membership, claimed by claimant', async () => {
+    const emp = await prisma.user.findFirst({ where: { email: 'alice@acme.com' } });
+    const agent = await prisma.user.findFirst({ where: { email: 'bob@acme.com' } });
+
+    const mine = await request(app.getHttpServer())
+      .get('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`);
+    expect(mine.status).toBe(200);
+    expect(mine.body.length).toBeGreaterThanOrEqual(1);
+    for (const t of mine.body) expect(t.employeeId).toBe(emp!.id);
+
+    const queue = await request(app.getHttpServer())
+      .get('/requests?view=queue')
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(queue.status).toBe(200);
+    const bobDepts = (
+      await prisma.departmentMember.findMany({ where: { userId: agent!.id, active: true } })
+    ).map((m) => m.departmentId);
+    for (const t of queue.body) {
+      expect(bobDepts).toContain(t.departmentId);
+      expect(['PENDING', 'IN_PROGRESS']).toContain(t.status);
+    }
+
+    const claimed = await request(app.getHttpServer())
+      .get('/requests?view=claimed')
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(claimed.status).toBe(200);
+    for (const t of claimed.body) expect(t.claimedById).toBe(agent!.id);
+
+    const adminQueue = await request(app.getHttpServer())
+      .get('/requests?view=queue')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(adminQueue.status).toBe(200);
+    expect(adminQueue.body.length).toBeGreaterThanOrEqual(1);
+
+    const anon = await request(app.getHttpServer()).get('/requests?view=mine');
+    expect(anon.status).toBe(401);
+  });
+
+  it('admin controls roles and memberships; employees are forbidden', async () => {
+    const email = `ctl-${Date.now()}@acme.com`;
+    const created = await request(app.getHttpServer())
+      .post('/auth/users')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ email, password: 'e2e-password-123' });
+    expect(created.status).toBe(201);
+    const userId = created.body.id;
+
+    const role = await request(app.getHttpServer())
+      .patch(`/auth/users/${userId}/role`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ platformRole: 'SYSTEM_ADMIN' });
+    expect(role.status).toBe(200);
+    expect(role.body.platformRole).toBe('SYSTEM_ADMIN');
+
+    const badRole = await request(app.getHttpServer())
+      .patch(`/auth/users/${userId}/role`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ platformRole: 'GOD' });
+    expect(badRole.status).toBe(400);
+
+    const it = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const added = await request(app.getHttpServer())
+      .post(`/auth/users/${userId}/memberships`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ departmentId: it!.id, departmentRole: 'AGENT' });
+    expect(added.status).toBe(201);
+    expect(added.body.memberships.some((m: any) => m.departmentId === it!.id)).toBe(true);
+
+    const badDept = await request(app.getHttpServer())
+      .post(`/auth/users/${userId}/memberships`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ departmentId: 'nope', departmentRole: 'AGENT' });
+    expect(badDept.status).toBe(400);
+
+    const removed = await request(app.getHttpServer())
+      .delete(`/auth/users/${userId}/memberships/${it!.id}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(removed.status).toBe(200);
+
+    const empRole = await request(app.getHttpServer())
+      .patch(`/auth/users/${userId}/role`)
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ platformRole: 'EMPLOYEE' });
+    expect(empRole.status).toBe(403);
+
+    const empMember = await request(app.getHttpServer())
+      .post(`/auth/users/${userId}/memberships`)
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ departmentId: it!.id });
+    expect(empMember.status).toBe(403);
+  });
+
   it('deactivated users cannot log in until reactivated', async () => {
     const email = `deact-${Date.now()}@acme.com`;
     const created = await request(app.getHttpServer())

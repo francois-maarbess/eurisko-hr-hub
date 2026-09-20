@@ -116,6 +116,62 @@ export class AuthService {
     return this.safeUser(updated);
   }
 
+  async setRole(userId: string, platformRole: string) {
+    if (!PLATFORM_ROLES.includes(platformRole)) {
+      throw new BadRequestException('Invalid platform role.');
+    }
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new BadRequestException('User not found.');
+    const updated = await this.prisma.user.update({ where: { id: userId }, data: { platformRole } });
+    return this.safeUser(updated);
+  }
+
+  async addMembership(userId: string, departmentId: string, departmentRole = 'AGENT') {
+    if (!DEPARTMENT_ROLES.includes(departmentRole)) {
+      throw new BadRequestException('Invalid department role.');
+    }
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new BadRequestException('User not found.');
+    const department = await this.prisma.department.findUnique({ where: { id: departmentId } });
+    if (!department || !department.active) {
+      throw new BadRequestException('Selected department was not found.');
+    }
+    await this.prisma.departmentMember.upsert({
+      where: { userId_departmentId: { userId, departmentId } },
+      update: { departmentRole, active: true },
+      create: { userId, departmentId, departmentRole },
+    });
+    const refreshed = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { departmentMemberships: { include: { department: true } } },
+    });
+    return this.safeUser(refreshed);
+  }
+
+  async removeMembership(userId: string, departmentId: string) {
+    const membership = await this.prisma.departmentMember.findUnique({
+      where: { userId_departmentId: { userId, departmentId } },
+    });
+    if (!membership) throw new BadRequestException('Membership not found.');
+    await this.prisma.departmentMember.delete({
+      where: { userId_departmentId: { userId, departmentId } },
+    });
+    return { removed: true };
+  }
+
+  async myMemberships(userId: string) {
+    const memberships = await this.prisma.departmentMember.findMany({
+      where: { userId, active: true },
+      include: { department: true },
+    });
+    return memberships.map((m) => ({
+      departmentId: m.departmentId,
+      departmentCode: m.department.code,
+      departmentName: m.department.name,
+      departmentRole: m.departmentRole,
+    }));
+  }
+
   private sign(user: { id: string; email: string; displayName: string; platformRole: string }) {
     const token = this.jwtService.sign({
       sub: user.id,

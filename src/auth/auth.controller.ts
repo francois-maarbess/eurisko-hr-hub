@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Inject,
   Param,
@@ -64,6 +65,22 @@ class SetActiveDto {
   active!: boolean;
 }
 
+class SetRoleDto {
+  @IsString()
+  @IsNotEmpty()
+  platformRole!: string;
+}
+
+class AddMembershipDto {
+  @IsString()
+  @IsNotEmpty()
+  departmentId!: string;
+
+  @IsOptional()
+  @IsString()
+  departmentRole?: string;
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -107,5 +124,32 @@ export class AuthController {
   @Patch('users/:id')
   setActive(@Param('id') id: string, @Body() dto: SetActiveDto) {
     return this.authService.setActive(id, dto.active);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SYSTEM_ADMIN')
+  @Patch('users/:id/role')
+  setRole(@Param('id') id: string, @Body() dto: SetRoleDto) {
+    return this.authService.setRole(id, dto.platformRole);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SYSTEM_ADMIN')
+  @Post('users/:id/memberships')
+  addMembership(@Param('id') id: string, @Body() dto: AddMembershipDto) {
+    return this.authService.addMembership(id, dto.departmentId, dto.departmentRole);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SYSTEM_ADMIN')
+  @Delete('users/:id/memberships/:departmentId')
+  removeMembership(@Param('id') id: string, @Param('departmentId') departmentId: string) {
+    return this.authService.removeMembership(id, departmentId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('memberships')
+  myMemberships(@Request() req: any) {
+    return this.authService.myMemberships(req.user.id);
   }
 }

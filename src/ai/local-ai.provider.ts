@@ -15,6 +15,11 @@ const TYPE_SYNONYMS: Record<string, string[]> = {
   ONBOARDING: ['onboard', 'onboarding', 'orientation', 'welcome', 'induction', 'starter', 'joiner', 'newcomer', 'hire'],
   EXPENSE: ['expense', 'expenses', 'reimbursement', 'reimburse', 'travel', 'receipt', 'receipts', 'budget', 'claim'],
   INVOICE: ['invoice', 'vendor', 'billing', 'bill', 'payment', 'dispute', 'charged', 'invoice'],
+  PRINTER: ['printer', 'printers', 'peripheral', 'peripherals', 'scanner', 'toner', 'ink', 'printing'],
+  LEAVE: ['leave', 'vacation', 'holiday', 'holidays', 'timeoff', 'time-off', 'absence', 'pto', 'sick'],
+  BUDGET: ['budget', 'budgets', 'funding', 'allocation', 'approve', 'approval'],
+  MAINTENANCE: ['maintenance', 'repair', 'repairs', 'broken', 'facility', 'facilities', 'plumbing', 'electrical', 'cleaning', 'hvac', 'cooling', 'heating'],
+  SUPPLIES: ['supplies', 'supply', 'stationery', 'paper', 'furniture', 'chair', 'desk', 'equipment', 'stock'],
 };
 
 function words(text: string): string[] {

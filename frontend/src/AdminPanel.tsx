@@ -10,7 +10,7 @@ interface AdminUser {
   displayName: string;
   platformRole: string;
   active: boolean;
-  memberships: { departmentCode?: string; departmentRole: string; active: boolean }[];
+  memberships: { departmentId: string; departmentCode?: string; departmentRole: string; active: boolean }[];
 }
 
 interface Department {
@@ -38,6 +38,65 @@ export default function AdminPanel({ token }: AdminPanelProps) {
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [memberDrafts, setMemberDrafts] = useState<Record<string, { deptId: string; role: string }>>({});
+
+  const changeRole = async (u: AdminUser, platformRole: string) => {
+    try {
+      const res = await fetch(`http://localhost:3000/auth/users/${u.id}/role`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ platformRole }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setMessage(data.message || 'Could not change role');
+        return;
+      }
+      await load();
+    } catch {
+      setMessage('Cannot reach the server');
+    }
+  };
+
+  const addMembership = async (u: AdminUser) => {
+    const draft = memberDrafts[u.id] || { deptId: '', role: 'AGENT' };
+    if (!draft.deptId) {
+      setMessage('Pick a department first.');
+      return;
+    }
+    try {
+      const res = await fetch(`http://localhost:3000/auth/users/${u.id}/memberships`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ departmentId: draft.deptId, departmentRole: draft.role }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setMessage(data.message || 'Could not add membership');
+        return;
+      }
+      await load();
+    } catch {
+      setMessage('Cannot reach the server');
+    }
+  };
+
+  const removeMembership = async (u: AdminUser, departmentId: string) => {
+    try {
+      const res = await fetch(`http://localhost:3000/auth/users/${u.id}/memberships/${departmentId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setMessage(data.message || 'Could not remove membership');
+        return;
+      }
+      await load();
+    } catch {
+      setMessage('Cannot reach the server');
+    }
+  };
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
@@ -149,23 +208,70 @@ export default function AdminPanel({ token }: AdminPanelProps) {
 
       <h4 style={{ margin: '1.25rem 0 0.5rem' }}>Users ({users.length})</h4>
       <div style={{ display: 'grid', gap: '0.5rem' }}>
-        {users.map((u) => (
-          <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#fff', borderRadius: '8px', padding: '0.6rem 0.75rem', border: '1px solid #eee' }}>
-            <div style={{ flex: 1, opacity: u.active ? 1 : 0.5 }}>
-              <div style={{ fontWeight: 600 }}>{u.displayName} {!u.active && <span style={{ color: '#dc3545' }}>(deactivated)</span>}</div>
-              <div style={{ fontSize: '0.8rem', color: '#666' }}>
-                {u.email} · {u.platformRole}
-                {u.memberships.filter((m) => m.active).map((m) => ` · ${m.departmentCode || '?'} ${m.departmentRole}`).join('')}
+        {users.map((u) => {
+          const draft = memberDrafts[u.id] || { deptId: '', role: 'AGENT' };
+          return (
+            <div key={u.id} style={{ background: '#fff', borderRadius: '8px', padding: '0.6rem 0.75rem', border: '1px solid #eee' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <div style={{ flex: 1, opacity: u.active ? 1 : 0.5 }}>
+                  <div style={{ fontWeight: 600 }}>{u.displayName} {!u.active && <span style={{ color: '#dc3545' }}>(deactivated)</span>}</div>
+                  <div style={{ fontSize: '0.8rem', color: '#666' }}>{u.email}</div>
+                </div>
+                <select
+                  value={u.platformRole}
+                  onChange={(e) => changeRole(u, e.target.value)}
+                  style={{ padding: '0.4rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '0.8rem' }}
+                >
+                  <option value="EMPLOYEE">Employee</option>
+                  <option value="SYSTEM_ADMIN">System Admin</option>
+                </select>
+                <button
+                  onClick={() => toggleActive(u)}
+                  style={{ padding: '0.4rem 0.7rem', borderRadius: '6px', border: '1px solid #ccc', background: '#fff', cursor: 'pointer', fontSize: '0.8rem' }}
+                >
+                  {u.active ? 'Deactivate' : 'Reactivate'}
+                </button>
+              </div>
+              <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                {u.memberships.filter((m) => m.active).map((m) => (
+                  <span key={m.departmentId} style={{ fontSize: '0.75rem', background: '#eef4ff', borderRadius: '999px', padding: '0.25rem 0.5rem' }}>
+                    {m.departmentCode || '?'} · {m.departmentRole}{' '}
+                    <button
+                      onClick={() => removeMembership(u, m.departmentId)}
+                      style={{ border: 'none', background: 'none', color: '#dc3545', cursor: 'pointer', fontWeight: 700 }}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                <select
+                  value={draft.deptId}
+                  onChange={(e) => setMemberDrafts((c) => ({ ...c, [u.id]: { ...draft, deptId: e.target.value } }))}
+                  style={{ padding: '0.3rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '0.75rem' }}
+                >
+                  <option value="">+ Department…</option>
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>{d.code}</option>
+                  ))}
+                </select>
+                <select
+                  value={draft.role}
+                  onChange={(e) => setMemberDrafts((c) => ({ ...c, [u.id]: { ...draft, role: e.target.value } }))}
+                  style={{ padding: '0.3rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '0.75rem' }}
+                >
+                  <option value="AGENT">Agent</option>
+                  <option value="MANAGER">Manager</option>
+                </select>
+                <button
+                  onClick={() => addMembership(u)}
+                  style={{ padding: '0.3rem 0.6rem', borderRadius: '6px', border: 'none', background: '#28a745', color: '#fff', cursor: 'pointer', fontSize: '0.75rem' }}
+                >
+                  Add
+                </button>
               </div>
             </div>
-            <button
-              onClick={() => toggleActive(u)}
-              style={{ padding: '0.4rem 0.7rem', borderRadius: '6px', border: '1px solid #ccc', background: '#fff', cursor: 'pointer', fontSize: '0.8rem' }}
-            >
-              {u.active ? 'Deactivate' : 'Reactivate'}
-            </button>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
