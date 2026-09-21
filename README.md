@@ -19,6 +19,13 @@ npm install
 cd frontend && npm install && cd ..
 ```
 
+Need a pristine demo database any time (tests and experiments pollute
+`dev.db`, which is local-only and gitignored):
+
+```bash
+npm run db:reset
+```
+
 > The real `.env` is gitignored and never committed — only `.env.example`
 > is in the repo. Optional: set `GROQ_API_KEY` in `.env` (free key from
 > https://console.groq.com) to enable the LLM provider for AI intake.

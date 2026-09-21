@@ -40,7 +40,8 @@ export class GroqAiProvider implements AiProvider {
               '{ "departmentCode": "one valid code below", "requestTypeCode": "one valid category of that department below", ' +
               '"title": "Professional 4-word subject", "description": "Professional rewrite of the issue", ' +
               '"priority": "URGENT if rushed/now/ASAP or distressed/unsafe, else STANDARD", ' +
-              '"sensitive": true only if the message signals distress, harassment, or safety concerns, else false }.\n' +
+              '"sensitive": true only if the message signals distress, harassment, or safety concerns, else false, ' +
+              '"confidence": "high only for specific, actionable requests with a clear need; low for vague, thin, or ambiguous messages" }.\n' +
               `Valid departments and categories:\n${listing}\n` +
               'Codes MUST come from the lists; the category MUST belong to the department. ' +
               'RULE: UNKNOWN is forbidden for anything work-related — typos, emotions, vague wording, and personal ' +
@@ -50,8 +51,9 @@ export class GroqAiProvider implements AiProvider {
               'ONLY when the message is unintelligible gibberish or clearly not about work at all ' +
               '(sports scores, cooking, homework, small talk).\n' +
               'Examples:\n' +
-              '- "my laptop screen is cracked, need replacement asap" -> {"departmentCode":"IT","requestTypeCode":"LAPTOP","title":"Laptop Screen Replacement Request","description":"...","priority":"URGENT","sensitive":false}\n' +
-              '- "please i need help, crying, a coworker is harassing me" -> {"departmentCode":"PEO","requestTypeCode":"WELLBEING","title":"Workplace Harassment Support Request","description":"...","priority":"URGENT","sensitive":true}',
+              '- "my laptop screen is cracked, need replacement asap" -> {"departmentCode":"IT","requestTypeCode":"LAPTOP","title":"Laptop Screen Replacement Request","description":"...","priority":"URGENT","sensitive":false,"confidence":"high"}\n' +
+              '- "please i need help, crying, a coworker is harassing me" -> {"departmentCode":"PEO","requestTypeCode":"WELLBEING","title":"Workplace Harassment Support Request","description":"...","priority":"URGENT","sensitive":true,"confidence":"high"}\n' +
+              '- "i need help asap" -> {"departmentCode":"IT","requestTypeCode":"ACCESS","title":"General Assistance Request","description":"...","priority":"URGENT","sensitive":false,"confidence":"low"}',
           },
           { role: 'user', content: text },
         ],
@@ -71,7 +73,10 @@ export class GroqAiProvider implements AiProvider {
         description: String(parsed.description || ''),
         priority: String(parsed.priority || ''),
       },
-      confidence: 'high',
+      // High only when the model explicitly claims it; anything else
+      // (missing, vague, malformed) degrades to low so the UI asks the
+      // human to double-check instead of presenting a guess confidently.
+      confidence: parsed.confidence === 'high' ? 'high' : 'low',
       sensitive: parsed.sensitive === true,
     };
   }
