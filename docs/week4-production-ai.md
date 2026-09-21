@@ -31,11 +31,19 @@ free text → POST /requests/ai-draft (JWT) → catalog load (DB-owned context)
 - **Bounded context:** the model only ever sees department/request-type
   codes from the database. It cannot invent values.
 - **Validation (`validateCandidate`, pure function):** unknown department or
-  category → 400; unknown priority → coerced to STANDARD; short/garbage text
-  → safe fallbacks that still satisfy DTO minimums. Invalid output is
+  type → 400s with messages; unknown priority → coerced to STANDARD;
+  short/garbage text → safe fallbacks that still satisfy DTO minimums. Invalid output is
   rejected, never created.
+- **UNKNOWN is reserved for off-topic input only** (gibberish, sports,
+  cooking, small talk): the service answers 400 with a human-readable
+  message ("I can only help with workplace requests…"). Anything
+  work-related — typos, emotions, vague wording, personal hardship — always
+  resolves to the closest category, never UNKNOWN.
 - **Confidence:** `high` when the match is decisive, `low` when ambiguous —
   the UI tells the user to double-check (`CreateRequestForm.tsx` AI box).
+- **Sensitive flag:** distress/safety signals (harassment, crying, unsafe…)
+  mark the draft `sensitive: true`, force URGENT, and show a discreet UI
+  note. Advisory only — a human still reviews every word.
 - **Frontend:** "✨ Draft with AI" box above the existing form fills every
   field from the candidate. Submit path unchanged.
 
@@ -64,6 +72,8 @@ local on any failure). Nothing else changes.
 4. **invalid output** — unknown department/category codes → rejected (400)
 5. **provider failure** — throwing provider → local fallback still drafts
 6. **conditional behavior** — calm wording ("at your convenience, no rush") → STANDARD, never forced URGENT
+7. **distressed + typos** — harassment/crying/sick wording → PEO/WELLBEING, URGENT, `sensitive: true`, high confidence
+8. **off-topic** — "who won the formula 1 race" → clean 400 workplace-requests message, never a forced ticket
 
 ## Files
 

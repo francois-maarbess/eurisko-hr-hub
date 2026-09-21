@@ -220,8 +220,8 @@ async function main() {
 
   const wellbeingType = await prisma.requestType.upsert({
     where: { departmentId_code: { departmentId: peo.id, code: 'WELLBEING' } },
-    update: {},
-    create: { departmentId: peo.id, code: 'WELLBEING', name: 'Employee Wellbeing', description: 'Wellbeing support and resources' },
+    update: { description: 'Wellbeing support, workplace safety concerns, grievances and resources' },
+    create: { departmentId: peo.id, code: 'WELLBEING', name: 'Employee Wellbeing', description: 'Wellbeing support, workplace safety concerns, grievances and resources' },
   });
 
   const feedbackType = await prisma.requestType.upsert({

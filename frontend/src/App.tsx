@@ -117,31 +117,49 @@ export default function App() {
 
       <main className="container">
         {inboxOpen && (
-          <div className="card" style={{ marginBottom: '1.25rem' }}>
-            <div className="row" style={{ justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-              <h3 className="card-title">Notifications</h3>
-              <Button variant="ghost" small onClick={markAllRead}>
-                Mark all read
-              </Button>
+          <>
+            <div
+              onClick={() => setInboxOpen(false)}
+              style={{ position: 'fixed', inset: 0, zIndex: 40 }}
+            />
+            <div
+              className="card"
+              style={{
+                position: 'fixed',
+                top: '72px',
+                right: 'max(1.25rem, calc((100vw - 960px) / 2))',
+                width: 'min(380px, calc(100vw - 2.5rem))',
+                maxHeight: '60vh',
+                overflowY: 'auto',
+                zIndex: 41,
+                boxShadow: 'var(--shadow-md)',
+              }}
+            >
+              <div className="row" style={{ justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <h3 className="card-title">Notifications</h3>
+                <Button variant="ghost" small onClick={markAllRead}>
+                  Mark all read
+                </Button>
+              </div>
+              {inbox.length === 0 && <p className="muted">Nothing yet — activity on your requests lands here.</p>}
+              <div style={{ display: 'grid', gap: '0.5rem' }}>
+                {inbox.map((n) => (
+                  <div
+                    key={n.id}
+                    style={{
+                      background: n.readAt ? '#fff' : 'var(--blue-pale)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '10px',
+                      padding: '0.6rem 0.8rem',
+                    }}
+                  >
+                    <div style={{ fontWeight: 700 }}>{n.title}</div>
+                    <div className="muted">{n.body}</div>
+                  </div>
+                ))}
+              </div>
             </div>
-            {inbox.length === 0 && <p className="muted">Nothing yet — activity on your requests lands here.</p>}
-            <div style={{ display: 'grid', gap: '0.5rem' }}>
-              {inbox.map((n) => (
-                <div
-                  key={n.id}
-                  style={{
-                    background: n.readAt ? '#fff' : 'var(--blue-pale)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '10px',
-                    padding: '0.6rem 0.8rem',
-                  }}
-                >
-                  <div style={{ fontWeight: 700 }}>{n.title}</div>
-                  <div className="muted">{n.body}</div>
-                </div>
-              ))}
-            </div>
-          </div>
+          </>
         )}
 
         <CreateRequestForm token={token} onCreated={() => { setRefreshKey((k) => k + 1); if (token) refreshInbox(token); }} />

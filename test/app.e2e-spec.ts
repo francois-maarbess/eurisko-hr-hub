@@ -279,6 +279,27 @@ describe('Service Request Flow (E2E)', () => {
     expect(await prisma.request.count()).toBe(before);
   });
 
+  it('AI draft rejects off-topic input with a clean human error', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/requests/ai-draft')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ text: 'who won the formula 1 race yesterday' });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/workplace requests/);
+  });
+
+  it('AI draft flags distressed input as sensitive and routes to wellbeing', async () => {
+    const peo = await prisma.department.findFirst({ where: { code: 'PEO' } });
+    const res = await request(app.getHttpServer())
+      .post('/requests/ai-draft')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ text: 'please i need help im crying i feel sick and my employee is harrassing me' });
+    expect(res.status).toBe(200);
+    expect(res.body.departmentId).toBe(peo!.id);
+    expect(res.body.sensitive).toBe(true);
+    expect(res.body.priority).toBe('URGENT');
+  });
+
   it('AI draft rejects empty text and requires auth', async () => {
     const empty = await request(app.getHttpServer())
       .post('/requests/ai-draft')

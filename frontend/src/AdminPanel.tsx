@@ -236,17 +236,30 @@ export default function AdminPanel({ token }: AdminPanelProps) {
       <p className="card-sub">Create accounts, assign roles and departments, manage the catalog, activate or deactivate users.</p>
 
       {report && (
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-          {Object.entries(report.byStatus).map(([status, count]) => (
-            <span key={status} className="badge" style={{ background: 'var(--navy)', color: '#fff' }}>
-              {status}: {count}
-            </span>
-          ))}
-          {report.departments.map((d) => (
-            <span key={d.code} className="badge" style={{ background: 'var(--blue-pale)', color: '#1d4ed8' }}>
-              {d.code}: {d.open} open / {d.total}
-            </span>
-          ))}
+        <div style={{ marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+            {Object.entries(report.byStatus).map(([status, count]) => (
+              <span key={status} className="badge" style={{ background: 'var(--navy)', color: '#fff' }}>
+                {status}: {count}
+              </span>
+            ))}
+          </div>
+          <div style={{ display: 'grid', gap: '0.4rem' }}>
+            {report.departments.map((d) => {
+              const pct = d.total > 0 ? Math.round((d.open / d.total) * 100) : 0;
+              return (
+                <div key={d.code}>
+                  <div className="row" style={{ justifyContent: 'space-between', fontSize: '0.82rem' }}>
+                    <strong>{d.code}</strong>
+                    <span className="muted">{d.open} open / {d.total} total</span>
+                  </div>
+                  <div style={{ height: '8px', borderRadius: '999px', background: 'var(--border)', marginTop: '0.25rem' }}>
+                    <div style={{ height: '100%', width: `${pct}%`, borderRadius: '999px', background: 'var(--blue)' }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

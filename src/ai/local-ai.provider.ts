@@ -6,6 +6,24 @@ const URGENT_HINTS = [
   'as soon as possible', "can't work", 'cannot work', 'not working',
 ];
 
+/**
+ * Everyday workplace words. If the text shares NOTHING with the catalog AND
+ * none of these, it is not a workplace request at all (gibberish, sports,
+ * cooking, homework...) — the extractor returns UNKNOWN so the service can
+ * answer with a clean, human-readable error instead of a forced guess.
+ */
+const WORK_WORDS = new Set([
+  'need', 'needs', 'help', 'please', 'issue', 'issues', 'problem', 'problems',
+  'fix', 'fixing', 'broken', 'work', 'working', 'request', 'requesting',
+  'employee', 'employees', 'employer', 'company', 'office', 'team',
+  'support', 'claim', 'report', 'approve', 'approval', 'access',
+]);
+
+const SENSITIVE_HINTS = [
+  'harass', 'harrass', 'bully', 'bullying', 'unsafe', 'discrimination',
+  'grievance', 'assault', 'threat', 'abuse', 'abusive', 'cry', 'crying',
+];
+
 const TYPE_SYNONYMS: Record<string, string[]> = {
   LAPTOP: ['laptop', 'computer', 'notebook', 'macbook', 'screen', 'keyboard', 'device', 'pc', 'monitor', 'mouse'],
   VPN: ['vpn', 'remote', 'tunnel', 'network', 'wifi', 'login', 'password', 'account', 'access', 'signin', 'sign-in'],
@@ -28,7 +46,7 @@ const TYPE_SYNONYMS: Record<string, string[]> = {
   BADGE: ['badge', 'badges', 'building', 'entry', 'entrance', 'gate'],
   DESK: ['desk', 'meeting', 'room', 'workspace', 'office', 'setup', 'move'],
   TRAINING: ['training', 'course', 'courses', 'workshop', 'certification', 'learn', 'excel'],
-  WELLBEING: ['wellbeing', 'wellness', 'health', 'support', 'stress', 'mental'],
+  WELLBEING: ['wellbeing', 'wellness', 'health', 'support', 'stress', 'mental', 'harass', 'harassment', 'harrass', 'bullying', 'bully', 'crying', 'cry', 'sick', 'illness', 'safety', 'unsafe', 'discrimination', 'grievance', 'complaint'],
   FEEDBACK: ['feedback', 'suggestion', 'suggestions', 'experience', 'improve', 'idea'],
 };
 
@@ -36,11 +54,20 @@ function words(text: string): string[] {
   return text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 }
 
+// Glue words must never become matchable keywords: with 23 catalog types,
+// a shared "the"/"and"/"for" would match everything and drown real signals.
+const KEY_STOPWORDS = new Set([
+  'the', 'and', 'for', 'are', 'with', 'from', 'that', 'this', 'into',
+  'your', 'you', 'our', 'was', 'were', 'has', 'have', 'had', 'will',
+  'would', 'can', 'its', 'are', 'an', 'of', 'to', 'in', 'on', 'is',
+  'it', 'as', 'at', 'by', 'or', 'be', 'new', 'request',
+]);
+
 function keywordSet(parts: (string | null | undefined)[], extra: string[] = []): Set<string> {
   const set = new Set<string>(extra);
   for (const part of parts) {
     for (const w of words(part || '')) {
-      if (w.length >= 2) set.add(w);
+      if (w.length >= 2 && !KEY_STOPWORDS.has(w)) set.add(w);
     }
   }
   return set;
@@ -82,6 +109,27 @@ export class LocalAiProvider implements AiProvider {
     const calmed = ['no rush', 'no hurry', 'not urgent', 'at your convenience', 'whenever', 'take your time']
       .some((h) => lowered.includes(h));
     const urgent = !calmed && URGENT_HINTS.some((h) => lowered.includes(h));
+    const sensitive = SENSITIVE_HINTS.some((h) => lowered.includes(h));
+
+    // Off-topic guard: zero catalog overlap AND zero workplace vocabulary
+    // means gibberish or small talk (sports, cooking, homework...). Return
+    // the UNKNOWN sentinel so the service answers with a clean,
+    // human-readable error instead of a forced wrong guess. Anything
+    // work-related always resolves — never UNKNOWN.
+    const hasWorkSignal = [...tokens].some((t) => WORK_WORDS.has(t));
+    if (best && best.score === 0 && !hasWorkSignal) {
+      return {
+        draft: {
+          departmentCode: 'UNKNOWN',
+          requestTypeCode: 'UNKNOWN',
+          title: '',
+          description: text.trim(),
+          priority: 'STANDARD',
+        },
+        confidence: 'low',
+        sensitive: false,
+      };
+    }
 
     // Deterministic fallback: alphabetical first department + first type,
     // always flagged low-confidence so the UI asks the human to confirm.
@@ -107,9 +155,10 @@ export class LocalAiProvider implements AiProvider {
         requestTypeCode: picked.typeCode,
         title: `${pickedTypeName}: ${firstClause}`.slice(0, 120),
         description: text.trim(),
-        priority: urgent ? 'URGENT' : 'STANDARD',
+        priority: urgent || sensitive ? 'URGENT' : 'STANDARD',
       },
       confidence: high ? 'high' : 'low',
+      sensitive,
     };
   }
 }

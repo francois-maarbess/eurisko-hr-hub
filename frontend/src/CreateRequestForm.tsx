@@ -71,11 +71,14 @@ export default function CreateRequestForm({ token, onCreated }: CreateRequestFor
       if (['LOW', 'STANDARD', 'URGENT'].includes(data.priority)) {
         setPriority(data.priority);
       }
-      setAiNote(
+      let note =
         data.confidence === 'high'
           ? 'AI suggestion applied — review it, then Submit below.'
-          : 'AI is unsure about this one — please double-check every field before submitting.',
-      );
+          : 'AI is unsure about this one — please double-check every field before submitting.';
+      if (data.sensitive === true) {
+        note += ' This looks personal and urgent — it will be handled discreetly.';
+      }
+      setAiNote(note);
     } catch {
       setAiNote('Cannot reach the server');
     } finally {

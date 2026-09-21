@@ -3,6 +3,10 @@ import { AiIntakeService, validateCandidate } from './ai-intake.service';
 import { LocalAiProvider } from './local-ai.provider';
 import { CatalogDepartment } from './ai.provider';
 
+// Deterministic tests: strip any locally configured key (Prisma's import
+// chain auto-loads .env) so drafts always take the offline path.
+delete process.env['GROQ_API_KEY'];
+
 // Mirrors prisma/seed.ts so unit tests never touch the database.
 const CATALOG: CatalogDepartment[] = [
   {
@@ -34,6 +38,12 @@ const ROWS = [
     requestTypes: [
       { id: 'type-laptop', code: 'LAPTOP', name: 'Laptop Request', description: 'laptop', active: true },
       { id: 'type-vpn', code: 'VPN', name: 'VPN Access', description: 'vpn', active: true },
+    ],
+  },
+  {
+    id: 'dept-peo', code: 'PEO', name: 'People Operations', description: 'Wellbeing and training', active: true,
+    requestTypes: [
+      { id: 'type-wellbeing', code: 'WELLBEING', name: 'Employee Wellbeing', description: 'Wellbeing support, grievances and resources', active: true },
     ],
   },
 ];
@@ -120,5 +130,25 @@ describe('AI-assisted intake (Week 4)', () => {
   it('empty input is rejected before any provider runs', async () => {
     const svc = new AiIntakeService(stubPrisma, new LocalAiProvider(), undefined as any);
     await expect(svc.draft('   ')).rejects.toThrow(BadRequestException);
+  });
+
+  it('distressed, typo’d input routes to wellbeing as sensitive (never UNKNOWN)', async () => {
+    const svc = new AiIntakeService(stubPrisma, new LocalAiProvider(), undefined as any);
+    const out = await svc.draft('please i need help im crying i feel sick and my employee is harrassing me');
+    expect(out.provider).toBe('local');
+    expect(out.departmentId).toBe('dept-peo');
+    expect(out.requestTypeId).toBe('type-wellbeing');
+    expect(out.sensitive).toBe(true);
+    // Three clean keyword hits (crying, sick, employee) with daylight behind
+    // them: high confidence AND a sensitive flag coexist — the human still
+    // reviews every word before anything is created.
+    expect(out.confidence).toBe('high');
+  });
+
+  it('off-topic input gets a clean human error, not a forced guess', async () => {
+    const svc = new AiIntakeService(stubPrisma, new LocalAiProvider(), undefined as any);
+    await expect(svc.draft('who won the formula 1 race yesterday')).rejects.toThrow(
+      /workplace requests/,
+    );
   });
 });

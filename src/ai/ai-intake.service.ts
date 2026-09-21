@@ -20,6 +20,9 @@ export interface ValidatedDraft {
   priority: 'LOW' | 'STANDARD' | 'URGENT';
   confidence: DraftConfidence;
   provider: string;
+  /** True for distress/safety signals. Advisory: forces URGENT + a discreet
+   * UI note. A human still reviews every word before anything is created. */
+  sensitive: boolean;
 }
 
 type CatalogRow = {
@@ -37,14 +40,22 @@ type CatalogRow = {
 export function validateCandidate(
   raw: RawDraft,
   catalog: CatalogRow[],
-): Omit<ValidatedDraft, 'confidence' | 'provider'> {
+): Omit<ValidatedDraft, 'confidence' | 'provider' | 'sensitive'> {
   const departmentCode = (raw.departmentCode || '').trim().toUpperCase();
   const requestTypeCode = (raw.requestTypeCode || '').trim().toUpperCase();
+
+  // UNKNOWN is reserved for off-topic input only (gibberish, sports,
+  // cooking, small talk). Anything work-related must resolve — never here.
+  if (!departmentCode || !requestTypeCode || departmentCode === 'UNKNOWN' || requestTypeCode === 'UNKNOWN') {
+    throw new BadRequestException(
+      'I can only help with workplace requests — try describing an issue like "my laptop screen is broken" or "I need VPN access".',
+    );
+  }
 
   const dept = catalog.find((d) => d.code === departmentCode);
   if (!dept) {
     throw new BadRequestException(
-      `AI suggested unknown department ("${departmentCode || 'empty'}").`,
+      `AI suggested unknown department ("${departmentCode}").`,
     );
   }
   const type = dept.requestTypes.find(
@@ -52,7 +63,7 @@ export function validateCandidate(
   );
   if (!type) {
     throw new BadRequestException(
-      `AI suggested unknown category ("${requestTypeCode || 'empty'}") for ${departmentCode}.`,
+      `AI suggested unknown category ("${requestTypeCode}") for ${departmentCode}.`,
     );
   }
 
@@ -137,6 +148,7 @@ export class AiIntakeService {
       ...validateCandidate(result.draft, departments),
       confidence: result.confidence,
       provider: used.name,
+      sensitive: result.sensitive === true,
     };
   }
 }

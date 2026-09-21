@@ -31,6 +31,9 @@ export type DraftConfidence = 'high' | 'low';
 export interface ProviderDraft {
   draft: RawDraft;
   confidence: DraftConfidence;
+  /** True when the text signals distress or a safety concern. Advisory only:
+   * forces URGENT priority and a discreet UI note; a human still confirms. */
+  sensitive: boolean;
 }
 
 export interface AiProvider {

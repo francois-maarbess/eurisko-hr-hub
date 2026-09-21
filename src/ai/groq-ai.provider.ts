@@ -39,10 +39,19 @@ export class GroqAiProvider implements AiProvider {
               'You are an IT service desk data extractor. Output ONLY a raw JSON object: ' +
               '{ "departmentCode": "one valid code below", "requestTypeCode": "one valid category of that department below", ' +
               '"title": "Professional 4-word subject", "description": "Professional rewrite of the issue", ' +
-              '"priority": "URGENT if rushed/now/ASAP, else STANDARD" }.\n' +
+              '"priority": "URGENT if rushed/now/ASAP or distressed/unsafe, else STANDARD", ' +
+              '"sensitive": true only if the message signals distress, harassment, or safety concerns, else false }.\n' +
               `Valid departments and categories:\n${listing}\n` +
               'Codes MUST come from the lists; the category MUST belong to the department. ' +
-              'If the message is gibberish or not a service request, output {"departmentCode":"UNKNOWN","requestTypeCode":"UNKNOWN","title":"","description":"","priority":"STANDARD"}.',
+              'RULE: UNKNOWN is forbidden for anything work-related — typos, emotions, vague wording, and personal ' +
+              'hardship all still map to the closest category (e.g. harassment, crying, or feeling unsafe at work ' +
+              'is Employee Wellbeing, URGENT, sensitive true). Output ' +
+              '{"departmentCode":"UNKNOWN","requestTypeCode":"UNKNOWN","title":"","description":"","priority":"STANDARD","sensitive":false} ' +
+              'ONLY when the message is unintelligible gibberish or clearly not about work at all ' +
+              '(sports scores, cooking, homework, small talk).\n' +
+              'Examples:\n' +
+              '- "my laptop screen is cracked, need replacement asap" -> {"departmentCode":"IT","requestTypeCode":"LAPTOP","title":"Laptop Screen Replacement Request","description":"...","priority":"URGENT","sensitive":false}\n' +
+              '- "please i need help, crying, a coworker is harassing me" -> {"departmentCode":"PEO","requestTypeCode":"WELLBEING","title":"Workplace Harassment Support Request","description":"...","priority":"URGENT","sensitive":true}',
           },
           { role: 'user', content: text },
         ],
@@ -63,6 +72,7 @@ export class GroqAiProvider implements AiProvider {
         priority: String(parsed.priority || ''),
       },
       confidence: 'high',
+      sensitive: parsed.sensitive === true,
     };
   }
 }

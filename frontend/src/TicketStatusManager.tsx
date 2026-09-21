@@ -70,6 +70,14 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
   const [resolutionInputs, setResolutionInputs] = useState<Record<string, string>>({});
   const [rejectionInputs, setRejectionInputs] = useState<Record<string, string>>({});
   const [showReject, setShowReject] = useState<Record<string, boolean>>({});
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 3000);
+  };
   const [docsOpen, setDocsOpen] = useState<Record<string, boolean>>({});
   const [docsCache, setDocsCache] = useState<Record<string, DocMeta[]>>({});
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
@@ -105,7 +113,7 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
 
   useEffect(() => { fetchTickets(view); }, [token, view]);
 
-  const mutate = async (ticket: TicketState, fn: () => Promise<Response>) => {
+  const mutate = async (ticket: TicketState, fn: () => Promise<Response>, successMsg?: string) => {
     setLoading(true);
     setCardErrors((current) => ({ ...current, [ticket.id]: null }));
     try {
@@ -116,6 +124,7 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
         return;
       }
       await fetchTickets(view);
+      if (successMsg) showToast(successMsg);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to reach the NestJS endpoint.';
       setCardErrors((current) => ({ ...current, [ticket.id]: message }));
@@ -127,6 +136,7 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
   const handleClaim = (ticket: TicketState) =>
     mutate(ticket, () =>
       fetch(`http://localhost:3000/requests/${ticket.id}/claim`, { method: 'PATCH', headers: authHeaders }),
+      'Claimed — you are now working on this request.',
     );
 
   const handleCancel = (ticket: TicketState) =>
@@ -136,6 +146,7 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
         headers: authHeaders,
         body: JSON.stringify({ status: 'CANCELLED' }),
       }),
+      'Request cancelled.',
     );
 
   const handleResolve = async (ticket: TicketState) => {
@@ -150,6 +161,7 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
         headers: authHeaders,
         body: JSON.stringify({ status: 'COMPLETED', resolutionNote: typedNote }),
       }),
+      'Marked as completed.',
     );
   };
 
@@ -240,6 +252,7 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
         headers: authHeaders,
         body: JSON.stringify({ status: 'REJECTED', rejectionReason: reason }),
       }),
+      'Request rejected.',
     );
     setShowReject((c) => ({ ...c, [ticket.id]: false }));
   };
@@ -258,6 +271,12 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
     <div style={{ display: 'grid', gap: '1rem' }}>
       <Tabs options={tabOptions} value={view} onChange={setView} />
 
+      {toast && (
+        <div style={{ background: 'var(--navy)', color: '#fff', borderRadius: '10px', padding: '0.7rem 0.9rem', fontWeight: 600 }}>
+          {toast}
+        </div>
+      )}
+
       {cardErrors.global && <ErrorBox message={cardErrors.global} />}
 
       {tickets.length === 0 && (
@@ -275,6 +294,7 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
       {tickets.map((ticket) => {
         const isOwner = ticket.employeeId === userId;
         const inMyDept = memberDeptIds.has(ticket.departmentId);
+        const isTerminalCard = ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(ticket.status);
         const isTerminal = ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(ticket.status);
         const canClaim = (inMyDept || isAdmin) && ticket.status === 'PENDING' && !ticket.claimedById && !isOwner;
         const canCancel = isOwner && ticket.status === 'PENDING';
@@ -284,7 +304,16 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
         const ticketError = cardErrors[ticket.id];
 
         return (
-          <div className="card" key={ticket.id}>
+          <div
+            className="card"
+            key={ticket.id}
+            style={{
+              ...(ticket.priority === 'URGENT' && !isTerminalCard
+                ? { borderLeft: '4px solid var(--danger)' }
+                : {}),
+              ...(isTerminalCard ? { opacity: 0.78 } : {}),
+            }}
+          >
             <div className="row" style={{ justifyContent: 'space-between' }}>
               <div>
                 <div className="muted" style={{ marginBottom: '0.25rem' }}>
