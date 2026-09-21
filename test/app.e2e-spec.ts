@@ -140,6 +140,76 @@ describe('Service Request Flow (E2E)', () => {
     expect(res.status).toBe(409);
   });
 
+  it('owner cannot claim their own request even as a department member', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+    const created = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${agentToken}`)
+      .send({
+        departmentId: dept!.id,
+        requestTypeId: rt!.id,
+        title: 'Self Claim Probe',
+        description: 'Agent creates in own department then tries to claim it',
+        priority: 'STANDARD',
+      });
+
+    // Bob IS an IT member — the 409 must come from the owner block, not membership.
+    const res = await request(app.getHttpServer())
+      .patch(`/requests/${created.body.id}/claim`)
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(res.status).toBe(409);
+  });
+
+  it('only the owner can cancel a PENDING request', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+    const created = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        departmentId: dept!.id,
+        requestTypeId: rt!.id,
+        title: 'Cancel Probe',
+        description: 'Strangers must not cancel other people’s pending tickets',
+        priority: 'STANDARD',
+      });
+
+    const stranger = await request(app.getHttpServer())
+      .patch(`/requests/${created.body.id}/status`)
+      .set('Authorization', `Bearer ${agentToken}`)
+      .send({ status: 'CANCELLED' });
+    expect(stranger.status).toBe(403);
+
+    const owner = await request(app.getHttpServer())
+      .patch(`/requests/${created.body.id}/status`)
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ status: 'CANCELLED' });
+    expect(owner.status).toBe(200);
+    expect(owner.body.status).toBe('CANCELLED');
+  });
+
+  it('system admin can claim outside their memberships', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'FINANCE' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'EXPENSE' } });
+    const created = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        departmentId: dept!.id,
+        requestTypeId: rt!.id,
+        title: 'Admin Claim Probe',
+        description: 'Admin is no FINANCE member yet claims by admin right',
+        priority: 'STANDARD',
+      });
+
+    const res = await request(app.getHttpServer())
+      .patch(`/requests/${created.body.id}/claim`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('IN_PROGRESS');
+  });
+
   it('cannot transition PENDING -> COMPLETED (skip denied)', async () => {
     const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
     const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });

@@ -236,6 +236,8 @@ export default function AdminPanel({ token }: AdminPanelProps) {
       <p className="card-sub">Create accounts, assign roles and departments, manage the catalog, activate or deactivate users.</p>
 
       {report && (
+        <>
+          <h4 style={{ margin: '0 0 0.5rem', color: 'var(--navy)' }}>1 · Platform overview</h4>
         <div style={{ marginBottom: '1rem' }}>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
             {Object.entries(report.byStatus).map(([status, count]) => (
@@ -261,9 +263,15 @@ export default function AdminPanel({ token }: AdminPanelProps) {
             })}
           </div>
         </div>
+        </>
       )}
 
-      <h4 style={{ margin: '0 0 0.5rem', color: 'var(--navy)' }}>Catalog</h4>
+      <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '1.25rem 0' }} />
+      <h4 style={{ margin: '0 0 0.25rem', color: 'var(--navy)' }}>2 · Catalog — departments & request types</h4>
+      <p className="muted" style={{ margin: '0 0 0.75rem' }}>
+        Departments group work; request types are the pickable categories inside one department.
+        Deactivating (not deleting) retires entries while history stays intact.
+      </p>
       <form onSubmit={createDepartment}>
         <div className="row">
           <input className="input" style={{ flex: 1 }} value={newDeptCode} onChange={(e) => setNewDeptCode(e.target.value)} placeholder="CODE (e.g. LEGAL)" />
@@ -285,6 +293,12 @@ export default function AdminPanel({ token }: AdminPanelProps) {
         </div>
       </form>
 
+      <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '1.25rem 0' }} />
+      <h4 style={{ margin: '0 0 0.25rem', color: 'var(--navy)' }}>3 · Create user account</h4>
+      <p className="muted" style={{ margin: '0 0 0.75rem' }}>
+        One account per employee. Pick their platform role and first department —
+        you can change both below after creation.
+      </p>
       <form onSubmit={handleCreate}>
         <Field label="Email *">
           <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@acme.com" required />
@@ -328,7 +342,11 @@ export default function AdminPanel({ token }: AdminPanelProps) {
 
       {message && <p className="muted" style={{ marginTop: '0.75rem' }}>{message}</p>}
 
-      <h4 style={{ margin: '1.25rem 0 0.5rem', color: 'var(--navy)' }}>Users ({users.length})</h4>
+      <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '1.25rem 0' }} />
+      <h4 style={{ margin: '0 0 0.25rem', color: 'var(--navy)' }}>4 · Users & memberships ({users.length})</h4>
+      <p className="muted" style={{ margin: '0 0 0.75rem' }}>
+        Change platform roles, add or remove department memberships, deactivate accounts.
+      </p>
       <div style={{ display: 'grid', gap: '0.6rem' }}>
         {users.map((u) => {
           const draft = memberDrafts[u.id] || { deptId: '', role: 'AGENT' };

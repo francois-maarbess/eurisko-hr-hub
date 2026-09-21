@@ -162,25 +162,30 @@ export class RequestsService {
   }
 
   async claim(id: string, userId: string) {
-    const request = await this.findOne(id, await this.viewerOf(userId));
+    const viewer = await this.viewerOf(userId);
+    const request = await this.findOne(id, viewer);
 
     if (request.status !== 'PENDING') {
       throw new BadRequestException('Only PENDING requests can be claimed');
     }
 
-    // The request owner cannot claim their own request
+    // The request owner cannot claim their own request — no exceptions,
+    // not even for admins: self-service is never self-dealing.
     if (request.employeeId === userId) {
       throw new ConflictException('You cannot claim your own request');
     }
 
-    // Authorization: user must be a member of the request's department
-    const membership = await this.prisma.departmentMember.findUnique({
-      where: {
-        userId_departmentId: { userId, departmentId: request.departmentId },
-      },
-    });
-    if (!membership || !membership.active) {
-      throw new ConflictException('You are not a member of this department');
+    // Authorization: an active member of the owning department, or a system
+    // administrator (data-model §4: admins operate all departments).
+    if (viewer.platformRole !== 'SYSTEM_ADMIN') {
+      const membership = await this.prisma.departmentMember.findUnique({
+        where: {
+          userId_departmentId: { userId, departmentId: request.departmentId },
+        },
+      });
+      if (!membership || !membership.active) {
+        throw new ConflictException('You are not a member of this department');
+      }
     }
 
     // Atomic claim: only one agent can claim
@@ -192,7 +197,7 @@ export class RequestsService {
       throw new ConflictException('Request was already claimed by another agent');
     }
 
-    const claimed = await this.findOne(id, await this.viewerOf(userId));
+    const claimed = await this.findOne(id, viewer);
     await this.audit.append({
       requestId: id,
       actorId: userId,
@@ -211,7 +216,8 @@ export class RequestsService {
   }
 
   async updateStatus(id: string, dto: UpdateStatusDto, userId: string) {
-    const request = await this.findOne(id, await this.viewerOf(userId));
+    const viewer = await this.viewerOf(userId);
+    const request = await this.findOne(id, viewer);
 
     // Validate transition
     const allowed = VALID_TRANSITIONS[request.status];
@@ -219,6 +225,12 @@ export class RequestsService {
       throw new BadRequestException(
         `Invalid transition: ${request.status} -> ${dto.status}`,
       );
+    }
+
+    // Cancellation is the requester's own right: only the owner may cancel,
+    // and only while PENDING (enforced by the table above).
+    if (dto.status === 'CANCELLED' && request.employeeId !== userId) {
+      throw new ForbiddenException('Only the requesting employee can cancel this request.');
     }
 
     // Completion requires a resolution artifact: a note, an attached
@@ -246,14 +258,17 @@ export class RequestsService {
         throw new ConflictException('You cannot resolve your own request');
       }
 
-      // Must be a department member
-      const membership = await this.prisma.departmentMember.findUnique({
-        where: {
-          userId_departmentId: { userId, departmentId: request.departmentId },
-        },
-      });
-      if (!membership || !membership.active) {
-        throw new ConflictException('You are not a member of this department');
+      // Must be an active department member — or a system administrator,
+      // who operates all departments (data-model §4).
+      if (viewer.platformRole !== 'SYSTEM_ADMIN') {
+        const membership = await this.prisma.departmentMember.findUnique({
+          where: {
+            userId_departmentId: { userId, departmentId: request.departmentId },
+          },
+        });
+        if (!membership || !membership.active) {
+          throw new ConflictException('You are not a member of this department');
+        }
       }
     }
 
@@ -291,7 +306,7 @@ export class RequestsService {
       });
       await this.notifications.fanout({ requestId: id, eventType, actorId: userId });
     }
-    return this.findOne(id, await this.viewerOf(userId));
+    return this.findOne(id, viewer);
   }
 
   private async viewerOf(userId: string): Promise<Viewer> {

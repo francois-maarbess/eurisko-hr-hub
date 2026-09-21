@@ -123,6 +123,12 @@ normal validated flow — the AI never creates anything.
 - `SYSTEM_ADMIN` (via `@Roles`) manages users; department membership
   (`AGENT`/`MANAGER`) gates claiming; owners can never resolve their own
   requests. One person may serve several departments.
+- Owners can never claim their own requests (409, no exceptions).
+- Only the owner can cancel, and only while `PENDING` (others get 403).
+- Reading a ticket requires ownership, department membership, or admin
+  role (strangers get 403, existence never confirmed).
+- System admins operate every department (claim/resolve) without needing
+  membership; department managers run their own members and catalog.
 
 ## Project Structure
 
