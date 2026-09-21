@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Badge, Button, EmptyState, ErrorBox, Field, Tabs } from './components/ui';
+import { Badge, Button, EmptyState, ErrorBox, Field, Tabs, formatEnum } from './components/ui';
 import { apiUrl } from './api';
 
 type TicketStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'REJECTED';
@@ -347,10 +347,10 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
               </div>
               <div className="pill-group">
                 <Badge bg={PRIORITY_COLORS[ticket.priority].background} color={PRIORITY_COLORS[ticket.priority].color}>
-                  {ticket.priority}
+                  {formatEnum(ticket.priority)}
                 </Badge>
                 <Badge bg={STATUS_COLORS[ticket.status].background} color={STATUS_COLORS[ticket.status].color}>
-                  {ticket.status}
+                  {formatEnum(ticket.status)}
                 </Badge>
               </div>
             </div>

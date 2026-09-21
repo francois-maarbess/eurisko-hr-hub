@@ -77,3 +77,40 @@ export function ErrorBox({ message }: { message: string }) {
 export function EmptyState({ message }: { message: string }) {
   return <p className="muted" style={{ textAlign: 'center', padding: '1.5rem 0' }}>{message}</p>;
 }
+
+/** IN_PROGRESS -> In Progress, EMP_LETTER -> Emp Letter. Never show raw enum/code text to users. */
+export function formatEnum(value: string): string {
+  return value
+    .toLowerCase()
+    .split('_')
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(' ');
+}
+
+export function SectionHeader({ n, title, sub }: { n: string; title: string; sub: string }) {
+  return (
+    <div style={{ display: 'flex', gap: '0.7rem', alignItems: 'flex-start', margin: '1.4rem 0 0.8rem' }}>
+      <span
+        style={{
+          flexShrink: 0,
+          width: '26px',
+          height: '26px',
+          borderRadius: '999px',
+          background: 'var(--navy)',
+          color: '#fff',
+          fontSize: '0.8rem',
+          fontWeight: 800,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        {n}
+      </span>
+      <div>
+        <div style={{ fontWeight: 800, color: 'var(--navy)', fontSize: '1rem' }}>{title}</div>
+        <div className="muted" style={{ fontSize: '0.85rem' }}>{sub}</div>
+      </div>
+    </div>
+  );
+}

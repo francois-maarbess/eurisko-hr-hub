@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Button, ErrorBox, Field } from './components/ui';
+import { Button, ErrorBox, Field, SectionHeader, formatEnum } from './components/ui';
 import { apiUrl } from './api';
 
 interface AdminPanelProps {
@@ -19,6 +19,15 @@ interface Department {
   id: string;
   code: string;
   name: string;
+  active: boolean;
+}
+
+interface CatalogType {
+  id: string;
+  code: string;
+  name: string;
+  departmentId: string;
+  active: boolean;
 }
 
 export default function AdminPanel({ token }: AdminPanelProps) {
@@ -39,17 +48,20 @@ export default function AdminPanel({ token }: AdminPanelProps) {
   const [newTypeDept, setNewTypeDept] = useState('');
   const [newTypeCode, setNewTypeCode] = useState('');
   const [newTypeName, setNewTypeName] = useState('');
+  const [allTypes, setAllTypes] = useState<CatalogType[]>([]);
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
   const load = async () => {
     try {
-      const [uRes, dRes] = await Promise.all([
+      const [uRes, dRes, tRes] = await Promise.all([
         fetch(apiUrl('/auth/users'), { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(apiUrl('/catalog/departments'), { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(apiUrl('/catalog/departments?includeInactive=1'), { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(apiUrl('/catalog/request-types?includeInactive=1'), { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       if (uRes.ok) setUsers(await uRes.json());
       if (dRes.ok) setDepartments(await dRes.json());
+      if (tRes.ok) setAllTypes(await tRes.json());
       void loadReport();
     } catch {
       setMessage('Cannot reach the server');
@@ -213,6 +225,42 @@ export default function AdminPanel({ token }: AdminPanelProps) {
     }
   };
 
+  const toggleDeptActive = async (id: string, active: boolean) => {
+    try {
+      const res = await fetch(apiUrl(`/departments/${id}`), {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ active }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setMessage(data.message || 'Could not update department');
+        return;
+      }
+      await load();
+    } catch {
+      setMessage('Cannot reach the server');
+    }
+  };
+
+  const toggleTypeActive = async (deptId: string, typeId: string, active: boolean) => {
+    try {
+      const res = await fetch(apiUrl(`/departments/${deptId}/request-types/${typeId}`), {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ active }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setMessage(data.message || 'Could not update request type');
+        return;
+      }
+      await load();
+    } catch {
+      setMessage('Cannot reach the server');
+    }
+  };
+
   const removeMembership = async (u: AdminUser, departmentId: string) => {
     try {
       const res = await fetch(apiUrl(`/auth/users/${u.id}/memberships/${departmentId}`), {
@@ -238,12 +286,16 @@ export default function AdminPanel({ token }: AdminPanelProps) {
 
       {report && (
         <>
-          <h4 style={{ margin: '0 0 0.5rem', color: 'var(--navy)' }}>1 · Platform overview</h4>
-        <div style={{ marginBottom: '1rem' }}>
+          <SectionHeader
+            n="1"
+            title="Platform overview"
+            sub="Live counts across every department. “Open” means pending or in progress right now; “total” is all-time."
+          />
+          <div style={{ marginBottom: '1rem' }}>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
             {Object.entries(report.byStatus).map(([status, count]) => (
               <span key={status} className="badge" style={{ background: 'var(--navy)', color: '#fff' }}>
-                {status}: {count}
+                {formatEnum(status)}: {count}
               </span>
             ))}
           </div>
@@ -254,7 +306,7 @@ export default function AdminPanel({ token }: AdminPanelProps) {
                 <div key={d.code}>
                   <div className="row" style={{ justifyContent: 'space-between', fontSize: '0.82rem' }}>
                     <strong>{d.code}</strong>
-                    <span className="muted">{d.open} open / {d.total} total</span>
+                    <span className="muted">{d.open} open of {d.total} total</span>
                   </div>
                   <div style={{ height: '8px', borderRadius: '999px', background: 'var(--border)', marginTop: '0.25rem' }}>
                     <div style={{ height: '100%', width: `${pct}%`, borderRadius: '999px', background: 'var(--blue)' }} />
@@ -268,11 +320,47 @@ export default function AdminPanel({ token }: AdminPanelProps) {
       )}
 
       <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '1.25rem 0' }} />
-      <h4 style={{ margin: '0 0 0.25rem', color: 'var(--navy)' }}>2 · Catalog — departments & request types</h4>
-      <p className="muted" style={{ margin: '0 0 0.75rem' }}>
-        Departments group work; request types are the pickable categories inside one department.
-        Deactivating (not deleting) retires entries while history stays intact.
-      </p>
+      <SectionHeader
+        n="2"
+        title="Catalog — departments & request types"
+        sub="Departments group work; request types are the pickable categories inside one department. Deactivating retires entries while history stays intact."
+      />
+      <div style={{ display: 'grid', gap: '0.5rem', marginBottom: '1rem' }}>
+        {departments.map((d) => (
+          <div key={d.id} className="admin-row" style={{ opacity: d.active ? 1 : 0.55 }}>
+            <div className="row" style={{ justifyContent: 'space-between' }}>
+              <div>
+                <strong>{d.name}</strong>{' '}
+                <span className="muted" style={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{d.code}</span>
+                {!d.active && <span className="badge" style={{ background: 'var(--danger-bg)', color: 'var(--danger)', marginLeft: '0.4rem' }}>Inactive</span>}
+              </div>
+              <Button variant="ghost" small onClick={() => toggleDeptActive(d.id, !d.active)}>
+                {d.active ? 'Deactivate' : 'Reactivate'}
+              </Button>
+            </div>
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
+              {allTypes
+                .filter((t) => t.departmentId === d.id)
+                .map((t) => (
+                  <span
+                    key={t.id}
+                    className="badge"
+                    title={t.name}
+                    style={{
+                      background: t.active ? 'var(--blue-pale)' : '#f1f5f9',
+                      color: t.active ? '#1d4ed8' : 'var(--muted)',
+                      textTransform: 'none',
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => toggleTypeActive(d.id, t.id, !t.active)}
+                  >
+                    {t.name} {!t.active && '(off)'}
+                  </span>
+                ))}
+            </div>
+          </div>
+        ))}
+      </div>
       <form onSubmit={createDepartment}>
         <div className="row">
           <input className="input" style={{ flex: 1 }} value={newDeptCode} onChange={(e) => setNewDeptCode(e.target.value)} placeholder="CODE (e.g. LEGAL)" />
@@ -295,11 +383,11 @@ export default function AdminPanel({ token }: AdminPanelProps) {
       </form>
 
       <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '1.25rem 0' }} />
-      <h4 style={{ margin: '0 0 0.25rem', color: 'var(--navy)' }}>3 · Create user account</h4>
-      <p className="muted" style={{ margin: '0 0 0.75rem' }}>
-        One account per employee. Pick their platform role and first department —
-        you can change both below after creation.
-      </p>
+      <SectionHeader
+        n="3"
+        title="Create user account"
+        sub="One account per employee. Pick their platform role and first department — you can change both below after creation."
+      />
       <form onSubmit={handleCreate}>
         <Field label="Email *">
           <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@acme.com" required />
@@ -344,10 +432,11 @@ export default function AdminPanel({ token }: AdminPanelProps) {
       {message && <p className="muted" style={{ marginTop: '0.75rem' }}>{message}</p>}
 
       <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '1.25rem 0' }} />
-      <h4 style={{ margin: '0 0 0.25rem', color: 'var(--navy)' }}>4 · Users & memberships ({users.length})</h4>
-      <p className="muted" style={{ margin: '0 0 0.75rem' }}>
-        Change platform roles, add or remove department memberships, deactivate accounts.
-      </p>
+      <SectionHeader
+        n="4"
+        title={`Users & memberships (${users.length})`}
+        sub="Change platform roles, add or remove department memberships, deactivate accounts."
+      />
       <div style={{ display: 'grid', gap: '0.6rem' }}>
         {users.map((u) => {
           const draft = memberDrafts[u.id] || { deptId: '', role: 'AGENT' };
