@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Button, ErrorBox, Field } from './components/ui';
+import { apiUrl } from './api';
 
 interface AdminPanelProps {
   token: string;
@@ -44,8 +45,8 @@ export default function AdminPanel({ token }: AdminPanelProps) {
   const load = async () => {
     try {
       const [uRes, dRes] = await Promise.all([
-        fetch('http://localhost:3000/auth/users', { headers: { Authorization: `Bearer ${token}` } }),
-        fetch('http://localhost:3000/catalog/departments', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(apiUrl('/auth/users'), { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(apiUrl('/catalog/departments'), { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       if (uRes.ok) setUsers(await uRes.json());
       if (dRes.ok) setDepartments(await dRes.json());
@@ -65,7 +66,7 @@ export default function AdminPanel({ token }: AdminPanelProps) {
     setBusy(true);
     setMessage('');
     try {
-      const res = await fetch('http://localhost:3000/auth/users', {
+      const res = await fetch(apiUrl('/auth/users'), {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -96,7 +97,7 @@ export default function AdminPanel({ token }: AdminPanelProps) {
 
   const toggleActive = async (u: AdminUser) => {
     try {
-      const res = await fetch(`http://localhost:3000/auth/users/${u.id}`, {
+      const res = await fetch(apiUrl(`/auth/users/${u.id}`), {
         method: 'PATCH',
         headers,
         body: JSON.stringify({ active: !u.active }),
@@ -114,7 +115,7 @@ export default function AdminPanel({ token }: AdminPanelProps) {
 
   const changeRole = async (u: AdminUser, platformRole: string) => {
     try {
-      const res = await fetch(`http://localhost:3000/auth/users/${u.id}/role`, {
+      const res = await fetch(apiUrl(`/auth/users/${u.id}/role`), {
         method: 'PATCH',
         headers,
         body: JSON.stringify({ platformRole }),
@@ -137,7 +138,7 @@ export default function AdminPanel({ token }: AdminPanelProps) {
       return;
     }
     try {
-      const res = await fetch(`http://localhost:3000/auth/users/${u.id}/memberships`, {
+      const res = await fetch(apiUrl(`/auth/users/${u.id}/memberships`), {
         method: 'POST',
         headers,
         body: JSON.stringify({ departmentId: draft.deptId, departmentRole: draft.role }),
@@ -155,7 +156,7 @@ export default function AdminPanel({ token }: AdminPanelProps) {
 
   const loadReport = async () => {
     try {
-      const res = await fetch('http://localhost:3000/requests/report', {
+      const res = await fetch(apiUrl('/requests/report'), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) setReport(await res.json());
@@ -167,7 +168,7 @@ export default function AdminPanel({ token }: AdminPanelProps) {
   const createDepartment = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('http://localhost:3000/departments', {
+      const res = await fetch(apiUrl('/departments'), {
         method: 'POST',
         headers,
         body: JSON.stringify({ code: newDeptCode, name: newDeptName }),
@@ -193,7 +194,7 @@ export default function AdminPanel({ token }: AdminPanelProps) {
       return;
     }
     try {
-      const res = await fetch(`http://localhost:3000/departments/${newTypeDept}/request-types`, {
+      const res = await fetch(apiUrl(`/departments/${newTypeDept}/request-types`), {
         method: 'POST',
         headers,
         body: JSON.stringify({ code: newTypeCode, name: newTypeName }),
@@ -214,7 +215,7 @@ export default function AdminPanel({ token }: AdminPanelProps) {
 
   const removeMembership = async (u: AdminUser, departmentId: string) => {
     try {
-      const res = await fetch(`http://localhost:3000/auth/users/${u.id}/memberships/${departmentId}`, {
+      const res = await fetch(apiUrl(`/auth/users/${u.id}/memberships/${departmentId}`), {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });

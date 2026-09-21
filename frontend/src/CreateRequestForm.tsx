@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Button, Card, ErrorBox, Field } from './components/ui';
+import { apiUrl } from './api';
 
 interface CreateRequestFormProps {
   token: string;
@@ -30,8 +31,8 @@ export default function CreateRequestForm({ token, onCreated }: CreateRequestFor
     // type, no matter how many tickets exist.
     const headers = { Authorization: `Bearer ${token}` };
     Promise.all([
-      fetch('http://localhost:3000/catalog/departments', { headers }).then((r) => r.json()),
-      fetch('http://localhost:3000/catalog/request-types', { headers }).then((r) => r.json()),
+      fetch(apiUrl('/catalog/departments'), { headers }).then((r) => r.json()),
+      fetch(apiUrl('/catalog/request-types'), { headers }).then((r) => r.json()),
     ])
       .then(([depts, types]) => {
         if (Array.isArray(depts)) setDepartments(depts);
@@ -50,7 +51,7 @@ export default function CreateRequestForm({ token, onCreated }: CreateRequestFor
     setAiLoading(true);
     setAiNote('');
     try {
-      const res = await fetch('http://localhost:3000/requests/ai-draft', {
+      const res = await fetch(apiUrl('/requests/ai-draft'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ text: aiText }),
@@ -93,7 +94,7 @@ export default function CreateRequestForm({ token, onCreated }: CreateRequestFor
     }
     setDupLoading(true);
     try {
-      const res = await fetch('http://localhost:3000/requests/check-duplicates', {
+      const res = await fetch(apiUrl('/requests/check-duplicates'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ departmentId: selectedDept, title, description }),
@@ -113,7 +114,7 @@ export default function CreateRequestForm({ token, onCreated }: CreateRequestFor
     setError('');
 
     try {
-      const res = await fetch('http://localhost:3000/requests', {
+      const res = await fetch(apiUrl('/requests'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({

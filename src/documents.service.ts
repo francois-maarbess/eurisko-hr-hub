@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  OnModuleInit,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
@@ -33,7 +34,7 @@ const MAGIC_BYTES: Record<string, number[][]> = {
  * are brokered by the API: no public URLs, no client storage credentials.
  */
 @Injectable()
-export class DocumentsService {
+export class DocumentsService implements OnModuleInit {
   private readonly logger = new Logger(DocumentsService.name);
 
   constructor(
@@ -41,6 +42,18 @@ export class DocumentsService {
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
   ) {}
+
+  onModuleInit() {
+    // Daily retention sweep in-process (same pattern as the notification
+    // outbox sweep). Self-healing; a failed run retries next interval.
+    const timer = setInterval(() => {
+      this.purgeExpired().catch((e) =>
+        this.logger.error(`Retention sweep failed: ${(e as Error).message}`),
+      );
+    }, 24 * 60 * 60 * 1000);
+    const maybeUnref = (timer as unknown as { unref?: () => void }).unref;
+    if (typeof maybeUnref === 'function') maybeUnref.call(timer);
+  }
 
   private ext(name: string): string {
     const i = name.lastIndexOf('.');

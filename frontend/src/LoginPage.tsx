@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Button, ErrorBox } from './components/ui';
+import { apiUrl } from './api';
 
 interface LoginPageProps {
   onLogin: (token: string, user: { id: string; email: string; name: string; platformRole: string }) => void;
@@ -17,7 +18,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     setError('');
 
     try {
-      const res = await fetch('http://localhost:3000/auth/login', {
+      const res = await fetch(apiUrl('/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -30,7 +31,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       }
 
       // Get user profile
-      const meRes = await fetch('http://localhost:3000/auth/me', {
+      const meRes = await fetch(apiUrl('/auth/me'), {
         headers: { Authorization: `Bearer ${data.accessToken}` },
       });
       const user = await meRes.json();

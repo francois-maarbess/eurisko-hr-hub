@@ -55,14 +55,14 @@ cd frontend && npm run dev
 ## Running Tests
 
 ```bash
-npm test      # 55 tests (all deterministic, SQLite)
-npm run eval:ai  # 6 AI eval cases (offline, no key, no DB)
+npm test      # 62 tests (all deterministic, SQLite)
+npm run eval:ai  # 8 AI eval cases (offline, no key, no DB)
 ```
 
-55 tests covering:
-- **Unit**: Status transitions (10) + AI extractor/validation/fallback (8) + password accounts (6) + purge & duplicate scoring (3)
-- **Integration**: Prisma ↔ SQLite database lifecycle
-- **E2E**: Full HTTP flow with auth, scoped views, create, claim, complete, documents lifecycle, notifications, duplicates, report, manager memberships, validation, regression + AI draft endpoint + catalog + admin user lifecycle
+62 tests covering:
+- **Unit**: Status transitions (10) + AI extractor/validation/fallback/sensitive/off-topic (10) + password accounts (6) + purge & duplicate scoring (3)
+- **Integration**: Prisma ↔ SQLite database lifecycle (3)
+- **E2E (30)**: Full HTTP flow with auth, scoped views, create, claim, complete, documents lifecycle, notifications, duplicates, report, manager memberships, owner-cancel/admin-claim rules, validation, regression + AI draft endpoint + catalog + admin user lifecycle
 
 ## AI-Assisted Intake (Week 4)
 
@@ -144,7 +144,7 @@ normal validated flow — the AI never creates anything.
 │   ├── requests.service.ts
 │   └── main.ts
 ├── scripts/
-│   └── eval-ai.ts         # 6 AI eval cases (`npm run eval:ai`)
+│   └── eval-ai.ts         # 8 AI eval cases (`npm run eval:ai`)
 ├── prisma/
 │   ├── schema.prisma      # Database schema
 │   ├── seed.ts            # Seed data

@@ -4,6 +4,7 @@ import CreateRequestForm from './CreateRequestForm';
 import TicketStatusManager from './TicketStatusManager';
 import AdminPanel from './AdminPanel';
 import { Button } from './components/ui';
+import { apiUrl } from './api';
 
 interface User {
   id: string;
@@ -46,8 +47,8 @@ export default function App() {
   const refreshInbox = async (t: string = token!) => {
     try {
       const [listRes, countRes] = await Promise.all([
-        fetch('http://localhost:3000/notifications', { headers: { Authorization: `Bearer ${t}` } }),
-        fetch('http://localhost:3000/notifications/unread-count', { headers: { Authorization: `Bearer ${t}` } }),
+        fetch(apiUrl('/notifications'), { headers: { Authorization: `Bearer ${t}` } }),
+        fetch(apiUrl('/notifications/unread-count'), { headers: { Authorization: `Bearer ${t}` } }),
       ]);
       if (listRes.ok) setInbox(await listRes.json());
       if (countRes.ok) setUnread((await countRes.json()).count || 0);
@@ -63,7 +64,7 @@ export default function App() {
 
   const markAllRead = async () => {
     if (!token) return;
-    await fetch('http://localhost:3000/notifications/read-all', {
+    await fetch(apiUrl('/notifications/read-all'), {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${token}` },
     }).catch(() => {});

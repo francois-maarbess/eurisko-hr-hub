@@ -707,12 +707,28 @@ describe('Service Request Flow (E2E)', () => {
 
   it('duplicate check warns on twins and stays silent otherwise', async () => {
     const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'VPN' } });
+    const stamp = Date.now();
+    // Self-contained twin: create it here so seed drift (demo clicks,
+    // status changes) can never break this test.
+    const twin = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        departmentId: dept!.id,
+        requestTypeId: rt!.id,
+        title: `VPN access for weekend travel ${stamp}`,
+        description: 'Temporary test ticket that must be found as a duplicate candidate',
+        priority: 'STANDARD',
+      });
+    expect(twin.status).toBe(201);
+
     const res = await request(app.getHttpServer())
       .post('/requests/check-duplicates')
       .set('Authorization', `Bearer ${employeeToken}`)
-      .send({ departmentId: dept!.id, title: 'VPN access for travel' });
+      .send({ departmentId: dept!.id, title: `VPN access for travel ${stamp}` });
     expect(res.status).toBe(200);
-    expect(res.body.length).toBeGreaterThanOrEqual(1);
+    expect(res.body.map((r: any) => r.id)).toContain(twin.body.id);
 
     const clean = await request(app.getHttpServer())
       .post('/requests/check-duplicates')

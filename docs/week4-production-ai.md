@@ -55,8 +55,8 @@ npx prisma generate
 npx prisma migrate dev
 npx tsx prisma/seed.ts
 
-npm test          # 33 tests: 23 original + 8 AI unit + 2 AI e2e
-npm run eval:ai   # 6 representative AI eval cases, offline, deterministic
+npm test          # 62 tests: 10 transitions + 3 integration + 10 AI unit + 6 auth unit + 3 purge/duplicate unit + 30 E2E
+npm run eval:ai   # 8 representative AI eval cases, offline, deterministic
 ```
 
 Optional: set `GROQ_API_KEY` to enable the LLM provider (falls back to
@@ -83,6 +83,6 @@ local on any failure). Nothing else changes.
 - `src/ai/ai-intake.service.ts` — catalog load, provider fallback, `validateCandidate`
 - `src/ai/ai.controller.ts` — `POST /requests/ai-draft` (JWT-guarded)
 - `src/ai/ai.module.ts`, `src/ai/ai-intake.service.spec.ts` (8 unit tests)
-- `scripts/eval-ai.ts` — 6 eval cases, exit code signals pass/fail
+- `scripts/eval-ai.ts` — 8 eval cases, exit code signals pass/fail
 - `test/app.e2e-spec.ts` — draft happy path (creates nothing) + empty/anon rejections
 - `frontend/src/CreateRequestForm.tsx` — AI draft box + confidence note

@@ -19,6 +19,7 @@ export class AuditService {
     action: string;
     oldValue?: string;
     newValue?: string;
+    metadata?: string;
   }): Promise<void> {
     try {
       await this.prisma.auditLog.create({
@@ -28,6 +29,7 @@ export class AuditService {
           action: data.action,
           oldValue: data.oldValue,
           newValue: data.newValue,
+          metadata: data.metadata,
         },
       });
     } catch (e) {

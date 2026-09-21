@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Badge, Button, EmptyState, ErrorBox, Field, Tabs } from './components/ui';
+import { apiUrl } from './api';
 
 type TicketStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'REJECTED';
 type TicketPriority = 'LOW' | 'STANDARD' | 'URGENT';
@@ -92,7 +93,7 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
 
   const fetchTickets = async (v: View) => {
     try {
-      const response = await fetch(`http://localhost:3000/requests?view=${v}`, { headers: { Authorization: `Bearer ${token}` } });
+      const response = await fetch(apiUrl(`/requests?view=${v}`), { headers: { Authorization: `Bearer ${token}` } });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.message || 'Failed to load requests.');
       setTickets(data as TicketState[]);
@@ -103,7 +104,7 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
   };
 
   useEffect(() => {
-    fetch('http://localhost:3000/auth/memberships', { headers: { Authorization: `Bearer ${token}` } })
+    fetch(apiUrl('/auth/memberships'), { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data)) setMemberships(data);
@@ -135,13 +136,13 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
 
   const handleClaim = (ticket: TicketState) =>
     mutate(ticket, () =>
-      fetch(`http://localhost:3000/requests/${ticket.id}/claim`, { method: 'PATCH', headers: authHeaders }),
+      fetch(apiUrl(`/requests/${ticket.id}/claim`), { method: 'PATCH', headers: authHeaders }),
       'Claimed — you are now working on this request.',
     );
 
   const handleCancel = (ticket: TicketState) =>
     mutate(ticket, () =>
-      fetch(`http://localhost:3000/requests/${ticket.id}/status`, {
+      fetch(apiUrl(`/requests/${ticket.id}/status`), {
         method: 'PATCH',
         headers: authHeaders,
         body: JSON.stringify({ status: 'CANCELLED' }),
@@ -152,14 +153,34 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
   const handleResolve = async (ticket: TicketState) => {
     const typedNote = (resolutionInputs[ticket.id] ?? '').trim();
     if (!typedNote) {
-      setCardErrors((current) => ({ ...current, [ticket.id]: 'A resolution note is required when transitioning to COMPLETED.' }));
-      return;
+      // Backend accepts an attached document instead of a note — check live
+      // rather than guessing from possibly-unloaded attachment state.
+      try {
+        const res = await fetch(apiUrl(`/requests/${ticket.id}/documents`), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const docs = res.ok ? await res.json() : [];
+        setDocsCache((c) => ({ ...c, [ticket.id]: docs }));
+        if (!Array.isArray(docs) || docs.length === 0) {
+          setCardErrors((current) => ({
+            ...current,
+            [ticket.id]: 'A resolution note or an attached document is required to complete.',
+          }));
+          return;
+        }
+      } catch {
+        setCardErrors((current) => ({ ...current, [ticket.id]: 'Could not verify attachments.' }));
+        return;
+      }
     }
     await mutate(ticket, () =>
-      fetch(`http://localhost:3000/requests/${ticket.id}/status`, {
+      fetch(apiUrl(`/requests/${ticket.id}/status`), {
         method: 'PATCH',
         headers: authHeaders,
-        body: JSON.stringify({ status: 'COMPLETED', resolutionNote: typedNote }),
+        body: JSON.stringify({
+          status: 'COMPLETED',
+          ...(typedNote ? { resolutionNote: typedNote } : {}),
+        }),
       }),
       'Marked as completed.',
     );
@@ -167,7 +188,7 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
 
   const loadDocs = async (ticketId: string) => {
     try {
-      const res = await fetch(`http://localhost:3000/requests/${ticketId}/documents`, {
+      const res = await fetch(apiUrl(`/requests/${ticketId}/documents`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return;
@@ -191,7 +212,7 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
     try {
       const form = new FormData();
       form.append('file', file);
-      const res = await fetch(`http://localhost:3000/requests/${ticket.id}/documents`, {
+      const res = await fetch(apiUrl(`/requests/${ticket.id}/documents`), {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: form,
@@ -211,7 +232,7 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
 
   const handleDownload = async (ticket: TicketState, doc: DocMeta) => {
     try {
-      const res = await fetch(`http://localhost:3000/requests/${ticket.id}/documents/${doc.id}/download`, {
+      const res = await fetch(apiUrl(`/requests/${ticket.id}/documents/${doc.id}/download`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
@@ -232,7 +253,7 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
 
   const handleDeleteDoc = async (ticket: TicketState, doc: DocMeta) => {
     await mutate(ticket, () =>
-      fetch(`http://localhost:3000/requests/${ticket.id}/documents/${doc.id}`, {
+      fetch(apiUrl(`/requests/${ticket.id}/documents/${doc.id}`), {
         method: 'DELETE',
         headers: authHeaders,
       }),
@@ -247,10 +268,10 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
       return;
     }
     await mutate(ticket, () =>
-      fetch(`http://localhost:3000/requests/${ticket.id}/status`, {
+      fetch(apiUrl(`/requests/${ticket.id}/status`), {
         method: 'PATCH',
         headers: authHeaders,
-        body: JSON.stringify({ status: 'REJECTED', rejectionReason: reason }),
+        body: JSON.stringify({ status: 'COMPLETED', resolutionNote: typedNote }),
       }),
       'Request rejected.',
     );
@@ -299,6 +320,8 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
         const canClaim = (inMyDept || isAdmin) && ticket.status === 'PENDING' && !ticket.claimedById && !isOwner;
         const canCancel = isOwner && ticket.status === 'PENDING';
         const canWork = (inMyDept || isAdmin) && !isOwner && ticket.status === 'IN_PROGRESS';
+        // Reject is legal straight from PENDING (spec §5) — no need to claim first.
+        const canRejectPending = (inMyDept || isAdmin) && !isOwner && ticket.status === 'PENDING';
         const canManageDocs = inMyDept || isAdmin;
         const canDownloadDocs = canManageDocs || (isOwner && isTerminal);
         const ticketError = cardErrors[ticket.id];
@@ -397,6 +420,20 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
               </div>
             )}
 
+            {(canWork || canRejectPending) && showReject[ticket.id] && (
+              <div style={{ display: 'grid', gap: '0.5rem', marginTop: '0.75rem' }}>
+                <Field label="Rejection reason">
+                  <input
+                    className="input"
+                    type="text"
+                    value={rejectionInputs[ticket.id] ?? ''}
+                    onChange={(e) => setRejectionInputs((c) => ({ ...c, [ticket.id]: e.target.value }))}
+                    placeholder="Enter rejection reason"
+                  />
+                </Field>
+              </div>
+            )}
+
             {canWork && (
               <div style={{ display: 'grid', gap: '0.5rem', marginTop: '0.75rem' }}>
                 <Field label="Resolution note">
@@ -408,17 +445,6 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
                     placeholder="Enter resolution note"
                   />
                 </Field>
-                {showReject[ticket.id] && (
-                  <Field label="Rejection reason">
-                    <input
-                      className="input"
-                      type="text"
-                      value={rejectionInputs[ticket.id] ?? ''}
-                      onChange={(e) => setRejectionInputs((c) => ({ ...c, [ticket.id]: e.target.value }))}
-                      placeholder="Enter rejection reason"
-                    />
-                  </Field>
-                )}
               </div>
             )}
 
@@ -465,6 +491,16 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
                     </Button>
                   )}
                 </>
+              )}
+              {canRejectPending && !showReject[ticket.id] && (
+                <Button variant="danger-outline" small onClick={() => setShowReject((c) => ({ ...c, [ticket.id]: true }))} disabled={loading}>
+                  Reject
+                </Button>
+              )}
+              {canRejectPending && showReject[ticket.id] && (
+                <Button variant="danger" small onClick={() => handleReject(ticket)} disabled={loading}>
+                  {loading ? '...' : 'Confirm Reject'}
+                </Button>
               )}
             </div>
           </div>

@@ -81,6 +81,7 @@ model Request {
   claimedById    String?
   resolutionNote String?
   rejectionReason String?
+  completedAt    DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -122,6 +123,7 @@ model AuditLog {
   action    String
   oldValue  String?
   newValue  String?
+  metadata  String?
   createdAt DateTime @default(now())
 
   request Request? @relation(fields: [requestId], references: [id])

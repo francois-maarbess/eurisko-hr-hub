@@ -275,6 +275,8 @@ export class RequestsService {
     const updateData: Record<string, any> = { status: dto.status };
     if (dto.resolutionNote) updateData.resolutionNote = dto.resolutionNote;
     if (dto.rejectionReason) updateData.rejectionReason = dto.rejectionReason;
+    // Acceptance: completion timestamp recorded at the moment of completion.
+    if (dto.status === 'COMPLETED') updateData.completedAt = new Date();
 
     await this.prisma.$transaction(async (tx) => {
       await tx.request.update({ where: { id }, data: updateData });
@@ -287,6 +289,14 @@ export class RequestsService {
           newValue: dto.status,
         },
       });
+      if (dto.status === 'COMPLETED') {
+        // Retention clock starts at completion (acceptance 11): attached
+        // payloads purge 30 days from now, never from upload time.
+        await tx.document.updateMany({
+          where: { requestId: id, deletedAt: null },
+          data: { purgeAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
+        });
+      }
     });
 
     const eventType =

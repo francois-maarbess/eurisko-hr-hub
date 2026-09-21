@@ -11,6 +11,7 @@ import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
 import { DepartmentsController } from './departments.controller';
 import { AuditService } from './audit.service';
+import { HealthController } from './health.controller';
 
 @Module({
   imports: [PrismaModule, AuthModule, AiModule],
@@ -20,6 +21,7 @@ import { AuditService } from './audit.service';
     DocumentsController,
     NotificationsController,
     DepartmentsController,
+    HealthController,
   ],
   providers: [RequestsService, AuditService, NotificationsService, DocumentsService],
 })
