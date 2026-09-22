@@ -24,6 +24,7 @@ interface TicketState {
   requestType?: { code: string; name: string };
   owner?: { id: string; displayName: string };
   claimant?: { id: string; displayName: string };
+  _count?: { documents?: number; staffNotes?: number };
 }
 
 interface Membership {
@@ -77,6 +78,81 @@ const PRIORITY_COLORS: Record<TicketPriority, { background: string; color: strin
 
 type View = 'mine' | 'queue' | 'claimed';
 
+function getSlaInfo(ticket: TicketState): { label: string; bg: string; color: string } {
+  const targetHours = ticket.priority === 'URGENT' ? 4 : ticket.priority === 'STANDARD' ? 24 : 48;
+  const targetMs = targetHours * 3600000;
+  const createdMs = new Date(ticket.createdAt).getTime();
+  const deadlineMs = createdMs + targetMs;
+  const isTerminal = ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(ticket.status);
+
+  if (ticket.status === 'COMPLETED' && ticket.completedAt) {
+    const completedMs = new Date(ticket.completedAt).getTime();
+    const met = completedMs <= deadlineMs;
+    return {
+      label: met ? `✓ SLA Met (${targetHours}h)` : `SLA Breached`,
+      bg: met ? '#dcfce7' : '#fee2e2',
+      color: met ? '#15803d' : '#b91c1c',
+    };
+  }
+
+  if (isTerminal) {
+    return {
+      label: `SLA: ${targetHours}h`,
+      bg: '#f1f5f9',
+      color: 'var(--muted)',
+    };
+  }
+
+  const remainingMs = deadlineMs - Date.now();
+  if (remainingMs <= 0) {
+    const overdueHrs = Math.ceil(Math.abs(remainingMs) / 3600000);
+    return {
+      label: `⚠️ SLA Overdue (+${overdueHrs}h)`,
+      bg: '#fee2e2',
+      color: '#b91c1c',
+    };
+  }
+
+  const remainingHrs = Math.floor(remainingMs / 3600000);
+  const remainingMins = Math.floor((remainingMs % 3600000) / 60000);
+  const text = remainingHrs > 0 ? `${remainingHrs}h ${remainingMins}m` : `${remainingMins}m`;
+  const isWarning = remainingMs < 3600000 || remainingMs < targetMs * 0.25;
+
+  return {
+    label: `⏱ SLA: ${text} left`,
+    bg: isWarning ? '#fef3c7' : '#eff6ff',
+    color: isWarning ? '#b45309' : '#1d4ed8',
+  };
+}
+
+function highlightMatch(text: string, q: string): React.ReactNode {
+  const query = q.trim();
+  if (!query) return text;
+  const parts = text.split(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'));
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === query.toLowerCase() ? (
+          <mark
+            key={i}
+            style={{
+              background: '#fef08a',
+              color: '#854d0e',
+              padding: '0 2px',
+              borderRadius: '2px',
+              fontWeight: 700,
+            }}
+          >
+            {part}
+          </mark>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
+
 interface TicketStatusManagerProps {
   token: string;
   userId: string;
@@ -95,6 +171,9 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [sortOldest, setSortOldest] = useState(false);
+  const [filterUrgentOnly, setFilterUrgentOnly] = useState(false);
+  const [filterHasDocs, setFilterHasDocs] = useState(false);
+  const [filterHasNotes, setFilterHasNotes] = useState(false);
 
   // Per-ticket form inputs
   const [resolutionInputs, setResolutionInputs] = useState<Record<string, string>>({});
@@ -490,6 +569,9 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
   const visibleTickets = tickets
     .filter((t) => {
       if (statusFilter !== 'ALL' && t.status !== statusFilter) return false;
+      if (filterUrgentOnly && t.priority !== 'URGENT') return false;
+      if (filterHasDocs && (t._count?.documents ?? (docsCache[t.id]?.length || 0)) === 0) return false;
+      if (filterHasNotes && (t._count?.staffNotes ?? (notesCache[t.id]?.length || 0)) === 0) return false;
       const q = query.trim().toLowerCase();
       if (!q) return true;
       return (
@@ -558,6 +640,77 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
         </button>
       </div>
 
+      <div className="row" style={{ gap: '0.4rem', flexWrap: 'wrap', marginTop: '-0.35rem' }}>
+        <span className="muted" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Quick filters:</span>
+        <button
+          onClick={() => setFilterUrgentOnly((u) => !u)}
+          style={{
+            border: filterUrgentOnly ? '1px solid var(--danger)' : '1px solid var(--border)',
+            background: filterUrgentOnly ? '#fee2e2' : '#fff',
+            color: filterUrgentOnly ? 'var(--danger)' : 'inherit',
+            borderRadius: '999px',
+            padding: '0.22rem 0.6rem',
+            fontSize: '0.76rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >
+          🔥 Urgent Only
+        </button>
+        <button
+          onClick={() => setFilterHasDocs((d) => !d)}
+          style={{
+            border: filterHasDocs ? '1px solid var(--blue)' : '1px solid var(--border)',
+            background: filterHasDocs ? 'var(--blue-pale)' : '#fff',
+            color: filterHasDocs ? 'var(--blue)' : 'inherit',
+            borderRadius: '999px',
+            padding: '0.22rem 0.6rem',
+            fontSize: '0.76rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >
+          📎 Has Attachments
+        </button>
+        {isStaff && (
+          <button
+            onClick={() => setFilterHasNotes((n) => !n)}
+            style={{
+              border: filterHasNotes ? '1px solid #7c3aed' : '1px solid var(--border)',
+              background: filterHasNotes ? '#ede9fe' : '#fff',
+              color: filterHasNotes ? '#7c3aed' : 'inherit',
+              borderRadius: '999px',
+              padding: '0.22rem 0.6rem',
+              fontSize: '0.76rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            💬 Has Staff Notes
+          </button>
+        )}
+        {(filterUrgentOnly || filterHasDocs || filterHasNotes) && (
+          <button
+            onClick={() => {
+              setFilterUrgentOnly(false);
+              setFilterHasDocs(false);
+              setFilterHasNotes(false);
+            }}
+            style={{
+              border: 'none',
+              background: 'none',
+              color: 'var(--muted)',
+              fontSize: '0.76rem',
+              cursor: 'pointer',
+              textDecoration: 'underline',
+              marginLeft: '0.2rem',
+            }}
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
       {toast && (
         <div style={{ background: 'var(--navy)', color: '#fff', borderRadius: '10px', padding: '0.7rem 0.9rem', fontWeight: 600 }}>
           {toast}
@@ -596,6 +749,8 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
         const canReadNotes = (inMyDept || isAdmin) && !isOwner;
         const ticketError = cardErrors[ticket.id];
 
+        const sla = getSlaInfo(ticket);
+
         return (
           <div
             className="card"
@@ -611,10 +766,15 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
                   {ticket.id} {ticket.department && `· ${ticket.department.name} (${ticket.department.code})`}
                   {ticket.requestType && ` · ${ticket.requestType.name}`}
                 </div>
-                <div style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--navy)' }}>{ticket.title}</div>
+                <div style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--navy)' }}>
+                  {highlightMatch(ticket.title, query)}
+                </div>
                 {ticket.owner && <div className="muted" style={{ fontSize: '0.85rem' }}>Requested by {ticket.owner.displayName}</div>}
               </div>
               <div className="pill-group">
+                <Badge bg={sla.bg} color={sla.color}>
+                  {sla.label}
+                </Badge>
                 <Badge bg={PRIORITY_COLORS[ticket.priority].background} color={PRIORITY_COLORS[ticket.priority].color}>
                   {formatEnum(ticket.priority)}
                 </Badge>
@@ -629,7 +789,9 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
               </div>
             </div>
 
-            <p style={{ margin: '0.75rem 0', lineHeight: 1.5, color: '#334155' }}>{ticket.description}</p>
+            <p style={{ margin: '0.75rem 0', lineHeight: 1.5, color: '#334155' }}>
+              {highlightMatch(ticket.description, query)}
+            </p>
 
             {ticket.claimant && (
               <p className="muted" style={{ fontSize: '0.85rem', margin: '0.25rem 0' }}>
@@ -655,15 +817,39 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
               </button>
               {activityOpen[ticket.id] && (
                 <div style={{ marginTop: '0.5rem', display: 'grid', gap: '0.4rem', background: '#f8fafc', padding: '0.65rem 0.85rem', borderRadius: '8px' }}>
-                  {(activityCache[ticket.id] || []).map((a) => (
-                    <div key={a.id} style={{ fontSize: '0.85rem', borderLeft: '3px solid var(--blue-border)', paddingLeft: '0.6rem' }}>
-                      <div style={{ fontWeight: 700 }}>{a.label}</div>
-                      <div className="muted" style={{ fontSize: '0.78rem' }}>
-                        {a.actor}
-                        {a.details ? ` · ${a.details}` : ''} · {a.timestamp ? new Date(a.timestamp).toLocaleString() : ''}
+                  {(activityCache[ticket.id] || []).map((a) => {
+                    const isStatus = a.label.startsWith('Status changed:');
+                    const isReroute = a.label.startsWith('Re-routed');
+                    return (
+                      <div key={a.id} style={{ fontSize: '0.85rem', borderLeft: '3px solid var(--blue-border)', paddingLeft: '0.6rem' }}>
+                        <div style={{ fontWeight: 700 }}>
+                          {isStatus ? (
+                            <span>
+                              Status:{' '}
+                              <span style={{ background: '#f1f5f9', padding: '1px 5px', borderRadius: '4px', fontSize: '0.78rem' }}>
+                                {a.label.replace('Status changed: ', '').split(' → ')[0]}
+                              </span>
+                              {' ➔ '}
+                              <span style={{ background: 'var(--blue-pale)', color: '#1d4ed8', padding: '1px 5px', borderRadius: '4px', fontSize: '0.78rem' }}>
+                                {a.label.replace('Status changed: ', '').split(' → ')[1]}
+                              </span>
+                            </span>
+                          ) : (
+                            a.label
+                          )}
+                        </div>
+                        {isReroute && a.details && (
+                          <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '4px', padding: '0.25rem 0.45rem', marginTop: '0.2rem', fontSize: '0.76rem' }}>
+                            <strong>Audit Reason:</strong> {a.details}
+                          </div>
+                        )}
+                        <div className="muted" style={{ fontSize: '0.78rem', marginTop: '0.15rem' }}>
+                          {a.actor}
+                          {!isReroute && a.details ? ` · ${a.details}` : ''} · {a.timestamp ? new Date(a.timestamp).toLocaleString() : ''}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {(activityCache[ticket.id] || []).length === 0 && (
                     <span className="muted" style={{ fontSize: '0.85rem' }}>No recorded events yet.</span>
                   )}
@@ -777,7 +963,13 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
                           type="text"
                           value={noteInputs[ticket.id] ?? ''}
                           onChange={(e) => setNoteInputs((c) => ({ ...c, [ticket.id]: e.target.value }))}
-                          placeholder="Add a private agent note (invisible to requester)…"
+                          onKeyDown={(e) => {
+                            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                              e.preventDefault();
+                              void submitNote(ticket);
+                            }
+                          }}
+                          placeholder="Add a private agent note (Ctrl+Enter to send)…"
                         />
                         <Button variant="ghost" small onClick={() => submitNote(ticket)} disabled={loading}>
                           Add
@@ -798,7 +990,13 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
                     type="text"
                     value={rejectionInputs[ticket.id] ?? ''}
                     onChange={(e) => setRejectionInputs((c) => ({ ...c, [ticket.id]: e.target.value }))}
-                    placeholder="Provide a reason for rejection (required)"
+                    onKeyDown={(e) => {
+                      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                        e.preventDefault();
+                        void handleReject(ticket);
+                      }
+                    }}
+                    placeholder="Provide a reason for rejection (Ctrl+Enter to reject)"
                   />
                 </Field>
               </div>
@@ -813,7 +1011,13 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
                     type="text"
                     value={resolutionInputs[ticket.id] ?? ''}
                     onChange={(e) => setResolutionInputs((c) => ({ ...c, [ticket.id]: e.target.value }))}
-                    placeholder="Enter resolution details"
+                    onKeyDown={(e) => {
+                      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                        e.preventDefault();
+                        void handleComplete(ticket);
+                      }
+                    }}
+                    placeholder="Enter resolution details (Ctrl+Enter to complete)"
                   />
                 </Field>
               </div>
@@ -864,7 +1068,13 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
                       type="text"
                       value={ratingNote}
                       onChange={(e) => setRatingNote(e.target.value)}
-                      placeholder="Optional feedback comment…"
+                      onKeyDown={(e) => {
+                        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && ratingStars > 0) {
+                          e.preventDefault();
+                          void submitRating(ticket);
+                        }
+                      }}
+                      placeholder="Optional feedback comment (Ctrl+Enter to submit)…"
                     />
                     <div className="row" style={{ gap: '0.5rem' }}>
                       <Button variant="success" small onClick={() => submitRating(ticket)} disabled={loading || ratingStars === 0}>

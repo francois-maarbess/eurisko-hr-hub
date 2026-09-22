@@ -192,7 +192,13 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
             className="textarea"
             value={aiText}
             onChange={(e) => setAiText(e.target.value)}
-            placeholder="e.g. my laptop screen is cracked, need a replacement ASAP"
+            onKeyDown={(e) => {
+              if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                handleAiDraft();
+              }
+            }}
+            placeholder="e.g. my laptop screen is cracked, need a replacement ASAP (Ctrl+Enter to draft)"
             rows={2}
           />
         </Field>
@@ -202,12 +208,20 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
           disabled={aiLoading}
           small
         >
-          {aiLoading ? 'Drafting...' : '✨ Draft with AI'}
+          {aiLoading ? 'Drafting...' : '✨ Draft with AI (Ctrl+Enter)'}
         </Button>
         {aiNote && <p className="muted" style={{ marginTop: '0.5rem' }}>{aiNote}</p>}
       </div>
 
-      <form onSubmit={handleSubmit}>
+      <form
+        onSubmit={handleSubmit}
+        onKeyDown={(e) => {
+          if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+            e.preventDefault();
+            handleSubmit(e);
+          }
+        }}
+      >
         <Field label="Department *">
           <select
             className="select"

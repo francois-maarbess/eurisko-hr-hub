@@ -41,6 +41,12 @@ export class RequestsService {
     requestType: true,
     owner: true,
     claimant: true,
+    _count: {
+      select: {
+        documents: true,
+        staffNotes: true,
+      },
+    },
   } as const;
 
   /**
