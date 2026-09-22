@@ -48,6 +48,18 @@ async function main() {
     create: { email: 'alice@acme.com', displayName: 'Alice Employee', platformRole: 'EMPLOYEE', passwordHash, active: true },
   });
 
+  const bob = await prisma.user.upsert({
+    where: { email: 'bob@acme.com' },
+    update: { displayName: 'Bob Agent', platformRole: 'EMPLOYEE', passwordHash, active: true },
+    create: { email: 'bob@acme.com', displayName: 'Bob Agent', platformRole: 'EMPLOYEE', passwordHash, active: true },
+  });
+
+  await prisma.user.upsert({
+    where: { email: 'carol@acme.com' },
+    update: { displayName: 'Carol Agent', platformRole: 'EMPLOYEE', passwordHash, active: true },
+    create: { email: 'carol@acme.com', displayName: 'Carol Agent', platformRole: 'EMPLOYEE', passwordHash, active: true },
+  });
+
   const admin = await prisma.user.upsert({
     where: { email: 'admin@acme.com' },
     update: { displayName: 'Admin User', platformRole: 'SYSTEM_ADMIN', passwordHash, active: true },
@@ -59,6 +71,13 @@ async function main() {
     where: { userId_departmentId: { userId: admin.id, departmentId: it.id } },
     update: { departmentRole: 'MANAGER', active: true },
     create: { userId: admin.id, departmentId: it.id, departmentRole: 'MANAGER', active: true },
+  });
+
+  // Ensure Bob is an agent in IT (claim/queue flows + README demo login depend on him)
+  await prisma.departmentMember.upsert({
+    where: { userId_departmentId: { userId: bob.id, departmentId: it.id } },
+    update: { departmentRole: 'AGENT', active: true },
+    create: { userId: bob.id, departmentId: it.id, departmentRole: 'AGENT', active: true },
   });
 
   // Request types
@@ -200,7 +219,7 @@ async function main() {
     create: { departmentId: peo.id, code: 'FEEDBACK', name: 'Workplace Feedback', description: 'Suggestions about the workplace experience' },
   });
 
-  console.log('Seed completed: departments, request types, Alice (employee), and Admin (system admin) initialized.');
+  console.log('Seed completed: departments, request types, Alice (employee), Bob (IT agent), and Admin (system admin) initialized.');
 }
 
 main()

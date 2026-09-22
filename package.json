@@ -13,7 +13,7 @@
     "prisma:seed": "npx tsx prisma/seed.ts",
     "prisma:studio": "prisma studio",
     "lint": "echo \"No lint configured\"",
-    "test": "jest --forceExit --detectOpenHandles",
+    "test": "jest --runInBand --forceExit --detectOpenHandles",
     "test:cov": "jest --coverage --forceExit",
     "eval:ai": "npx tsx scripts/eval-ai.ts",
     "db:reset": "npx tsx scripts/clean-db.ts"

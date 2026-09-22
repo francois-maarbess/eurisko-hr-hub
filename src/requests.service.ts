@@ -616,8 +616,8 @@ export class RequestsService {
   async exportCsv(): Promise<string> {
     const rows = await this.prisma.request.findMany({
       include: {
-        department: { select: { code: true } },
-        requestType: { select: { code: true } },
+        department: { select: { name: true } },
+        requestType: { select: { name: true } },
         owner: { select: { email: true } },
         claimant: { select: { email: true } },
       },
@@ -632,7 +632,7 @@ export class RequestsService {
       header.map(cell).join(','),
       ...rows.map((r) =>
         [
-          r.id, r.title, r.department.code, r.requestType.code, r.status, r.priority,
+          r.id, r.title, r.department.name, r.requestType.name, r.status, r.priority,
           r.owner.email, r.claimant?.email ?? '', r.createdAt.toISOString(),
           r.completedAt ? r.completedAt.toISOString() : '', r.rating ?? '',
         ].map(cell).join(','),

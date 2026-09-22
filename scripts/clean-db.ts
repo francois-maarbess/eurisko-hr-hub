@@ -16,25 +16,37 @@ async function clean() {
   await prisma.notificationEvent.deleteMany();
   await prisma.request.deleteMany();
 
-  // 2. Remove any users other than alice and admin
+  // 2. Remove any users other than alice, bob, carol, and admin
   await prisma.departmentMember.deleteMany({
     where: {
       user: {
-        email: { notIn: ['alice@acme.com', 'admin@acme.com'] },
+        email: { notIn: ['alice@acme.com', 'bob@acme.com', 'carol@acme.com', 'admin@acme.com'] },
       },
     },
   });
   await prisma.user.deleteMany({
     where: {
-      email: { notIn: ['alice@acme.com', 'admin@acme.com'] },
+      email: { notIn: ['alice@acme.com', 'bob@acme.com', 'carol@acme.com', 'admin@acme.com'] },
     },
   });
 
-  // 3. Ensure alice and admin exist and have proper roles and password
+  // 3. Ensure alice, bob, and admin exist and have proper roles and password
   const alice = await prisma.user.upsert({
     where: { email: 'alice@acme.com' },
     update: { displayName: 'Alice Employee', platformRole: 'EMPLOYEE', passwordHash: hash, active: true },
     create: { email: 'alice@acme.com', displayName: 'Alice Employee', platformRole: 'EMPLOYEE', passwordHash: hash, active: true },
+  });
+
+  const bob = await prisma.user.upsert({
+    where: { email: 'bob@acme.com' },
+    update: { displayName: 'Bob Agent', platformRole: 'EMPLOYEE', passwordHash: hash, active: true },
+    create: { email: 'bob@acme.com', displayName: 'Bob Agent', platformRole: 'EMPLOYEE', passwordHash: hash, active: true },
+  });
+
+  await prisma.user.upsert({
+    where: { email: 'carol@acme.com' },
+    update: { displayName: 'Carol Agent', platformRole: 'EMPLOYEE', passwordHash: hash, active: true },
+    create: { email: 'carol@acme.com', displayName: 'Carol Agent', platformRole: 'EMPLOYEE', passwordHash: hash, active: true },
   });
 
   const admin = await prisma.user.upsert({
@@ -50,6 +62,12 @@ async function clean() {
       where: { userId_departmentId: { userId: admin.id, departmentId: itDept.id } },
       update: { departmentRole: 'MANAGER', active: true },
       create: { userId: admin.id, departmentId: itDept.id, departmentRole: 'MANAGER', active: true },
+    });
+    // Bob is the demo IT agent (claim/queue flows, e2e, and README login depend on him)
+    await prisma.departmentMember.upsert({
+      where: { userId_departmentId: { userId: bob.id, departmentId: itDept.id } },
+      update: { departmentRole: 'AGENT', active: true },
+      create: { userId: bob.id, departmentId: itDept.id, departmentRole: 'AGENT', active: true },
     });
   }
 

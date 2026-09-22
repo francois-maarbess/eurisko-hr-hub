@@ -72,6 +72,19 @@ describe('Service Request Flow (E2E)', () => {
   });
 
   it('should return requests for authenticated user', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+    await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        departmentId: dept!.id,
+        requestTypeId: rt!.id,
+        title: `List Probe ${Date.now()}`,
+        description: 'Ensures the listing endpoint returns rows on a clean database',
+        priority: 'STANDARD',
+      });
+
     const res = await request(app.getHttpServer())
       .get('/requests')
       .set('Authorization', `Bearer ${employeeToken}`);
@@ -931,9 +944,15 @@ describe('Service Request Flow (E2E)', () => {
     expect(audits.length).toBeGreaterThanOrEqual(1);
     expect(audits[0].metadata).toContain('belongs to HR');
 
-    // Terminal tickets cannot be re-routed.
+    // Terminal tickets cannot be re-routed: owner cancels the moved ticket, then reroute is rejected.
+    const cancelled = await request(app.getHttpServer())
+      .patch(`/requests/${id}/status`)
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ status: 'CANCELLED' });
+    expect(cancelled.status).toBe(200);
+
     const terminal = await request(app.getHttpServer())
-      .patch('/requests/req-3/reroute')
+      .patch(`/requests/${id}/reroute`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ newDepartmentId: it!.id, newRequestTypeId: laptop!.id, reason: 'too late' });
     expect(terminal.status).toBe(400);
