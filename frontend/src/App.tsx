@@ -26,6 +26,7 @@ export default function App() {
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [catalogVersion, setCatalogVersion] = useState(0);
   const [inboxOpen, setInboxOpen] = useState(false);
   const [inbox, setInbox] = useState<InboxItem[]>([]);
   const [unread, setUnread] = useState(0);
@@ -163,9 +164,18 @@ export default function App() {
           </>
         )}
 
-        <CreateRequestForm token={token} onCreated={() => { setRefreshKey((k) => k + 1); if (token) refreshInbox(token); }} />
+        <CreateRequestForm
+          token={token}
+          catalogVersion={catalogVersion}
+          onCreated={() => { setRefreshKey((k) => k + 1); if (token) refreshInbox(token); }}
+        />
 
-        {user.platformRole === 'SYSTEM_ADMIN' && <AdminPanel token={token} />}
+        {user.platformRole === 'SYSTEM_ADMIN' && (
+          <AdminPanel
+            token={token}
+            onCatalogChange={() => setCatalogVersion((v) => v + 1)}
+          />
+        )}
 
         <h3 style={{ margin: '1.5rem 0 0.75rem', color: 'var(--navy)' }}>Request Queue</h3>
         <TicketStatusManager key={refreshKey} token={token} userId={user.id} platformRole={user.platformRole} />

@@ -4,6 +4,7 @@ import { apiUrl } from './api';
 
 interface AdminPanelProps {
   token: string;
+  onCatalogChange?: () => void;
 }
 
 interface AdminUser {
@@ -30,7 +31,7 @@ interface CatalogType {
   active: boolean;
 }
 
-export default function AdminPanel({ token }: AdminPanelProps) {
+export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [email, setEmail] = useState('');
@@ -222,8 +223,10 @@ export default function AdminPanel({ token }: AdminPanelProps) {
       }
       setNewDeptCode('');
       setNewDeptName('');
-      setMessage(`Department ${data.code} created.`);
+      setNewTypeDept(data.id);
+      setMessage(`Department "${data.name}" (${data.code}) created! Now add at least one request type below so employees can select it.`);
       await load();
+      onCatalogChange?.();
     } catch {
       setMessage('Cannot reach the server');
     }
@@ -248,8 +251,9 @@ export default function AdminPanel({ token }: AdminPanelProps) {
       }
       setNewTypeCode('');
       setNewTypeName('');
-      setMessage(`Request type ${data.code} created.`);
+      setMessage(`Request type "${data.name}" (${data.code}) created.`);
       await load();
+      onCatalogChange?.();
     } catch {
       setMessage('Cannot reach the server');
     }
@@ -268,6 +272,7 @@ export default function AdminPanel({ token }: AdminPanelProps) {
         return;
       }
       await load();
+      onCatalogChange?.();
     } catch {
       setMessage('Cannot reach the server');
     }
@@ -286,6 +291,7 @@ export default function AdminPanel({ token }: AdminPanelProps) {
         return;
       }
       await load();
+      onCatalogChange?.();
     } catch {
       setMessage('Cannot reach the server');
     }
@@ -319,7 +325,7 @@ export default function AdminPanel({ token }: AdminPanelProps) {
           <SectionHeader
             n="1"
             title="Platform overview"
-            sub="Live counts across every department. “Open” means pending or in progress right now; “total” is all-time."
+            sub="Live ticket counts across every department. “Active” means currently pending or in-progress requests requiring staff attention; “total” is lifetime requests."
           />
           <div className="row" style={{ marginBottom: '0.75rem' }}>
             <span className="badge" style={{ background: '#fef3c7', color: '#92400e' }}>
@@ -343,8 +349,10 @@ export default function AdminPanel({ token }: AdminPanelProps) {
               return (
                 <div key={d.code}>
                   <div className="row" style={{ justifyContent: 'space-between', fontSize: '0.82rem' }}>
-                    <strong>{d.code}</strong>
-                    <span className="muted">{d.open} open of {d.total} total</span>
+                    <strong>{d.code} · {d.name}</strong>
+                    <span className="muted">
+                      <strong style={{ color: d.open > 0 ? 'var(--blue)' : 'inherit' }}>{d.open} active</strong> (pending/in-progress) · {d.total} total
+                    </span>
                   </div>
                   <div style={{ height: '8px', borderRadius: '999px', background: 'var(--border)', marginTop: '0.25rem' }}>
                     <div style={{ height: '100%', width: `${pct}%`, borderRadius: '999px', background: 'var(--blue)' }} />
@@ -364,22 +372,27 @@ export default function AdminPanel({ token }: AdminPanelProps) {
         sub="Departments group work; request types are the pickable categories inside one department. Deactivating retires entries while history stays intact."
       />
       <div style={{ display: 'grid', gap: '0.5rem', marginBottom: '1rem' }}>
-        {departments.map((d) => (
-          <div key={d.id} className="admin-row" style={{ opacity: d.active ? 1 : 0.55 }}>
-            <div className="row" style={{ justifyContent: 'space-between' }}>
-              <div>
-                <strong>{d.name}</strong>{' '}
-                <span className="muted" style={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{d.code}</span>
-                {!d.active && <span className="badge" style={{ background: 'var(--danger-bg)', color: 'var(--danger)', marginLeft: '0.4rem' }}>Inactive</span>}
+        {departments.map((d) => {
+          const typesForDept = allTypes.filter((t) => t.departmentId === d.id);
+          return (
+            <div key={d.id} className="admin-row" style={{ opacity: d.active ? 1 : 0.55 }}>
+              <div className="row" style={{ justifyContent: 'space-between' }}>
+                <div>
+                  <strong>{d.name}</strong>{' '}
+                  <span className="muted" style={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{d.code}</span>
+                  {!d.active && <span className="badge" style={{ background: 'var(--danger-bg)', color: 'var(--danger)', marginLeft: '0.4rem' }}>Inactive</span>}
+                </div>
+                <Button variant="ghost" small onClick={() => toggleDeptActive(d.id, !d.active)}>
+                  {d.active ? 'Deactivate' : 'Reactivate'}
+                </Button>
               </div>
-              <Button variant="ghost" small onClick={() => toggleDeptActive(d.id, !d.active)}>
-                {d.active ? 'Deactivate' : 'Reactivate'}
-              </Button>
-            </div>
-            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
-              {allTypes
-                .filter((t) => t.departmentId === d.id)
-                .map((t) => (
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
+                {typesForDept.length === 0 && (
+                  <span className="badge" style={{ background: '#fef3c7', color: '#b45309', textTransform: 'none' }}>
+                    ⚠️ No request types yet — add one below so employees can select this department
+                  </span>
+                )}
+                {typesForDept.map((t) => (
                   <span
                     key={t.id}
                     className="badge"
@@ -395,27 +408,28 @@ export default function AdminPanel({ token }: AdminPanelProps) {
                     {t.name} {!t.active && '(off)'}
                   </span>
                 ))}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <form onSubmit={createDepartment}>
         <div className="row">
-          <input className="input" style={{ flex: 1 }} value={newDeptCode} onChange={(e) => setNewDeptCode(e.target.value)} placeholder="CODE (e.g. LEGAL)" />
-          <input className="input" style={{ flex: 2 }} value={newDeptName} onChange={(e) => setNewDeptName(e.target.value)} placeholder="Department name" />
+          <input className="input" style={{ flex: 1 }} value={newDeptCode} onChange={(e) => setNewDeptCode(e.target.value)} placeholder="CODE (e.g. LEGAL)" required />
+          <input className="input" style={{ flex: 2 }} value={newDeptName} onChange={(e) => setNewDeptName(e.target.value)} placeholder="Department name" required />
           <Button type="submit" variant="ghost" small>Add Dept</Button>
         </div>
       </form>
       <form onSubmit={createRequestType} style={{ marginTop: '0.5rem' }}>
         <div className="row">
-          <select className="select" style={{ flex: 1 }} value={newTypeDept} onChange={(e) => setNewTypeDept(e.target.value)}>
-            <option value="">Dept…</option>
+          <select className="select" style={{ flex: 1 }} value={newTypeDept} onChange={(e) => setNewTypeDept(e.target.value)} required>
+            <option value="">Select Dept…</option>
             {departments.map((d) => (
-              <option key={d.id} value={d.id}>{d.code}</option>
+              <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
             ))}
           </select>
-          <input className="input" style={{ flex: 1 }} value={newTypeCode} onChange={(e) => setNewTypeCode(e.target.value)} placeholder="TYPE_CODE" />
-          <input className="input" style={{ flex: 2 }} value={newTypeName} onChange={(e) => setNewTypeName(e.target.value)} placeholder="Type name" />
+          <input className="input" style={{ flex: 1 }} value={newTypeCode} onChange={(e) => setNewTypeCode(e.target.value)} placeholder="Type Code (e.g. LETTER)" required />
+          <input className="input" style={{ flex: 2 }} value={newTypeName} onChange={(e) => setNewTypeName(e.target.value)} placeholder="Type name (e.g. Verification Letter)" required />
           <Button type="submit" variant="ghost" small>Add Type</Button>
         </div>
       </form>

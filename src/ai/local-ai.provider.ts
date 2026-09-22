@@ -91,7 +91,14 @@ export class LocalAiProvider implements AiProvider {
     for (const dept of catalog) {
       for (const type of dept.types) {
         const keys = keywordSet(
-          [type.code.replace(/_/g, ' '), type.name, type.description],
+          [
+            dept.code.replace(/_/g, ' '),
+            dept.name,
+            dept.description,
+            type.code.replace(/_/g, ' '),
+            type.name,
+            type.description,
+          ],
           TYPE_SYNONYMS[type.code] || [],
         );
         let score = 0;

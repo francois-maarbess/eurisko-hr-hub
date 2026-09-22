@@ -5,12 +5,13 @@ import { apiUrl } from './api';
 interface CreateRequestFormProps {
   token: string;
   onCreated: () => void;
+  catalogVersion?: number;
 }
 
 interface Department { id: string; code: string; name: string; }
 interface RequestType { id: string; code: string; name: string; departmentId: string; }
 
-export default function CreateRequestForm({ token, onCreated }: CreateRequestFormProps) {
+export default function CreateRequestForm({ token, onCreated, catalogVersion }: CreateRequestFormProps) {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [requestTypes, setRequestTypes] = useState<RequestType[]>([]);
   const [selectedDept, setSelectedDept] = useState('');
@@ -27,9 +28,7 @@ export default function CreateRequestForm({ token, onCreated }: CreateRequestFor
   const [duplicates, setDuplicates] = useState<{ id: string; title: string; status: string }[] | null>(null);
   const [dupConfirmedFor, setDupConfirmedFor] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Pickers load from the product catalog — one option per department and
-    // type, no matter how many tickets exist.
+  const loadCatalog = () => {
     const headers = { Authorization: `Bearer ${token}` };
     Promise.all([
       fetch(apiUrl('/catalog/departments'), { headers }).then((r) => r.json()),
@@ -40,7 +39,11 @@ export default function CreateRequestForm({ token, onCreated }: CreateRequestFor
         if (Array.isArray(types)) setRequestTypes(types);
       })
       .catch(() => {});
-  }, [token]);
+  };
+
+  useEffect(() => {
+    loadCatalog();
+  }, [token, catalogVersion]);
 
   const filteredTypes = requestTypes.filter((t) => t.departmentId === selectedDept);
 
@@ -222,11 +225,27 @@ export default function CreateRequestForm({ token, onCreated }: CreateRequestFor
             className="select"
             value={selectedType}
             onChange={(e) => setSelectedType(e.target.value)}
+            disabled={!selectedDept || filteredTypes.length === 0}
             required
           >
-            <option value="">Select Request Type</option>
-            {filteredTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            <option value="">
+              {!selectedDept
+                ? 'Select a department first'
+                : filteredTypes.length === 0
+                ? 'No request types configured yet for this department'
+                : 'Select Request Type'}
+            </option>
+            {filteredTypes.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
           </select>
+          {selectedDept && filteredTypes.length === 0 && (
+            <p className="muted" style={{ fontSize: '0.8rem', color: '#b45309', background: '#fef3c7', padding: '0.4rem 0.6rem', borderRadius: '6px', marginTop: '0.35rem' }}>
+              ⚠️ This department has no active request types yet. An administrator must add at least one request type in the Administration panel before requests can be submitted.
+            </p>
+          )}
         </Field>
 
         <Field label="Title *">
