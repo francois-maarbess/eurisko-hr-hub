@@ -55,13 +55,14 @@ cd frontend && npm run dev
 2. Log in with email + password (demo password: `Password123!`):
    - `admin@acme.com` — System Admin (IT Manager; full access to Admin Panel and department queues)
    - `alice@acme.com` — Employee (submits requests, rates completed requests, cancels pending requests)
+   - `bob@acme.com` — IT Agent (claims and resolves tickets in the IT queue)
    *(Admins can create additional agents and employees anytime directly in the UI via the Administration Panel)*
 3. Create a request (or draft one with ✨ AI — **no API key needed**), manage it as admin/agent, resolve it
 
 ## Running Tests
 
 ```bash
-npm test      # 62 tests (all deterministic, SQLite)
+npm test      # 74 tests (all deterministic, SQLite)
 npm run eval:ai  # 8 AI eval cases (offline, no key, no DB)
 ```
 
