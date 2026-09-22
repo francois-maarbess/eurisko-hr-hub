@@ -7,6 +7,9 @@ export type PrismaService = PrismaClient;
 export const PrismaServiceProvider: Provider = {
   provide: PRISMA_CLIENT_TOKEN,
   useFactory: () => {
+    if (!process.env['DATABASE_URL']) {
+      process.env['DATABASE_URL'] = 'file:./dev.db';
+    }
     return new PrismaClient();
   },
 };

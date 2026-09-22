@@ -16,7 +16,7 @@
     "test": "jest --forceExit --detectOpenHandles",
     "test:cov": "jest --coverage --forceExit",
     "eval:ai": "npx tsx scripts/eval-ai.ts",
-    "db:reset": "rm -f prisma/dev.db && npx prisma migrate dev && npx tsx prisma/seed.ts"
+    "db:reset": "npx tsx scripts/clean-db.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",

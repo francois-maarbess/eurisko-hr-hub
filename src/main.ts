@@ -1,4 +1,13 @@
 import 'dotenv/config';
+
+// Safe zero-config fallbacks: allows instant running on any clone without manual .env copying
+if (!process.env['DATABASE_URL']) {
+  process.env['DATABASE_URL'] = 'file:./dev.db';
+}
+if (!process.env['JWT_SECRET']) {
+  process.env['JWT_SECRET'] = 'week3-dev-secret';
+}
+
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
