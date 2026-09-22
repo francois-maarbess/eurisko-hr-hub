@@ -52,12 +52,11 @@ cd frontend && npm run dev
 ### 4. Use the app
 
 1. Open `http://localhost:5173`
-2. Log in with email + password (demo password for all seeded accounts: `Password123!`):
-   - `alice@acme.com` — Employee (creates requests)
-   - `bob@acme.com` — IT + HR Agent (claims & resolves)
-   - `carol@acme.com` — Finance Agent
-   - `admin@acme.com` — System Admin (manages users in the Administration panel)
-3. Create a request (or draft one with ✨ AI), claim it as an agent, resolve it
+2. Log in with email + password (demo password: `Password123!`):
+   - `admin@acme.com` — System Admin (IT Manager; full access to Admin Panel and department queues)
+   - `alice@acme.com` — Employee (submits requests, rates completed requests, cancels pending requests)
+   *(Admins can create additional agents and employees anytime directly in the UI via the Administration Panel)*
+3. Create a request (or draft one with ✨ AI — **no API key needed**), manage it as admin/agent, resolve it
 
 ## Running Tests
 
