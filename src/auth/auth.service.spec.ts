@@ -98,4 +98,36 @@ describe('AuthService (password accounts)', () => {
     const svc = new AuthService(stubPrisma(null), stubJwt);
     await expect(svc.setActive('nope', false)).rejects.toThrow(BadRequestException);
   });
+
+  it('changePassword verifies the current one and rotates the hash', async () => {
+    const hash = await bcrypt.hash('old-password-123', 4);
+    let stored = baseUser({ passwordHash: hash });
+    const prisma = {
+      ...stubPrisma(stored).user,
+      user: {
+        ...stubPrisma(stored).user,
+        update: async (args: any) => {
+          stored = { ...stored, ...args.data };
+          return stored;
+        },
+      },
+    } as any;
+    const svc = new AuthService(prisma, stubJwt);
+    const res = await svc.changePassword('u-1', 'old-password-123', 'brand-new-password-1');
+    expect(res).toEqual({ changed: true });
+    expect(await bcrypt.compare('brand-new-password-1', stored.passwordHash)).toBe(true);
+    expect(await bcrypt.compare('old-password-123', stored.passwordHash)).toBe(false);
+  });
+
+  it('changePassword rejects wrong current, short or identical passwords', async () => {
+    const hash = await bcrypt.hash('old-password-123', 4);
+    const svc = new AuthService(stubPrisma(baseUser({ passwordHash: hash })), stubJwt);
+    await expect(svc.changePassword('u-1', 'nope-nope-nope', 'brand-new-password-1')).rejects.toThrow(
+      UnauthorizedException,
+    );
+    await expect(svc.changePassword('u-1', 'old-password-123', 'short')).rejects.toThrow(BadRequestException);
+    await expect(svc.changePassword('u-1', 'old-password-123', 'old-password-123')).rejects.toThrow(
+      BadRequestException,
+    );
+  });
 });

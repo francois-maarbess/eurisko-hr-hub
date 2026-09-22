@@ -25,6 +25,7 @@ export default function CreateRequestForm({ token, onCreated }: CreateRequestFor
   const [aiNote, setAiNote] = useState('');
   const [dupLoading, setDupLoading] = useState(false);
   const [duplicates, setDuplicates] = useState<{ id: string; title: string; status: string }[] | null>(null);
+  const [dupConfirmedFor, setDupConfirmedFor] = useState<string | null>(null);
 
   useEffect(() => {
     // Pickers load from the product catalog — one option per department and
@@ -94,13 +95,8 @@ export default function CreateRequestForm({ token, onCreated }: CreateRequestFor
     }
     setDupLoading(true);
     try {
-      const res = await fetch(apiUrl('/requests/check-duplicates'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ departmentId: selectedDept, title, description }),
-      });
-      const data = await res.json();
-      setDuplicates(res.ok && Array.isArray(data) ? data : []);
+      const dups = await checkDuplicates();
+      setDuplicates(dups);
     } catch {
       setDuplicates([]);
     } finally {
@@ -108,8 +104,46 @@ export default function CreateRequestForm({ token, onCreated }: CreateRequestFor
     }
   };
 
+  const checkDuplicates = async (): Promise<{ id: string; title: string; status: string }[]> => {
+    if (!selectedDept || title.trim().length < 4) return [];
+    const res = await fetch(apiUrl('/requests/check-duplicates'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ departmentId: selectedDept, title, description }),
+    });
+    const data = await res.json();
+    return res.ok && Array.isArray(data) ? data : [];
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Advisory duplicate guard: warn on twins, never block. Skipped once the
+    // user has seen the warning for this exact title+department.
+    const dupKey = `${selectedDept}|${title.trim().toLowerCase()}`;
+    if (dupConfirmedFor !== dupKey) {
+      setLoading(true);
+      try {
+        const dups = await checkDuplicates();
+        setDuplicates(dups);
+        if (dups.length > 0) {
+          setDupConfirmedFor(`pending:${dupKey}`);
+          return;
+        }
+      } catch {
+        // Duplicate service down must never block creation.
+      } finally {
+        setLoading(false);
+      }
+    }
+    await doCreate();
+  };
+
+  const submitAnyway = async () => {
+    setDupConfirmedFor(`${selectedDept}|${title.trim().toLowerCase()}`);
+    await doCreate();
+  };
+
+  const doCreate = async () => {
     setLoading(true);
     setError('');
 
@@ -136,6 +170,8 @@ export default function CreateRequestForm({ token, onCreated }: CreateRequestFor
       setDescription('');
       setSelectedDept('');
       setSelectedType('');
+      setDuplicates(null);
+      setDupConfirmedFor(null);
       onCreated();
     } catch {
       setError('Cannot reach the server');
@@ -227,11 +263,16 @@ export default function CreateRequestForm({ token, onCreated }: CreateRequestFor
             ) : (
               <div className="note-info" style={{ background: 'var(--warning-bg)', border: 'none', marginTop: '0.5rem' }}>
                 <strong>{duplicates.length} similar open request{duplicates.length > 1 ? 's' : ''}:</strong>
-                <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.2rem' }}>
+                <ul style={{ margin: '0.4rem 0 0.5rem', paddingLeft: '1.2rem' }}>
                   {duplicates.map((d) => (
                     <li key={d.id}>{d.title} <span className="muted">({d.status})</span></li>
                   ))}
                 </ul>
+                {dupConfirmedFor?.startsWith('pending:') && (
+                  <Button variant="ghost" small onClick={submitAnyway} disabled={loading} type="button">
+                    {loading ? 'Submitting…' : 'Submit anyway'}
+                  </Button>
+                )}
               </div>
             )
           )}

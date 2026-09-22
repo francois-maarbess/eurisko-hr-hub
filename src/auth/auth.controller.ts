@@ -65,6 +65,16 @@ class SetActiveDto {
   active!: boolean;
 }
 
+class ChangePasswordDto {
+  @IsString()
+  @IsNotEmpty()
+  currentPassword!: string;
+
+  @IsString()
+  @MinLength(8)
+  newPassword!: string;
+}
+
 class SetRoleDto {
   @IsString()
   @IsNotEmpty()
@@ -103,6 +113,12 @@ export class AuthController {
   @Get('me')
   getProfile(@Request() req: any) {
     return req.user;
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('password')
+  changePassword(@Body() dto: ChangePasswordDto, @Request() req: any) {
+    return this.authService.changePassword(req.user.id, dto.currentPassword, dto.newPassword);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

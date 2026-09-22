@@ -38,9 +38,24 @@ export class AuditService {
   }
 
   async forRequest(requestId: string) {
-    return this.prisma.auditLog.findMany({
+    const rows = await this.prisma.auditLog.findMany({
       where: { requestId },
       orderBy: { createdAt: 'asc' },
     });
+    const actorIds = [...new Set(rows.map((r) => r.actorId))];
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: actorIds } },
+      select: { id: true, displayName: true, email: true },
+    });
+    const names = new Map(users.map((u) => [u.id, u.displayName || u.email]));
+    return rows.map((r) => ({
+      id: r.id,
+      action: r.action,
+      oldValue: r.oldValue,
+      newValue: r.newValue,
+      metadata: r.metadata,
+      createdAt: r.createdAt,
+      actorName: names.get(r.actorId) || 'System',
+    }));
   }
 }

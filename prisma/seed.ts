@@ -41,54 +41,24 @@ async function main() {
     create: { code: 'PEO', name: 'People Operations', description: 'Training, performance, wellbeing and feedback' },
   });
 
-  // Users (all password-protected; see README demo accounts)
-  const employee = await prisma.user.upsert({
+  // Users: Alice (Employee) and Admin (System Admin)
+  await prisma.user.upsert({
     where: { email: 'alice@acme.com' },
-    update: { passwordHash },
-    create: { email: 'alice@acme.com', displayName: 'Alice Employee', platformRole: 'EMPLOYEE', passwordHash },
-  });
-
-  const agent = await prisma.user.upsert({
-    where: { email: 'bob@acme.com' },
-    update: { passwordHash },
-    create: { email: 'bob@acme.com', displayName: 'Bob Agent', platformRole: 'EMPLOYEE', passwordHash },
+    update: { displayName: 'Alice Employee', platformRole: 'EMPLOYEE', passwordHash, active: true },
+    create: { email: 'alice@acme.com', displayName: 'Alice Employee', platformRole: 'EMPLOYEE', passwordHash, active: true },
   });
 
   const admin = await prisma.user.upsert({
     where: { email: 'admin@acme.com' },
-    update: { passwordHash },
-    create: { email: 'admin@acme.com', displayName: 'Admin User', platformRole: 'SYSTEM_ADMIN', passwordHash },
+    update: { displayName: 'Admin User', platformRole: 'SYSTEM_ADMIN', passwordHash, active: true },
+    create: { email: 'admin@acme.com', displayName: 'Admin User', platformRole: 'SYSTEM_ADMIN', passwordHash, active: true },
   });
 
-  const financeAgent = await prisma.user.upsert({
-    where: { email: 'carol@acme.com' },
-    update: { passwordHash },
-    create: { email: 'carol@acme.com', displayName: 'Carol Agent', platformRole: 'EMPLOYEE', passwordHash },
-  });
-
-  // Department memberships (one person may serve several departments)
-  await prisma.departmentMember.upsert({
-    where: { userId_departmentId: { userId: agent.id, departmentId: it.id } },
-    update: {},
-    create: { userId: agent.id, departmentId: it.id, departmentRole: 'AGENT' },
-  });
-
-  await prisma.departmentMember.upsert({
-    where: { userId_departmentId: { userId: agent.id, departmentId: hr.id } },
-    update: {},
-    create: { userId: agent.id, departmentId: hr.id, departmentRole: 'AGENT' },
-  });
-
+  // Ensure admin has manager membership in IT
   await prisma.departmentMember.upsert({
     where: { userId_departmentId: { userId: admin.id, departmentId: it.id } },
-    update: {},
-    create: { userId: admin.id, departmentId: it.id, departmentRole: 'MANAGER' },
-  });
-
-  await prisma.departmentMember.upsert({
-    where: { userId_departmentId: { userId: financeAgent.id, departmentId: finance.id } },
-    update: {},
-    create: { userId: financeAgent.id, departmentId: finance.id, departmentRole: 'AGENT' },
+    update: { departmentRole: 'MANAGER', active: true },
+    create: { userId: admin.id, departmentId: it.id, departmentRole: 'MANAGER', active: true },
   });
 
   // Request types
@@ -230,260 +200,7 @@ async function main() {
     create: { departmentId: peo.id, code: 'FEEDBACK', name: 'Workplace Feedback', description: 'Suggestions about the workplace experience' },
   });
 
-  // Requests across every state for a lived-in demo queue
-  await prisma.request.upsert({
-    where: { id: 'req-1' },
-    update: {},
-    create: {
-      id: 'req-1',
-      employeeId: employee.id,
-      departmentId: it.id,
-      requestTypeId: laptopType.id,
-      title: 'Laptop Request',
-      description: 'Employee needs a replacement work laptop for onboarding.',
-      priority: 'URGENT',
-      status: 'PENDING',
-    },
-  });
-
-  await prisma.request.upsert({
-    where: { id: 'req-2' },
-    update: {},
-    create: {
-      id: 'req-2',
-      employeeId: employee.id,
-      departmentId: it.id,
-      requestTypeId: vpnType.id,
-      title: 'VPN Access Request',
-      description: 'Employee needs temporary access to the finance VPN for travel.',
-      priority: 'STANDARD',
-      status: 'IN_PROGRESS',
-      claimedById: agent.id,
-    },
-  });
-
-  await prisma.request.upsert({
-    where: { id: 'req-3' },
-    update: {},
-    create: {
-      id: 'req-3',
-      employeeId: employee.id,
-      departmentId: hr.id,
-      requestTypeId: empLetterType.id,
-      title: 'Employment Letter',
-      description: 'Employee requests an employment verification letter for a visa application.',
-      priority: 'LOW',
-      status: 'COMPLETED',
-      resolutionNote: 'Letter sent to employee email.',
-    },
-  });
-
-  await prisma.request.upsert({
-    where: { id: 'req-4' },
-    update: {},
-    create: {
-      id: 'req-4',
-      employeeId: employee.id,
-      departmentId: it.id,
-      requestTypeId: softwareType.id,
-      title: 'Design Software License',
-      description: 'Employee needs a Figma professional license for the new project.',
-      priority: 'STANDARD',
-      status: 'PENDING',
-    },
-  });
-
-  await prisma.request.upsert({
-    where: { id: 'req-5' },
-    update: {},
-    create: {
-      id: 'req-5',
-      employeeId: employee.id,
-      departmentId: finance.id,
-      requestTypeId: expenseType.id,
-      title: 'Travel Expense Claim',
-      description: 'Reimbursement for client-site travel: flights and hotel.',
-      priority: 'STANDARD',
-      status: 'PENDING',
-    },
-  });
-
-  await prisma.request.upsert({
-    where: { id: 'req-6' },
-    update: {},
-    create: {
-      id: 'req-6',
-      employeeId: employee.id,
-      departmentId: hr.id,
-      requestTypeId: onboardingType.id,
-      title: 'New Joiner Onboarding',
-      description: 'Onboarding checklist for a new backend developer starting Monday.',
-      priority: 'URGENT',
-      status: 'IN_PROGRESS',
-      claimedById: agent.id,
-    },
-  });
-
-  await prisma.request.upsert({
-    where: { id: 'req-7' },
-    update: {},
-    create: {
-      id: 'req-7',
-      employeeId: employee.id,
-      departmentId: finance.id,
-      requestTypeId: invoiceType.id,
-      title: 'Vendor Invoice Dispute',
-      description: 'Invoice #INV-2041 charged twice for the same license seat.',
-      priority: 'STANDARD',
-      status: 'COMPLETED',
-      claimedById: financeAgent.id,
-      resolutionNote: 'Vendor credited the duplicate charge.',
-    },
-  });
-
-  await prisma.request.upsert({
-    where: { id: 'req-8' },
-    update: {},
-    create: {
-      id: 'req-8',
-      employeeId: employee.id,
-      departmentId: fac.id,
-      requestTypeId: maintenanceType.id,
-      title: 'AC Not Cooling',
-      description: 'The air conditioning in meeting room B stopped cooling yesterday.',
-      priority: 'URGENT',
-      status: 'PENDING',
-    },
-  });
-
-  await prisma.request.upsert({
-    where: { id: 'req-9' },
-    update: {},
-    create: {
-      id: 'req-9',
-      employeeId: employee.id,
-      departmentId: hr.id,
-      requestTypeId: leaveType.id,
-      title: 'Summer Vacation',
-      description: 'Requesting five days off in August for a family trip.',
-      priority: 'LOW',
-      status: 'PENDING',
-    },
-  });
-
-  await prisma.request.upsert({
-    where: { id: 'req-10' },
-    update: {},
-    create: {
-      id: 'req-10',
-      employeeId: employee.id,
-      departmentId: finance.id,
-      requestTypeId: budgetType.id,
-      title: 'Q4 Team Budget',
-      description: 'Approval needed for the Q4 contractor budget of $12,000.',
-      priority: 'STANDARD',
-      status: 'IN_PROGRESS',
-      claimedById: financeAgent.id,
-    },
-  });
-
-  await prisma.request.upsert({
-    where: { id: 'req-11' },
-    update: {},
-    create: {
-      id: 'req-11',
-      employeeId: employee.id,
-      departmentId: it.id,
-      requestTypeId: printerType.id,
-      title: 'Printer Toner',
-      description: 'The second-floor printer is out of black toner.',
-      priority: 'LOW',
-      status: 'COMPLETED',
-      claimedById: agent.id,
-      resolutionNote: 'Toner cartridge replaced.',
-    },
-  });
-
-  await prisma.request.upsert({
-    where: { id: 'req-12' },
-    update: {},
-    create: {
-      id: 'req-12',
-      employeeId: employee.id,
-      departmentId: fac.id,
-      requestTypeId: suppliesType.id,
-      title: 'Standing Desk',
-      description: 'Requesting a standing desk converter for back pain.',
-      priority: 'STANDARD',
-      status: 'REJECTED',
-      rejectionReason: 'Furniture budget frozen until next quarter.',
-    },
-  });
-
-  await prisma.request.upsert({
-    where: { id: 'req-13' },
-    update: {},
-    create: {
-      id: 'req-13',
-      employeeId: employee.id,
-      departmentId: peo.id,
-      requestTypeId: trainingType.id,
-      title: 'Advanced Excel Training',
-      description: 'Requesting a seat in next month’s advanced Excel workshop.',
-      priority: 'LOW',
-      status: 'PENDING',
-    },
-  });
-
-  await prisma.request.upsert({
-    where: { id: 'req-14' },
-    update: {},
-    create: {
-      id: 'req-14',
-      employeeId: employee.id,
-      departmentId: it.id,
-      requestTypeId: emailType.id,
-      title: 'Shared Mailbox Access',
-      description: 'Need access to the support shared mailbox starting Monday.',
-      priority: 'STANDARD',
-      status: 'IN_PROGRESS',
-      claimedById: agent.id,
-    },
-  });
-
-  await prisma.request.upsert({
-    where: { id: 'req-15' },
-    update: {},
-    create: {
-      id: 'req-15',
-      employeeId: employee.id,
-      departmentId: hr.id,
-      requestTypeId: payrollType.id,
-      title: 'Missing Overtime Line',
-      description: 'October payslip is missing the overtime line for week 42.',
-      priority: 'STANDARD',
-      status: 'COMPLETED',
-      claimedById: agent.id,
-      resolutionNote: 'Payroll rerun issued, corrected slip sent.',
-    },
-  });
-
-  await prisma.request.upsert({
-    where: { id: 'req-16' },
-    update: {},
-    create: {
-      id: 'req-16',
-      employeeId: employee.id,
-      departmentId: fac.id,
-      requestTypeId: badgeType.id,
-      title: 'Replacement Badge',
-      description: 'Lost access badge, need a replacement before Monday.',
-      priority: 'URGENT',
-      status: 'PENDING',
-    },
-  });
-
-  console.log('Seed data created successfully');
+  console.log('Seed completed: departments, request types, Alice (employee), and Admin (system admin) initialized.');
 }
 
 main()

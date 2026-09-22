@@ -22,6 +22,7 @@ model User {
   claimedRequests       Request[]         @relation("RequestClaimant")
   documents             Document[]
   notifications         Notification[]
+  staffNotes            StaffNote[]
 }
 
 model Department {
@@ -82,6 +83,8 @@ model Request {
   resolutionNote String?
   rejectionReason String?
   completedAt    DateTime?
+  rating         Int?
+  feedbackNote   String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -91,9 +94,23 @@ model Request {
   requestType RequestType  @relation(fields: [requestTypeId], references: [id])
   documents   Document[]
   auditLogs   AuditLog[]
+  staffNotes  StaffNote[]
 
   @@index([employeeId, createdAt(sort: Desc)])
   @@index([departmentId, status, priority, createdAt])
+}
+
+model StaffNote {
+  id        String   @id @default(cuid())
+  requestId String
+  authorId  String
+  content   String
+  createdAt DateTime @default(now())
+
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  author  User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([requestId, createdAt])
 }
 
 model Document {

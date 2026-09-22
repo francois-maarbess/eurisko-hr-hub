@@ -64,7 +64,7 @@ local on any failure). Nothing else changes.
 
 ## Eval coverage (PROVE)
 
-`npm run eval:ai` runs 6 cases with no network, no database, no key:
+`npm run eval:ai` runs 8 cases with no network, no database, no key:
 
 1. **clear** — urgent laptop request → IT/LAPTOP/URGENT, high confidence
 2. **thin** — single word "vpn" → IT/VPN/STANDARD, description padded

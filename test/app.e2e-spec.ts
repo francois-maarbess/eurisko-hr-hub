@@ -816,4 +816,274 @@ describe('Service Request Flow (E2E)', () => {
       .send({ email, password: 'e2e-password-123' });
     expect(loginOn.status).toBe(201);
   });
+
+  it('users rotate their own password; old password dies', async () => {
+    const email = `pwrot-${Date.now()}@acme.com`;
+    await request(app.getHttpServer())
+      .post('/auth/users')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ email, password: 'e2e-password-123' });
+
+    const login = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email, password: 'e2e-password-123' });
+    expect(login.status).toBe(201);
+    const me = login.body.accessToken;
+
+    const wrong = await request(app.getHttpServer())
+      .patch('/auth/password')
+      .set('Authorization', `Bearer ${me}`)
+      .send({ currentPassword: 'nope-nope-nope', newPassword: 'brand-new-pass-456' });
+    expect(wrong.status).toBe(401);
+
+    const changed = await request(app.getHttpServer())
+      .patch('/auth/password')
+      .set('Authorization', `Bearer ${me}`)
+      .send({ currentPassword: 'e2e-password-123', newPassword: 'brand-new-pass-456' });
+    expect(changed.status).toBe(200);
+
+    const loginNew = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email, password: 'brand-new-pass-456' });
+    expect(loginNew.status).toBe(201);
+
+    const loginOld = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email, password: 'e2e-password-123' });
+    expect(loginOld.status).toBe(401);
+  });
+
+  it('audit trail records the lifecycle; strangers see nothing (acceptance 12)', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+    const created = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        departmentId: dept!.id,
+        requestTypeId: rt!.id,
+        title: 'Audit Trail Probe',
+        description: 'Every lifecycle step of this ticket must leave an audit row',
+        priority: 'STANDARD',
+      });
+    const id = created.body.id;
+    await request(app.getHttpServer())
+      .patch(`/requests/${id}/claim`)
+      .set('Authorization', `Bearer ${agentToken}`);
+
+    const trail = await request(app.getHttpServer())
+      .get(`/requests/${id}/audit`)
+      .set('Authorization', `Bearer ${employeeToken}`);
+    expect(trail.status).toBe(200);
+    const actions = trail.body.map((a: any) => a.action);
+    expect(actions).toContain('REQUEST_CREATED');
+    expect(actions).toContain('REQUEST_CLAIMED');
+    expect(trail.body[0].actorName).toBeTruthy();
+
+    const stranger = await request(app.getHttpServer())
+      .get(`/requests/${id}/audit`)
+      .set('Authorization', `Bearer ${financeToken}`);
+    expect(stranger.status).toBe(403);
+  });
+
+  it('manager re-routes a ticket; employees are forbidden', async () => {
+    const it = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const laptop = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+    const hr = await prisma.department.findFirst({ where: { code: 'HR' } });
+    const letter = await prisma.requestType.findFirst({ where: { code: 'EMP_LETTER' } });
+    const stamp = Date.now();
+    const created = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        departmentId: it!.id,
+        requestTypeId: laptop!.id,
+        title: `Reroute Probe ${stamp}`,
+        description: 'A ticket filed in the wrong department for reroute testing',
+        priority: 'STANDARD',
+      });
+    const id = created.body.id;
+
+    // Plain employee (even the owner) cannot re-route.
+    const denied = await request(app.getHttpServer())
+      .patch(`/requests/${id}/reroute`)
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ newDepartmentId: hr!.id, newRequestTypeId: letter!.id, reason: 'wrong dept' });
+    expect(denied.status).toBe(403);
+
+    // Admin (IT manager in seed) re-routes IT -> HR.
+    const moved = await request(app.getHttpServer())
+      .patch(`/requests/${id}/reroute`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ newDepartmentId: hr!.id, newRequestTypeId: letter!.id, reason: 'belongs to HR' });
+    expect(moved.status).toBe(200);
+    expect(moved.body.departmentId).toBe(hr!.id);
+    expect(moved.body.requestTypeId).toBe(letter!.id);
+    expect(moved.body.status).toBe('PENDING');
+    expect(moved.body.claimedById).toBeNull();
+
+    // Moved ticket shows in the new department queue with an audit row.
+    const fetched = await request(app.getHttpServer())
+      .get(`/requests/${id}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(fetched.body.department.code).toBe('HR');
+    const audits = await prisma.auditLog.findMany({ where: { requestId: id, action: 'REQUEST_REROUTED' } });
+    expect(audits.length).toBeGreaterThanOrEqual(1);
+    expect(audits[0].metadata).toContain('belongs to HR');
+
+    // Terminal tickets cannot be re-routed.
+    const terminal = await request(app.getHttpServer())
+      .patch('/requests/req-3/reroute')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ newDepartmentId: it!.id, newRequestTypeId: laptop!.id, reason: 'too late' });
+    expect(terminal.status).toBe(400);
+  });
+
+  it('activity timeline shows labeled history to insiders, 403 to strangers', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+    const created = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        departmentId: dept!.id,
+        requestTypeId: rt!.id,
+        title: `Activity Probe ${Date.now()}`,
+        description: 'Timeline must narrate creation and claim',
+        priority: 'STANDARD',
+      });
+    const id = created.body.id;
+    await request(app.getHttpServer())
+      .patch(`/requests/${id}/claim`)
+      .set('Authorization', `Bearer ${agentToken}`);
+
+    const res = await request(app.getHttpServer())
+      .get(`/requests/${id}/activity`)
+      .set('Authorization', `Bearer ${employeeToken}`);
+    expect(res.status).toBe(200);
+    const labels = res.body.map((a: any) => a.label);
+    expect(labels).toContain('Ticket created');
+    expect(labels).toContain('Claimed');
+    expect(res.body[0].actor).toBeTruthy();
+    expect(res.body[0].timestamp).toBeTruthy();
+
+    const stranger = await request(app.getHttpServer())
+      .get(`/requests/${id}/activity`)
+      .set('Authorization', `Bearer ${financeToken}`);
+    expect(stranger.status).toBe(403);
+  });
+
+  it('staff notes are private: owner blocked, agent allowed', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+    const created = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        departmentId: dept!.id,
+        requestTypeId: rt!.id,
+        title: `Notes Probe ${Date.now()}`,
+        description: 'Internal notes must stay invisible to the requester',
+        priority: 'STANDARD',
+      });
+    const id = created.body.id;
+
+    const ownerPost = await request(app.getHttpServer())
+      .post(`/requests/${id}/notes`)
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ content: 'sneaky owner note' });
+    expect(ownerPost.status).toBe(403);
+
+    const agentPost = await request(app.getHttpServer())
+      .post(`/requests/${id}/notes`)
+      .set('Authorization', `Bearer ${agentToken}`)
+      .send({ content: 'Checked logs, vendor escalation opened.' });
+    expect(agentPost.status).toBe(201);
+
+    const agentList = await request(app.getHttpServer())
+      .get(`/requests/${id}/notes`)
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(agentList.status).toBe(200);
+    expect(agentList.body.some((n: any) => n.content.includes('vendor escalation'))).toBe(true);
+
+    const ownerList = await request(app.getHttpServer())
+      .get(`/requests/${id}/notes`)
+      .set('Authorization', `Bearer ${employeeToken}`);
+    expect(ownerList.status).toBe(403);
+
+    const empty = await request(app.getHttpServer())
+      .post(`/requests/${id}/notes`)
+      .set('Authorization', `Bearer ${agentToken}`)
+      .send({ content: '   ' });
+    expect(empty.status).toBe(400);
+  });
+
+  it('owner rates a completed ticket once; others and bad values rejected', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+    const created = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        departmentId: dept!.id,
+        requestTypeId: rt!.id,
+        title: `Rating Probe ${Date.now()}`,
+        description: 'Will be completed then rated by its owner',
+        priority: 'STANDARD',
+      });
+    const id = created.body.id;
+    await request(app.getHttpServer())
+      .patch(`/requests/${id}/claim`)
+      .set('Authorization', `Bearer ${agentToken}`);
+    await request(app.getHttpServer())
+      .patch(`/requests/${id}/status`)
+      .set('Authorization', `Bearer ${agentToken}`)
+      .send({ status: 'COMPLETED', resolutionNote: 'Done.' });
+
+    const badValue = await request(app.getHttpServer())
+      .post(`/requests/${id}/feedback`)
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ rating: 6 });
+    expect(badValue.status).toBe(400);
+
+    const stranger = await request(app.getHttpServer())
+      .post(`/requests/${id}/feedback`)
+      .set('Authorization', `Bearer ${agentToken}`)
+      .send({ rating: 5 });
+    expect(stranger.status).toBe(403);
+
+    const pending = await request(app.getHttpServer())
+      .post('/requests/req-1/feedback')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ rating: 5 });
+    expect([400, 403, 404]).toContain(pending.status);
+
+    const ok = await request(app.getHttpServer())
+      .post(`/requests/${id}/feedback`)
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ rating: 5, feedbackNote: 'Fast and clear, thanks!' });
+    expect(ok.status).toBe(201);
+    expect(ok.body.rating).toBe(5);
+
+    const again = await request(app.getHttpServer())
+      .post(`/requests/${id}/feedback`)
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ rating: 4 });
+    expect(again.status).toBe(409);
+  });
+
+  it('admin CSV export downloads text/csv; employees forbidden', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/requests/export')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/text\/csv/);
+    expect(res.text).toContain('"ID","Title","Department"');
+    expect(res.text).toContain('Laptop Request');
+
+    const denied = await request(app.getHttpServer())
+      .get('/requests/export')
+      .set('Authorization', `Bearer ${employeeToken}`);
+    expect(denied.status).toBe(403);
+  });
 });

@@ -88,12 +88,10 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         )}
 
         <div className="note-info" style={{ marginTop: '1.25rem' }}>
-          <strong>Demo accounts</strong> (password for all: <code>Password123!</code>)
+          <strong>Demo accounts</strong> (password for both: <code>Password123!</code>)
           <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.2rem' }}>
-            <li><code>alice@acme.com</code> — Employee</li>
-            <li><code>bob@acme.com</code> — IT + HR Agent</li>
-            <li><code>carol@acme.com</code> — Finance Agent</li>
             <li><code>admin@acme.com</code> — System Admin</li>
+            <li><code>alice@acme.com</code> — Employee</li>
           </ul>
         </div>
       </div>

@@ -108,6 +108,12 @@ export class NotificationsService implements OnModuleInit {
         case 'document.uploaded':
           toEmployee('A document was added to your request', `“${short}” has a new attachment.`);
           break;
+        case 'request.rerouted':
+          toEmployee('Your request was moved', `“${short}” is now with ${req.department.name}.`);
+          for (const id of staffIds) {
+            rows.push({ userId: id, type: input.eventType, title: `Request moved into ${req.department.name}`, body: short });
+          }
+          break;
         default:
           return;
       }

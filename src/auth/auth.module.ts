@@ -8,9 +8,14 @@ import { AuthService } from './auth.service';
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'week3-dev-secret',
-      signOptions: { expiresIn: '24h' },
+    // registerAsync (not register): the factory runs at instantiation,
+    // so the secret is read AFTER env is loaded — never baked in from
+    // whatever happened to exist at import time.
+    JwtModule.registerAsync({
+      useFactory: () => ({
+        secret: process.env.JWT_SECRET || 'week3-dev-secret',
+        signOptions: { expiresIn: '24h' as const },
+      }),
     }),
   ],
   controllers: [AuthController],

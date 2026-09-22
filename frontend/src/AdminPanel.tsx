@@ -42,7 +42,37 @@ export default function AdminPanel({ token }: AdminPanelProps) {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [memberDrafts, setMemberDrafts] = useState<Record<string, { deptId: string; role: string }>>({});
-  const [report, setReport] = useState<{ byStatus: Record<string, number>; departments: { code: string; name: string; open: number; total: number }[] } | null>(null);
+  const [report, setReport] = useState<{
+    byStatus: Record<string, number>;
+    departments: { code: string; name: string; open: number; total: number }[];
+    csatAverage: number | null;
+    csatCount: number;
+  } | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      const res = await fetch(apiUrl('/requests/export'), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        setMessage('Export failed.');
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'requests-export.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setMessage('Export failed.');
+    } finally {
+      setExporting(false);
+    }
+  };
   const [newDeptCode, setNewDeptCode] = useState('');
   const [newDeptName, setNewDeptName] = useState('');
   const [newTypeDept, setNewTypeDept] = useState('');
@@ -291,6 +321,14 @@ export default function AdminPanel({ token }: AdminPanelProps) {
             title="Platform overview"
             sub="Live counts across every department. “Open” means pending or in progress right now; “total” is all-time."
           />
+          <div className="row" style={{ marginBottom: '0.75rem' }}>
+            <span className="badge" style={{ background: '#fef3c7', color: '#92400e' }}>
+              ★ CSAT {report.csatAverage != null ? report.csatAverage.toFixed(2) : '—'} ({report.csatCount} ratings)
+            </span>
+            <Button variant="ghost" small onClick={exportCsv} disabled={exporting}>
+              {exporting ? 'Exporting…' : '📥 Export to CSV'}
+            </Button>
+          </div>
           <div style={{ marginBottom: '1rem' }}>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
             {Object.entries(report.byStatus).map(([status, count]) => (

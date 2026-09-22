@@ -121,6 +121,14 @@ normal validated flow — the AI never creates anything.
 | `POST` | `/requests/ai-draft` | Yes | Draft a ticket from free text (advisory, creates nothing) |
 | `PATCH` | `/requests/:id/claim` | Yes | Claim a pending request (dept members only) |
 | `PATCH` | `/requests/:id/status` | Yes | Update request status |
+| `PATCH` | `/requests/:id/reroute` | Manager | Re-route ticket to another department |
+| `GET` | `/requests/:id/activity` | Staff/owner | Chronological labeled activity timeline |
+| `GET` | `/requests/:id/notes` | Staff | View private internal staff notes |
+| `POST` | `/requests/:id/notes` | Staff | Post private internal staff note |
+| `POST` | `/requests/:id/feedback` | Owner | Rate resolution (1-5 stars) and optional feedback |
+| `GET` | `/requests/export` | Admin | Export all requests to CSV |
+| `PATCH` | `/auth/password` | Yes | Change user password |
+| `GET` | `/health` | No | API and database health check |
 
 ## Accounts & Authorization
 

@@ -109,6 +109,31 @@ export class AuthService {
     return users.map((u) => this.safeUser(u));
   }
 
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.active) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    if (!user.passwordHash) {
+      throw new BadRequestException('Account has no password set. Ask an admin.');
+    }
+    const ok = await bcrypt.compare(currentPassword || '', user.passwordHash);
+    if (!ok) {
+      throw new UnauthorizedException('Current password is incorrect.');
+    }
+    if (!newPassword || newPassword.length < 8) {
+      throw new BadRequestException('New password must be at least 8 characters.');
+    }
+    if (newPassword === currentPassword) {
+      throw new BadRequestException('New password must differ from the current one.');
+    }
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: await bcrypt.hash(newPassword, 10) },
+    });
+    return { changed: true };
+  }
+
   async setActive(userId: string, active: boolean) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new BadRequestException('User not found.');

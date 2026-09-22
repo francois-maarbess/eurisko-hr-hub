@@ -325,6 +325,100 @@ export class RequestsService {
     return { id: user.id, platformRole: user.platformRole };
   }
 
+  private async isManagerOf(userId: string, departmentId: string): Promise<boolean> {
+    const membership = await this.prisma.departmentMember.findUnique({
+      where: { userId_departmentId: { userId, departmentId } },
+    });
+    return !!membership?.active && membership.departmentRole === 'MANAGER';
+  }
+
+  /**
+   * Audited re-routing: moves a non-terminal ticket to another department
+   * (and type), releasing any claim and reopening it as PENDING. Only a
+   * MANAGER of the owning department or a SYSTEM_ADMIN may do this — the
+   * reason is mandatory and stored in audit metadata.
+   */
+  async reroute(
+    id: string,
+    input: { newDepartmentId: string; newRequestTypeId: string; reason: string },
+    userId: string,
+  ) {
+    const viewer = await this.viewerOf(userId);
+    const request = await this.findOne(id, viewer);
+
+    const manager = await this.isManagerOf(userId, request.departmentId);
+    if (viewer.platformRole !== 'SYSTEM_ADMIN' && !manager) {
+      throw new ForbiddenException('Only a department manager or system administrator can re-route requests.');
+    }
+
+    if (TERMINAL_STATUSES.includes(request.status)) {
+      throw new BadRequestException(`Cannot re-route a ${request.status} request.`);
+    }
+
+    const newDepartment = await this.prisma.department.findUnique({
+      where: { id: input.newDepartmentId },
+    });
+    if (!newDepartment || !newDepartment.active) {
+      throw new BadRequestException('Target department not found or inactive.');
+    }
+    const newType = await this.prisma.requestType.findFirst({
+      where: { id: input.newRequestTypeId, departmentId: input.newDepartmentId, active: true },
+    });
+    if (!newType) {
+      throw new BadRequestException('Target request type does not belong to the target department.');
+    }
+    if (input.newDepartmentId === request.departmentId) {
+      throw new BadRequestException('Ticket is already in that department.');
+    }
+
+    const reason = input.reason.trim();
+    if (!reason) {
+      throw new BadRequestException('A reason is required to re-route a request.');
+    }
+
+    const metadata = JSON.stringify({
+      fromDepartment: request.department.code,
+      fromType: request.requestType.code,
+      toDepartment: newDepartment.code,
+      toType: newType.code,
+      reason,
+    });
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.request.update({
+        where: { id },
+        data: {
+          departmentId: input.newDepartmentId,
+          requestTypeId: input.newRequestTypeId,
+          status: 'PENDING',
+          claimedById: null,
+          resolutionNote: null,
+          rejectionReason: null,
+          completedAt: null,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          requestId: id,
+          actorId: userId,
+          action: 'REQUEST_REROUTED',
+          oldValue: `${request.department.code}/${request.requestType.code}`,
+          newValue: `${newDepartment.code}/${newType.code}`,
+          metadata,
+        },
+      });
+    });
+
+    await this.notifications.emit({
+      requestId: id,
+      eventType: 'request.rerouted',
+      payload: { fromDepartment: request.department.code, toDepartment: newDepartment.code },
+      idempotencyKey: `req-${id}-rerouted-${Date.now()}`,
+    });
+    await this.notifications.fanout({ requestId: id, eventType: 'request.rerouted', actorId: userId });
+    return this.findOne(id, viewer);
+  }
+
   /**
    * Duplicate warning (advisory only, never blocks creation): open requests
    * in the same department sharing significant title words with the draft.
@@ -371,6 +465,107 @@ export class RequestsService {
   }
 
   /**
+   * Internal staff notes: private working notes on a ticket. Department
+   * staff and admins only — the requesting employee is always forbidden,
+   * even when they belong to the department in another role.
+   */
+  async addStaffNote(id: string, content: string, userId: string) {
+    const viewer = await this.viewerOf(userId);
+    const request = await this.findOne(id, viewer);
+    if (request.employeeId === userId) {
+      throw new ForbiddenException('Requesters cannot post internal staff notes.');
+    }
+    const text = (content || '').trim();
+    if (!text) {
+      throw new BadRequestException('Note content is required.');
+    }
+    if (text.length > 2000) {
+      throw new BadRequestException('Note is too long (max 2000 characters).');
+    }
+    if (viewer.platformRole !== 'SYSTEM_ADMIN') {
+      const membership = await this.prisma.departmentMember.findUnique({
+        where: { userId_departmentId: { userId, departmentId: request.departmentId } },
+      });
+      if (!membership?.active) {
+        throw new ForbiddenException('Only department staff can post internal notes.');
+      }
+    }
+    const note = await this.prisma.staffNote.create({
+      data: { requestId: id, authorId: userId, content: text },
+    });
+    await this.audit.append({
+      requestId: id,
+      actorId: userId,
+      action: 'STAFF_NOTE_ADDED',
+      newValue: `note ${note.id}`,
+    });
+    return note;
+  }
+
+  async listStaffNotes(id: string, userId: string) {
+    const viewer = await this.viewerOf(userId);
+    const request = await this.findOne(id, viewer);
+    if (request.employeeId === userId) {
+      throw new ForbiddenException('Requesters cannot read internal staff notes.');
+    }
+    if (viewer.platformRole !== 'SYSTEM_ADMIN') {
+      const membership = await this.prisma.departmentMember.findUnique({
+        where: { userId_departmentId: { userId, departmentId: request.departmentId } },
+      });
+      if (!membership?.active) {
+        throw new ForbiddenException('Only department staff can read internal notes.');
+      }
+    }
+    const notes = await this.prisma.staffNote.findMany({
+      where: { requestId: id },
+      include: { author: { select: { id: true, displayName: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+    return notes;
+  }
+
+  /**
+   * Resolution feedback (CSAT): only the requesting employee, only on a
+   * COMPLETED ticket, rated once. Feeds the admin CSAT average.
+   */
+  async submitFeedback(id: string, input: { rating: number; feedbackNote?: string }, userId: string) {
+    const viewer = await this.viewerOf(userId);
+    const request = await this.findOne(id, viewer);
+    if (request.employeeId !== userId) {
+      throw new ForbiddenException('Only the requesting employee can rate this ticket.');
+    }
+    if (request.status !== 'COMPLETED') {
+      throw new BadRequestException('Only completed tickets can be rated.');
+    }
+    if (!Number.isInteger(input.rating) || input.rating < 1 || input.rating > 5) {
+      throw new BadRequestException('Rating must be an integer from 1 to 5.');
+    }
+    if (request.rating != null) {
+      throw new ConflictException('This ticket has already been rated.');
+    }
+    const note = (input.feedbackNote || '').trim();
+    if (note.length > 2000) {
+      throw new BadRequestException('Feedback note is too long (max 2000 characters).');
+    }
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.request.update({
+        where: { id },
+        data: { rating: input.rating, feedbackNote: note || null },
+      });
+      await tx.auditLog.create({
+        data: {
+          requestId: id,
+          actorId: userId,
+          action: 'FEEDBACK_SUBMITTED',
+          newValue: `${input.rating}/5`,
+        },
+      });
+      return row;
+    });
+    return updated;
+  }
+
+  /**
    * Cross-department report for system admins (product-spec §3).
    */
   async getReport() {
@@ -390,6 +585,11 @@ export class RequestsService {
       _count: true,
     });
     const totalMap = new Map(totalByDept.map((r) => [r.departmentId, r._count]));
+    const csat = await this.prisma.request.aggregate({
+      where: { rating: { not: null } },
+      _avg: { rating: true },
+      _count: { rating: true },
+    });
     return {
       byStatus: Object.fromEntries(byStatus.map((r) => [r.status, r._count])),
       departments: departments.map((d) => ({
@@ -398,6 +598,40 @@ export class RequestsService {
         open: openMap.get(d.id) || 0,
         total: totalMap.get(d.id) || 0,
       })),
+      csatAverage: csat._avg.rating == null ? null : Math.round(csat._avg.rating * 100) / 100,
+      csatCount: csat._count.rating,
     };
+  }
+
+  /**
+   * Operations CSV export (admin only): every request as one row.
+   * Returned as a string; the controller sets text/csv headers.
+   */
+  async exportCsv(): Promise<string> {
+    const rows = await this.prisma.request.findMany({
+      include: {
+        department: { select: { code: true } },
+        requestType: { select: { code: true } },
+        owner: { select: { email: true } },
+        claimant: { select: { email: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    const cell = (v: unknown): string => {
+      const s = v == null ? '' : String(v);
+      return `"${s.replace(/"/g, '""')}"`;
+    };
+    const header = ['ID', 'Title', 'Department', 'Type', 'Status', 'Priority', 'Requester', 'Claimant', 'CreatedAt', 'CompletedAt', 'Rating'];
+    const lines = [
+      header.map(cell).join(','),
+      ...rows.map((r) =>
+        [
+          r.id, r.title, r.department.code, r.requestType.code, r.status, r.priority,
+          r.owner.email, r.claimant?.email ?? '', r.createdAt.toISOString(),
+          r.completedAt ? r.completedAt.toISOString() : '', r.rating ?? '',
+        ].map(cell).join(','),
+      ),
+    ];
+    return lines.join('\n');
   }
 }
