@@ -10,6 +10,7 @@ if (!process.env['JWT_SECRET']) {
 
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -29,6 +30,20 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('Internal Operations Service Hub API')
+    .setDescription(
+      'Submit, route, track, and resolve employee requests. ' +
+        'Authenticate via POST /auth/login, then send the returned JWT as ' +
+        '`Authorization: Bearer <token>`. Demo logins: admin@acme.com, ' +
+        'alice@acme.com, bob@acme.com (password Password123!).',
+    )
+    .setVersion('1.0.0')
+    .addBearerAuth()
+    .build();
+  const swaggerDoc = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup('api-docs', app, swaggerDoc);
 
   await app.listen(3000);
 }
