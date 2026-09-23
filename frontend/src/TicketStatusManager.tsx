@@ -181,6 +181,7 @@ interface TicketStatusManagerProps {
 export default function TicketStatusManager({ token, userId, platformRole, focusTicketId, onBack, onOpenTicket }: TicketStatusManagerProps) {
   // Core lists & navigation state
   const [tickets, setTickets] = useState<TicketState[]>([]);
+  const [listLoading, setListLoading] = useState(true);
   const [view, setView] = useState<View>('mine');
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [loading, setLoading] = useState(false);
@@ -251,6 +252,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
   };
 
   const fetchTickets = async (v: View) => {
+    setListLoading(true);
     try {
       // Focus mode shows one ticket (detail view); overdue mode pulls the
       // server-side breach list; otherwise the current tab.
@@ -266,8 +268,22 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to load requests.';
       setCardErrors((current) => ({ ...current, global: message }));
+    } finally {
+      setListLoading(false);
     }
   };
+
+  const TicketSkeletons = () => (
+    <div style={{ display: 'grid', gap: '1rem' }} aria-label="Loading requests">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="skeleton-card">
+          <div className="skeleton-line" style={{ width: '40%' }} />
+          <div className="skeleton-line" style={{ width: '70%', height: '1.1rem' }} />
+          <div className="skeleton-line" style={{ width: '55%' }} />
+        </div>
+      ))}
+    </div>
+  );
 
   useEffect(() => {
     fetch(apiUrl('/auth/memberships'), { headers: { Authorization: `Bearer ${token}` } })
@@ -282,14 +298,27 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
     fetchTickets(view);
   }, [token, view, overdueOnly, focusTicketId]);
 
-  const mutate = async (ticket: TicketState, fn: () => Promise<Response>, successMsg?: string) => {
+  const mutate = async (
+    ticket: TicketState,
+    fn: () => Promise<Response>,
+    successMsg?: string,
+    optimistic?: Partial<TicketState>,
+  ) => {
     setLoading(true);
     setCardErrors((current) => ({ ...current, [ticket.id]: null }));
+    // Optimistic UI: paint the expected outcome instantly; any failure
+    // below refetches server truth, rolling the card back automatically.
+    if (optimistic) {
+      setTickets((current) =>
+        current.map((t) => (t.id === ticket.id ? { ...t, ...optimistic } : t)),
+      );
+    }
     try {
       const response = await fn();
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         setCardErrors((current) => ({ ...current, [ticket.id]: data?.message || 'Request failed.' }));
+        if (optimistic) await fetchTickets(view);
         return;
       }
       await fetchTickets(view);
@@ -297,6 +326,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to reach the server.';
       setCardErrors((current) => ({ ...current, [ticket.id]: message }));
+      if (optimistic) await fetchTickets(view);
     } finally {
       setLoading(false);
     }
@@ -307,6 +337,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
       ticket,
       () => fetch(apiUrl(`/requests/${ticket.id}/claim`), { method: 'PATCH', headers: authHeaders }),
       'Claimed — you are now working on this request.',
+      { status: 'IN_PROGRESS', claimedById: userId },
     );
 
   const handleCancel = (ticket: TicketState) =>
@@ -319,6 +350,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
           body: JSON.stringify({ status: 'CANCELLED' }),
         }),
       'Request cancelled.',
+      { status: 'CANCELLED' },
     );
 
   const handleResolve = async (ticket: TicketState) => {
@@ -356,6 +388,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
           }),
         }),
       'Marked as completed.',
+      { status: 'COMPLETED', resolutionNote: typedNote || ticket.resolutionNote },
     );
   };
 
@@ -374,6 +407,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
           body: JSON.stringify({ status: 'REJECTED', rejectionReason: reason }),
         }),
       'Request rejected.',
+      { status: 'REJECTED', rejectionReason: reason },
     );
     setShowReject((c) => ({ ...c, [ticket.id]: false }));
   };
@@ -785,7 +819,9 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
 
       {cardErrors.global && <ErrorBox message={cardErrors.global} />}
 
-      {visibleTickets.length === 0 && (
+      {listLoading && tickets.length === 0 && <TicketSkeletons />}
+
+      {visibleTickets.length === 0 && !(listLoading && tickets.length === 0) && (
         <EmptyState
           message={
             overdueOnly

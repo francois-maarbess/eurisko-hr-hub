@@ -379,3 +379,26 @@ body {
   gap: 0.4rem;
   flex-wrap: wrap;
 }
+
+/* Skeleton loaders: shimmer cards shown while lists fetch. */
+@keyframes skeleton-shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.skeleton-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  background: #fff;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.skeleton-line {
+  height: 0.85rem;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #eef2f7 25%, #e2e8f0 50%, #eef2f7 75%);
+  background-size: 800px 100%;
+  animation: skeleton-shimmer 1.3s ease-in-out infinite;
+}

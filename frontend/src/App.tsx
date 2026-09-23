@@ -4,6 +4,7 @@ import CreateRequestForm from './CreateRequestForm';
 import TicketStatusManager from './TicketStatusManager';
 import AdminPanel from './AdminPanel';
 import MfaSettings from './MfaSettings';
+import ErrorBoundary from './ErrorBoundary';
 import { Button } from './components/ui';
 import { apiUrl } from './api';
 
@@ -168,14 +169,16 @@ export default function App() {
         )}
 
         {focusTicketId ? (
-          <TicketStatusManager
-            key={refreshKey}
-            token={token}
-            userId={user.id}
-            platformRole={user.platformRole}
-            focusTicketId={focusTicketId}
-            onBack={() => setFocusTicketId(null)}
-          />
+          <ErrorBoundary section="ticket detail">
+            <TicketStatusManager
+              key={refreshKey}
+              token={token}
+              userId={user.id}
+              platformRole={user.platformRole}
+              focusTicketId={focusTicketId}
+              onBack={() => setFocusTicketId(null)}
+            />
+          </ErrorBoundary>
         ) : (
           <>
             <CreateRequestForm
@@ -185,20 +188,24 @@ export default function App() {
             />
 
             {user.platformRole === 'SYSTEM_ADMIN' && (
-              <AdminPanel
-                token={token}
-                onCatalogChange={() => setCatalogVersion((v) => v + 1)}
-              />
+              <ErrorBoundary section="administration panel">
+                <AdminPanel
+                  token={token}
+                  onCatalogChange={() => setCatalogVersion((v) => v + 1)}
+                />
+              </ErrorBoundary>
             )}
 
             <h3 style={{ margin: '1.5rem 0 0.75rem', color: 'var(--navy)' }}>Request Queue</h3>
-            <TicketStatusManager
-              key={refreshKey}
-              token={token}
-              userId={user.id}
-              platformRole={user.platformRole}
-              onOpenTicket={(id) => setFocusTicketId(id)}
-            />
+            <ErrorBoundary section="request queue">
+              <TicketStatusManager
+                key={refreshKey}
+                token={token}
+                userId={user.id}
+                platformRole={user.platformRole}
+                onOpenTicket={(id) => setFocusTicketId(id)}
+              />
+            </ErrorBoundary>
             <MfaSettings token={token} />
           </>
         )}
