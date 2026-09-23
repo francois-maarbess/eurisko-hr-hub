@@ -186,7 +186,7 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
   return (
     <Card title="New Service Request">
       <div className="note-ai">
-        <div className="note-ai-title">✨ Describe it in your own words</div>
+        <div className="note-ai-title">Describe it in your own words</div>
         <Field label="">
           <textarea
             className="textarea"
@@ -209,7 +209,7 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
             disabled={aiLoading}
             small
           >
-            {aiLoading ? 'Drafting...' : '✨ Draft with AI'}
+            {aiLoading ? 'Drafting...' : 'Draft with AI'}
           </Button>
           <span className="muted" style={{ fontSize: '0.8rem' }} title="Press Ctrl+Enter (or Cmd+Enter on Mac) inside the description box to draft">
             Ctrl+Enter
@@ -262,7 +262,7 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
           </select>
           {selectedDept && filteredTypes.length === 0 && (
             <p className="muted" style={{ fontSize: '0.8rem', color: '#b45309', background: '#fef3c7', padding: '0.4rem 0.6rem', borderRadius: '6px', marginTop: '0.35rem' }}>
-              ⚠️ This department has no active request types yet. An administrator must add at least one request type in the Administration panel before requests can be submitted.
+              This department has no active request types yet. An administrator must add at least one request type in the Administration panel before requests can be submitted.
             </p>
           )}
         </Field>

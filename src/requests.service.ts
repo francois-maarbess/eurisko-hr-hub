@@ -664,8 +664,24 @@ export class RequestsService {
       _avg: { rating: true },
       _count: { rating: true },
     });
+    // Org-wide creation volume, last 7 days inclusive, zero-filled so
+    // charts always receive exactly 7 points.
+    const dayKeys: string[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      dayKeys.push(d.toISOString().slice(0, 10));
+    }
+    const rawVolume = await this.prisma.$queryRaw<{ day: string; count: bigint }[]>`
+      SELECT date("createdAt") AS day, COUNT(*) AS count
+      FROM "Request"
+      WHERE date("createdAt") >= date('now', '-6 days')
+      GROUP BY day ORDER BY day ASC
+    `;
+    const volumeMap = new Map(rawVolume.map((r) => [r.day, Number(r.count)]));
     return {
       byStatus: Object.fromEntries(byStatus.map((r) => [r.status, r._count])),
+      volume: dayKeys.map((day) => ({ day, count: volumeMap.get(day) ?? 0 })),
       departments: departments.map((d) => ({
         code: d.code,
         name: d.name,

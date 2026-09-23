@@ -24,6 +24,7 @@ interface MiniTicket {
 interface Report {
   byStatus: Record<string, number>;
   departments: { code: string; name: string; open: number; total: number; breached: number }[];
+  volume: { day: string; count: number }[];
   csatAverage: number | null;
   csatCount: number;
 }
@@ -39,39 +40,34 @@ function dayKey(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-function last7Days(): { key: string; label: string }[] {
-  const out: { key: string; label: string }[] = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    out.push({
-      key: dayKey(d),
-      label: d.toLocaleDateString(undefined, { weekday: 'short' }),
-    });
-  }
-  return out;
+function weekdayLabel(isoDay: string): string {
+  const [y, m, d] = isoDay.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' });
 }
 
 /**
- * Personal command center: greeting, KPI cards, 7-day volume chart,
- * SLA donut, and the active-ticket feed. Org-wide numbers appear
- * automatically for admins (report endpoint); everyone else sees
- * their own tickets only.
+ * Command center. Admins (report available) see org-wide numbers — they
+ * are accountable for every request. Everyone else sees their own
+ * tickets only, with explicitly personal labels.
  */
 export default function Dashboard({ token, userName }: { token: string; userName: string }) {
   const [mine, setMine] = useState<MiniTicket[]>([]);
+  const [breached, setBreached] = useState<MiniTicket[]>([]);
   const [report, setReport] = useState<Report | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [mineRes, reportRes] = await Promise.all([
-          fetch(apiUrl('/requests?view=mine'), { headers: { Authorization: `Bearer ${token}` } }),
-          fetch(apiUrl('/requests/report'), { headers: { Authorization: `Bearer ${token}` } }),
+        const headers = { Authorization: `Bearer ${token}` };
+        const [mineRes, breachRes, reportRes] = await Promise.all([
+          fetch(apiUrl('/requests?view=mine'), { headers }),
+          fetch(apiUrl('/requests/breach'), { headers }),
+          fetch(apiUrl('/requests/report'), { headers }),
         ]);
         if (cancelled) return;
         if (mineRes.ok) setMine(await mineRes.json());
+        if (breachRes.ok) setBreached(await breachRes.json());
         if (reportRes.ok) setReport(await reportRes.json());
       } catch {
         // Dashboard is decorative; the queue below is the source of truth.
@@ -83,21 +79,44 @@ export default function Dashboard({ token, userName }: { token: string; userName
   }, [token]);
 
   const now = Date.now();
+  const isOrg = report !== null;
+
+  // Personal numbers (employees) vs org numbers (admins).
   const openMine = mine.filter((t) => !TERMINAL.includes(t.status));
   const overdueMine = openMine.filter((t) => t.slaDueAt && new Date(t.slaDueAt).getTime() < now);
-  const onTrack = openMine.length - overdueMine.length;
-  const compliance = openMine.length === 0 ? 100 : Math.round((onTrack / openMine.length) * 100);
+  const orgOpen = (report?.departments || []).reduce((n, d) => n + d.open, 0);
+  const orgBreached = (report?.departments || []).reduce((n, d) => n + d.breached, 0);
 
-  const days = last7Days();
-  const volume = days.map((d) => ({
-    name: d.label,
-    tickets: mine.filter((t) => dayKey(new Date(t.createdAt)) === d.key).length,
-  }));
+  const openCount = isOrg ? orgOpen : openMine.length;
+  const overdueCount = isOrg ? orgBreached : overdueMine.length;
+  const onTrack = openCount - overdueCount;
+  const compliance = openCount === 0 ? 100 : Math.round((onTrack / openCount) * 100);
+  const scope = isOrg ? 'ORG' : 'MY';
+
+  const volume = isOrg && report
+    ? report.volume.map((v) => ({ name: weekdayLabel(v.day), tickets: v.count }))
+    : (() => {
+        const days: { key: string; label: string }[] = [];
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date();
+          d.setDate(d.getDate() - i);
+          days.push({ key: dayKey(d), label: d.toLocaleDateString(undefined, { weekday: 'short' }) });
+        }
+        return days.map((d) => ({
+          name: d.label,
+          tickets: mine.filter((t) => dayKey(new Date(t.createdAt)) === d.key).length,
+        }));
+      })();
 
   const donut = [
     { name: 'On track', value: onTrack },
-    { name: 'Overdue', value: overdueMine.length },
+    { name: 'Overdue', value: overdueCount },
   ];
+
+  // Overdue first (backend returns breach most-overdue-first), then open.
+  const attention = breached.slice(0, 5);
+  const feed = attention.length > 0 ? attention : openMine.slice(0, 5);
+  const feedTitle = attention.length > 0 ? 'Needs attention' : 'Active tickets';
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
@@ -105,23 +124,25 @@ export default function Dashboard({ token, userName }: { token: string; userName
   return (
     <div className="card" style={{ marginBottom: '1.5rem' }}>
       <h3 className="card-title">
-        {greeting}, {userName.split(' ')[0]} 👋
+        {greeting}, {userName.split(' ')[0]}
       </h3>
       <p className="card-sub">
-        {openMine.length === 0
-          ? 'All clear — nothing open on your plate.'
-          : `${openMine.length} open ticket${openMine.length === 1 ? '' : 's'}${overdueMine.length > 0 ? `, ${overdueMine.length} past deadline` : ''}.`}
+        {openCount === 0
+          ? isOrg
+            ? 'All clear across every department.'
+            : 'All clear — nothing open on your plate.'
+          : `${openCount} open ticket${openCount === 1 ? '' : 's'}${overdueCount > 0 ? `, ${overdueCount} past deadline` : ''}${isOrg ? ' org-wide' : ''}.`}
       </p>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.6rem', margin: '0.9rem 0' }}>
         <div style={{ background: '#eff6ff', borderRadius: '10px', padding: '0.7rem 0.9rem' }}>
-          <div className="muted" style={{ fontSize: '0.75rem', fontWeight: 700 }}>MY OPEN</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: NAVY }}>{openMine.length}</div>
+          <div className="muted" style={{ fontSize: '0.75rem', fontWeight: 700 }}>{scope} OPEN</div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: NAVY }}>{openCount}</div>
         </div>
-        <div style={{ background: overdueMine.length > 0 ? '#fee2e2' : '#f8fafc', borderRadius: '10px', padding: '0.7rem 0.9rem' }}>
+        <div style={{ background: overdueCount > 0 ? '#fee2e2' : '#f8fafc', borderRadius: '10px', padding: '0.7rem 0.9rem' }}>
           <div className="muted" style={{ fontSize: '0.75rem', fontWeight: 700 }}>OVERDUE</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: overdueMine.length > 0 ? RED : NAVY }}>
-            {overdueMine.length}
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: overdueCount > 0 ? RED : NAVY }}>
+            {overdueCount}
           </div>
         </div>
         <div style={{ background: '#f0fdf4', borderRadius: '10px', padding: '0.7rem 0.9rem' }}>
@@ -143,7 +164,7 @@ export default function Dashboard({ token, userName }: { token: string; userName
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
         <div>
           <div className="muted" style={{ fontSize: '0.78rem', fontWeight: 700, marginBottom: '0.3rem' }}>
-            MY TICKETS · LAST 7 DAYS
+            {isOrg ? 'ORG TICKETS · LAST 7 DAYS' : 'MY TICKETS · LAST 7 DAYS'}
           </div>
           <ResponsiveContainer width="100%" height={150}>
             <BarChart data={volume} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
@@ -156,9 +177,9 @@ export default function Dashboard({ token, userName }: { token: string; userName
         </div>
         <div>
           <div className="muted" style={{ fontSize: '0.78rem', fontWeight: 700, marginBottom: '0.3rem' }}>
-            MY OPEN · ON TRACK VS OVERDUE
+            {isOrg ? 'ORG OPEN · ON TRACK VS OVERDUE' : 'MY OPEN · ON TRACK VS OVERDUE'}
           </div>
-          {openMine.length === 0 ? (
+          {openCount === 0 ? (
             <p className="muted" style={{ fontSize: '0.85rem' }}>Nothing open — enjoy the calm.</p>
           ) : (
             <ResponsiveContainer width="100%" height={150}>
@@ -174,9 +195,10 @@ export default function Dashboard({ token, userName }: { token: string; userName
         </div>
       </div>
 
-      {openMine.length > 0 && (
+      {feed.length > 0 && (
         <div style={{ marginTop: '0.8rem', display: 'grid', gap: '0.35rem' }}>
-          {openMine.slice(0, 5).map((t) => {
+          <div className="muted" style={{ fontSize: '0.78rem', fontWeight: 700 }}>{feedTitle}</div>
+          {feed.map((t) => {
             const overdue = t.slaDueAt && new Date(t.slaDueAt).getTime() < now;
             return (
               <div key={t.id} className="row" style={{ justifyContent: 'space-between', fontSize: '0.85rem' }}>

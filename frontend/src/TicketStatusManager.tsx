@@ -121,7 +121,7 @@ function getSlaInfo(ticket: TicketState): { label: string; bg: string; color: st
   if (remainingMs <= 0) {
     const overdueHrs = Math.ceil(Math.abs(remainingMs) / 3600000);
     return {
-      label: `⚠️ SLA Overdue (+${overdueHrs}h)`,
+      label: `SLA Overdue (+${overdueHrs}h)`,
       bg: '#fee2e2',
       color: '#b91c1c',
       title: `${sourceTitle} · overdue by about ${overdueHrs}h`,
@@ -135,7 +135,7 @@ function getSlaInfo(ticket: TicketState): { label: string; bg: string; color: st
   const isWarning = remainingMs < 3600000 || remainingMs < slaTargetMs * 0.25;
 
   return {
-    label: `⏱ SLA: ${text} left`,
+    label: `SLA: ${text} left`,
     bg: isWarning ? '#fef3c7' : '#eff6ff',
     color: isWarning ? '#b45309' : '#1d4ed8',
     title: `${sourceTitle} · ${text} remaining`,
@@ -789,7 +789,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                 color: boardView ? 'var(--blue)' : 'var(--muted)',
               }}
             >
-              {boardView ? '☰ List view' : '📋 Board view'}
+              {boardView ? 'List view' : 'Board view'}
             </button>
           </div>
 
@@ -808,7 +808,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
             cursor: 'pointer',
           }}
         >
-          🔥 Urgent Only
+          Urgent Only
         </button>
         <button
           onClick={() => setFilterHasDocs((d) => !d)}
@@ -823,7 +823,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
             cursor: 'pointer',
           }}
         >
-          📎 Has Attachments
+          Has Attachments
         </button>
         {isStaff && (
           <button
@@ -839,7 +839,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
               cursor: 'pointer',
             }}
           >
-            💬 Has Staff Notes
+            Has Staff Notes
           </button>
         )}
         <button
@@ -861,7 +861,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
             cursor: 'pointer',
           }}
         >
-          ⚠️ Overdue
+          Overdue
         </button>
         {(filterUrgentOnly || filterHasDocs || filterHasNotes || overdueOnly) && (
           <button
@@ -902,7 +902,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
         <EmptyState
           message={
             overdueOnly
-              ? 'No overdue tickets — everything is on time. 🎉'
+              ? 'No overdue tickets — everything is on time.'
               : query || statusFilter !== 'ALL'
                 ? 'No requests match this search.'
                 : view === 'queue'
@@ -1112,7 +1112,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                     {(docsCache[ticket.id] || []).map((d) => (
                       <div key={d.id} className="row" style={{ justifyContent: 'space-between' }}>
                         <span style={{ fontSize: '0.85rem' }}>
-                          📎 {d.originalFilename} <span className="muted">({Math.round(d.byteSize / 1024)} KB)</span>
+                          {d.originalFilename} <span className="muted">({Math.round(d.byteSize / 1024)} KB)</span>
                         </span>
                         <span className="row" style={{ gap: '0.4rem' }}>
                           {canDownloadDocs && (

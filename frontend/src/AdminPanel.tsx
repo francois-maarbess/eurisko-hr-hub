@@ -333,7 +333,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
               ★ CSAT {report.csatAverage != null ? report.csatAverage.toFixed(2) : '—'} ({report.csatCount} ratings)
             </span>
             <Button variant="ghost" small onClick={exportCsv} disabled={exporting}>
-              {exporting ? 'Exporting…' : '📥 Export to CSV'}
+              {exporting ? 'Exporting…' : 'Export to CSV'}
             </Button>
             <button
               onClick={() => setShowCountsInfo((s) => !s)}
@@ -365,7 +365,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
           </div>
           {report.departments.reduce((n, d) => n + d.breached, 0) > 0 && (
             <div className="badge" style={{ background: '#fee2e2', color: 'var(--danger)', marginBottom: '0.75rem' }}>
-              ⚠️ {report.departments.reduce((n, d) => n + d.breached, 0)} ticket(s) past their SLA deadline
+              {report.departments.reduce((n, d) => n + d.breached, 0)} ticket(s) past their SLA deadline
               in {report.departments.filter((d) => d.breached > 0).length} department(s) — needs attention
             </div>
           )}
@@ -425,7 +425,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
               <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
                 {typesForDept.length === 0 && (
                   <span className="badge" style={{ background: '#fef3c7', color: '#b45309', textTransform: 'none' }}>
-                    ⚠️ No request types yet — add one below so employees can select this department
+                    No request types yet — add one below so employees can select this department
                   </span>
                 )}
                 {typesForDept.map((t) => (

@@ -770,6 +770,12 @@ describe('Service Request Flow (E2E)', () => {
       expect(typeof d.breached).toBe('number');
       expect(d.breached).toBeLessThanOrEqual(d.open);
     }
+    expect(Array.isArray(res.body.volume)).toBe(true);
+    expect(res.body.volume).toHaveLength(7);
+    for (const v of res.body.volume) {
+      expect(v.day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(typeof v.count).toBe('number');
+    }
 
     const denied = await request(app.getHttpServer())
       .get('/requests/report')

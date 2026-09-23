@@ -95,10 +95,11 @@ export default function App() {
               title="Notifications"
               style={{
                 position: 'relative', border: '1px solid var(--border)', background: '#fff',
-                borderRadius: '10px', padding: '0.45rem 0.7rem', cursor: 'pointer', fontSize: '1.05rem',
+                borderRadius: '10px', padding: '0.45rem 0.7rem', cursor: 'pointer', fontSize: '0.85rem',
+                fontWeight: 700, color: 'var(--navy)',
               }}
             >
-              🔔
+              Notifications
               {unread > 0 && (
                 <span
                   style={{
