@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Card, ErrorBox, Field } from './components/ui';
+import { Button, Card, ErrorBox, Field, Section } from './components/ui';
 import { apiUrl } from './api';
 
 interface CreateRequestFormProps {
@@ -185,8 +185,11 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
 
   return (
     <Card title="New Service Request">
+      <Section
+        title="1. What do you need help with?"
+        sub="Optional: describe the issue in your own words and AI drafts the fields below. You review everything before anything is created."
+      >
       <div className="note-ai">
-        <div className="note-ai-title">Describe it in your own words</div>
         <Field label="Request summary">
           <textarea
             className="textarea"
@@ -217,6 +220,7 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
         </div>
         {aiNote && <p className="muted mt-sm">{aiNote}</p>}
       </div>
+      </Section>
 
       <form
         onSubmit={handleSubmit}
@@ -226,6 +230,10 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
             handleSubmit(e);
           }
         }}
+      >
+      <Section
+        title="2. Classify your request"
+        sub="The department owns the ticket; the type must belong to it."
       >
         <Field label="Department *">
           <select
@@ -267,6 +275,19 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
           )}
         </Field>
 
+        <Field label="Priority">
+          <select className="select" value={priority} onChange={(e) => setPriority(e.target.value as any)}>
+            <option value="LOW">Low</option>
+            <option value="STANDARD">Standard</option>
+            <option value="URGENT">Urgent</option>
+          </select>
+        </Field>
+      </Section>
+
+      <Section
+        title="3. Add the details"
+        sub="Used for search, duplicate detection, and the SLA estimate."
+      >
         <Field label="Title *">
           <input
             className="input"
@@ -290,7 +311,12 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
             required
           />
         </Field>
+      </Section>
 
+      <Section
+        title="4. Review and submit"
+        sub="Duplicates are advisory — a twin never blocks creation."
+      >
         <div className="duplicate-check">
           <Button variant="ghost" small onClick={handleCheckDuplicates} disabled={dupLoading} type="button">
             {dupLoading ? 'Checking…' : 'Check for duplicates'}
@@ -306,31 +332,24 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
                     <li key={d.id}>{d.title} <span className="muted">({d.status})</span></li>
                   ))}
                 </ul>
-                {dupConfirmedFor?.startsWith('pending:') && (
-                  <Button variant="ghost" small onClick={submitAnyway} disabled={loading} type="button">
-                    {loading ? 'Submitting…' : 'Submit anyway'}
-                  </Button>
-                )}
+                  {dupConfirmedFor?.startsWith('pending:') && (
+                    <Button variant="ghost" small onClick={submitAnyway} disabled={loading} type="button">
+                      {loading ? 'Creating…' : 'Create anyway'}
+                    </Button>
+                  )}
               </div>
             )
           )}
         </div>
 
-        <Field label="Priority">
-          <select className="select" value={priority} onChange={(e) => setPriority(e.target.value as any)}>
-            <option value="LOW">Low</option>
-            <option value="STANDARD">Standard</option>
-            <option value="URGENT">Urgent</option>
-          </select>
-        </Field>
-
         {error && <ErrorBox message={error} />}
 
         <div className="submit-wrap">
           <Button type="submit" variant="success" block disabled={loading}>
-            {loading ? 'Submitting...' : 'Submit Request'}
+            {loading ? 'Creating…' : 'Create request'}
           </Button>
         </div>
+      </Section>
       </form>
     </Card>
   );
