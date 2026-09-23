@@ -837,3 +837,16 @@ a:focus-visible {
   transform: translate(-50%, -50%);
   width: min(440px, calc(100vw - 2.5rem));
 }
+
+/* ---------- keyboard hints ---------- */
+
+kbd {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  background: #f1f5f9;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  padding: 0.1rem 0.4rem;
+  white-space: nowrap;
+}

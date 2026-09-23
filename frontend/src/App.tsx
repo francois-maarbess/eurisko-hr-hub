@@ -42,6 +42,7 @@ export default function App() {
   const [inboxOpen, setInboxOpen] = useState(false);
   const [inbox, setInbox] = useState<InboxItem[]>([]);
   const [unread, setUnread] = useState(0);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const handleLogin = (accessToken: string, userData: User) => {
     setToken(accessToken);
@@ -104,6 +105,33 @@ export default function App() {
     if (focusTicketId) window.scrollTo({ top: 0 });
   }, [focusTicketId]);
 
+  // Power-user keys: c = new request, ? = shortcut help, Escape = back/close.
+  // Typing inside inputs is never hijacked.
+  useEffect(() => {
+    if (!token) return;
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) return;
+      if (e.key === '?') {
+        e.preventDefault();
+        setShortcutsOpen((o) => !o);
+      } else if (e.key === 'c' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        setFocusTicketId(null);
+        setActiveView('new');
+      } else if (e.key === 'Escape') {
+        setShortcutsOpen(false);
+        setInboxOpen(false);
+        if (focusTicketId) {
+          setFocusTicketId(null);
+          setActiveView(returnView);
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [token, focusTicketId, returnView]);
+
   if (!token || !user) {
     return <LoginPage onLogin={handleLogin} />;
   }
@@ -140,6 +168,20 @@ export default function App() {
 
   return (
     <>
+      {shortcutsOpen && (
+        <>
+          <div className="modal-backdrop" onClick={() => setShortcutsOpen(false)} />
+          <div className="card glass-panel modal-panel" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+            <h3 className="card-title">Keyboard shortcuts</h3>
+            <div style={{ display: 'grid', gap: '0.45rem', fontSize: '0.88rem', marginTop: '0.5rem' }}>
+              <div className="row" style={{ justifyContent: 'space-between' }}><span>Create a new request</span><kbd>C</kbd></div>
+              <div className="row" style={{ justifyContent: 'space-between' }}><span>Draft with AI / submit form</span><kbd>Ctrl + Enter</kbd></div>
+              <div className="row" style={{ justifyContent: 'space-between' }}><span>Back to list / close dialogs</span><kbd>Esc</kbd></div>
+              <div className="row" style={{ justifyContent: 'space-between' }}><span>This help</span><kbd>?</kbd></div>
+            </div>
+          </div>
+        </>
+      )}
       {inboxOpen && (
         <>
           <div
@@ -199,6 +241,7 @@ export default function App() {
           setFocusTicketId(null);
           setActiveView('new');
         }}
+        onShortcuts={() => setShortcutsOpen(true)}
         onSignOut={handleLogout}
         topRight={notifButton}
       >

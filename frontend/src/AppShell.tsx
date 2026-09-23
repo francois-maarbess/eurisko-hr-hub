@@ -37,6 +37,7 @@ interface AppShellProps {
   activeView: AppView;
   onNavigate: (v: AppView) => void;
   onNewRequest: () => void;
+  onShortcuts: () => void;
   onSignOut: () => void;
   topRight?: React.ReactNode;
   children: React.ReactNode;
@@ -55,6 +56,7 @@ export default function AppShell({
   activeView,
   onNavigate,
   onNewRequest,
+  onShortcuts,
   onSignOut,
   topRight,
   children,
@@ -89,8 +91,10 @@ export default function AppShell({
           <button onClick={onSignOut} className="sidebar-signout">
             Sign Out
           </button>
-        </div>
-      </aside>
+          <button onClick={onShortcuts} className="sidebar-signout" title="Keyboard shortcuts (?)">
+            Shortcuts <kbd>?</kbd>
+          </button>
+        </div>      </aside>
 
       <div className="shell-main">
         <header className="shell-header">
