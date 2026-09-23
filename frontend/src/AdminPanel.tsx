@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Button, ErrorBox, Field, SectionHeader, formatEnum } from './components/ui';
+import { Button, ErrorBox, Field, Section, Tabs, formatEnum } from './components/ui';
 import { apiUrl } from './api';
 
 interface AdminPanelProps {
@@ -43,6 +43,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [memberDrafts, setMemberDrafts] = useState<Record<string, { deptId: string; role: string }>>({});
+  const [adminTab, setAdminTab] = useState<'overview' | 'catalog' | 'users'>('overview');
   const [report, setReport] = useState<{
     byStatus: Record<string, number>;
     departments: { code: string; name: string; open: number; total: number; breached: number }[];
@@ -321,13 +322,21 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
       <h3 className="card-title">Administration</h3>
       <p className="card-sub">Create accounts, assign roles and departments, manage the catalog, activate or deactivate users.</p>
 
-      {report && (
-        <>
-          <SectionHeader
-            n="1"
-            title="Platform overview"
-            sub="Live ticket counts across every department."
-          />
+      <Tabs
+        options={[
+          { value: 'overview', label: 'Overview' },
+          { value: 'catalog', label: 'Catalog' },
+          { value: 'users', label: 'Users' },
+        ]}
+        value={adminTab}
+        onChange={(v) => setAdminTab(v as 'overview' | 'catalog' | 'users')}
+      />
+
+      {adminTab === 'overview' && report && (
+        <Section
+          title="Platform overview"
+          sub="Live ticket counts across every department."
+        >
           <div className="row mb-md">
             <span className="badge" style={{ background: '#fef3c7', color: '#92400e' }}>
               ★ CSAT {report.csatAverage != null ? report.csatAverage.toFixed(2) : '—'} ({report.csatCount} ratings)
@@ -397,16 +406,15 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
               );
             })}
           </div>
-        </div>
-        </>
+          </div>
+        </Section>
       )}
 
-      <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '1.25rem 0' }} />
-      <SectionHeader
-        n="2"
-        title="Catalog — departments & request types"
-        sub="Departments group work; request types are the pickable categories inside one department. Deactivating retires entries while history stays intact."
-      />
+      {adminTab === 'catalog' && (
+        <Section
+          title="Catalog — departments & request types"
+          sub="Departments group work; request types are the pickable categories inside one department. Deactivating retires entries while history stays intact."
+        >
       <div className="admin-grid">
         {departments.map((d) => {
           const typesForDept = allTypes.filter((t) => t.departmentId === d.id);
@@ -469,13 +477,15 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
           <Button type="submit" variant="ghost" small>Add Type</Button>
         </div>
       </form>
+        </Section>
+      )}
 
-      <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '1.25rem 0' }} />
-      <SectionHeader
-        n="3"
-        title="Create user account"
-        sub="One account per employee. Pick their platform role and first department — you can change both below after creation."
-      />
+      {adminTab === 'users' && (
+        <>
+        <Section
+          title="Create user account"
+          sub="One account per employee. Pick their platform role and first department — you can change both below after creation."
+        >
       <form onSubmit={handleCreate}>
         <Field label="Email *">
           <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@acme.com" required />
@@ -518,13 +528,11 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
       </form>
 
       {message && <p className="muted admin-message">{message}</p>}
-
-      <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '1.25rem 0' }} />
-      <SectionHeader
-        n="4"
-        title={`Users & memberships (${users.length})`}
-        sub="Change platform roles, add or remove department memberships, deactivate accounts."
-      />
+        </Section>
+        <Section
+          title={`Manage users & memberships (${users.length})`}
+          sub="Change platform roles, add or remove department memberships, deactivate accounts."
+        >
       <div className="admin-grid">
         {users.map((u) => {
           const draft = memberDrafts[u.id] || { deptId: '', role: 'AGENT' };
@@ -589,6 +597,9 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
           );
         })}
       </div>
+        </Section>
+        </>
+      )}
     </div>
   );
 }
