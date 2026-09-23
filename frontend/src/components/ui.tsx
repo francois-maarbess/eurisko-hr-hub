@@ -103,3 +103,53 @@ export function SectionHeader({ n, title, sub }: { n: string; title: string; sub
     </div>
   );
 }
+
+export function PageHeader({ title, sub, actions }: { title: string; sub?: string; actions?: React.ReactNode }) {
+  return (
+    <div className="page-head">
+      <div>
+        <h2 className="page-title">{title}</h2>
+        {sub && <p className="page-sub">{sub}</p>}
+      </div>
+      {actions && <div className="row">{actions}</div>}
+    </div>
+  );
+}
+
+export function Section({ title, sub, children }: { title?: string; sub?: string; children: React.ReactNode }) {
+  return (
+    <section className="section">
+      {(title || sub) && (
+        <div className="section-head">
+          {title && <h3 className="section-title">{title}</h3>}
+          {sub && <p className="section-sub">{sub}</p>}
+        </div>
+      )}
+      {children}
+    </section>
+  );
+}
+
+export function Alert({ tone, children }: { tone: 'info' | 'warn' | 'danger' | 'success'; children: React.ReactNode }) {
+  return <div className={`alert alert-${tone}`} role="alert">{children}</div>;
+}
+
+export function Modal({ title, sub, onClose, children }: { title: string; sub?: string; onClose: () => void; children: React.ReactNode }) {
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <>
+      <div className="modal-backdrop" onClick={onClose} />
+      <div className="card glass-panel modal-panel" role="dialog" aria-modal="true" aria-label={title}>
+        <h3 className="card-title">{title}</h3>
+        {sub && <p className="card-sub">{sub}</p>}
+        {children}
+      </div>
+    </>
+  );
+}

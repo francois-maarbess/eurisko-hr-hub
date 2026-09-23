@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { DndContext, useDraggable, useDroppable, type DragEndEvent } from '@dnd-kit/core';
-import { Badge, Button, formatEnum } from './components/ui';
+import { Badge, Button, Modal, formatEnum } from './components/ui';
 
 export type BoardStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
 
@@ -167,42 +167,36 @@ export default function KanbanBoard({ tickets, canDrop, onDropProgress, onDropCo
       </p>
 
       {completing && (
-        <>
-          <div
-            onClick={() => setCompleting(null)}
-            className="modal-backdrop"
+        <Modal
+          title={`Complete “${completing.title}”`}
+          sub="A resolution note is required to complete a ticket."
+          onClose={() => setCompleting(null)}
+        >
+          <input
+            className="input"
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="What was done to resolve this?"
+            autoFocus
           />
-          <div
-            className="card glass-panel modal-card"
-          >
-            <h3 className="card-title">Complete “{completing.title}”</h3>
-            <p className="card-sub">A resolution note is required to complete a ticket.</p>
-            <input
-              className="input"
-              type="text"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="What was done to resolve this?"
-              autoFocus
-            />
-            <div className="row mt-md">
-              <Button
-                variant="success"
-                small
-                disabled={!note.trim()}
-                onClick={() => {
-                  onDropComplete(completing, note.trim());
-                  setCompleting(null);
-                }}
-              >
-                Complete ticket
-              </Button>
-              <Button variant="ghost" small onClick={() => setCompleting(null)}>
-                Cancel
-              </Button>
-            </div>
+          <div className="row mt-md">
+            <Button
+              variant="success"
+              small
+              disabled={!note.trim()}
+              onClick={() => {
+                onDropComplete(completing, note.trim());
+                setCompleting(null);
+              }}
+            >
+              Complete ticket
+            </Button>
+            <Button variant="ghost" small onClick={() => setCompleting(null)}>
+              Cancel
+            </Button>
           </div>
-        </>
+        </Modal>
       )}
     </div>
   );
