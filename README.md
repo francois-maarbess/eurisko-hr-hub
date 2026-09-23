@@ -1,6 +1,12 @@
 # Internal Operations Service Hub
 
+![CI](https://github.com/francois-maarbess/eurisko-hr-hub/actions/workflows/ci.yml/badge.svg)
+![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
+![License](https://img.shields.io/badge/license-MIT-blue)
+
 An internal service hub for submitting, routing, tracking, and resolving employee requests.
+
+**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt auth (password + TOTP + Google SSO) · 74 automated tests.
 
 ## Quick Start
 

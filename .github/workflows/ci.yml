@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Configure environment
+        run: cp .env.example .env
+
+      - name: Set up database
+        run: npm run db:reset
+
+      - name: Typecheck backend
+        run: npx tsc --noEmit
+
+      - name: Run tests (74, SQLite)
+        run: npm test
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: frontend
