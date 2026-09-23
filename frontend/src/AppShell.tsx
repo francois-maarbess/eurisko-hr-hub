@@ -35,6 +35,7 @@ interface AppShellProps {
   activeView: AppView;
   onNavigate: (v: AppView) => void;
   onNewRequest: () => void;
+  onQuickSwitcher: () => void;
   onShortcuts: () => void;
   onSignOut: () => void;
   topRight?: React.ReactNode;
@@ -54,6 +55,7 @@ export default function AppShell({
   activeView,
   onNavigate,
   onNewRequest,
+  onQuickSwitcher,
   onShortcuts,
   onSignOut,
   topRight,
@@ -79,7 +81,8 @@ export default function AppShell({
               aria-current={activeView === n.id ? 'page' : undefined}
               className={activeView === n.id ? 'sidebar-link sidebar-link-active' : 'sidebar-link'}
             >
-              {n.label}
+              <span className="sidebar-link-marker" aria-hidden="true" />
+              <span>{n.label}</span>
             </button>
           ))}
         </nav>
@@ -101,7 +104,12 @@ export default function AppShell({
               <div className="shell-crumb">{ctx.title}</div>
               <div className="shell-sub">{ctx.sub}</div>
             </div>
-            <div className="row">
+            <div className="shell-header-actions">
+              <button className="shell-search-button" onClick={onQuickSwitcher} aria-label="Open quick switcher">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 5 5" /></svg>
+                <span>Search</span>
+                <kbd>⌘K</kbd>
+              </button>
               {topRight}
               <Button variant="primary" small onClick={onNewRequest}>
                 + New Request
@@ -122,7 +130,7 @@ export default function AppShell({
           </nav>
         </header>
 
-        <main className="shell-content">{children}</main>
+        <main key={activeView} className="shell-content page-transition">{children}</main>
       </div>
     </div>
   );

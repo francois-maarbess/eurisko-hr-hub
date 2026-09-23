@@ -54,6 +54,7 @@ export default function Dashboard({ token, userName }: { token: string; userName
   const [mine, setMine] = useState<MiniTicket[]>([]);
   const [breached, setBreached] = useState<MiniTicket[]>([]);
   const [report, setReport] = useState<Report | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,12 +72,27 @@ export default function Dashboard({ token, userName }: { token: string; userName
         if (reportRes.ok) setReport(await reportRes.json());
       } catch {
         // Dashboard is decorative; the queue below is the source of truth.
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [token]);
+
+  if (loading) {
+    return (
+      <div className="card dashboard-card dashboard-loading" aria-label="Loading dashboard">
+        <div className="skeleton-line skeleton-title" />
+        <div className="skeleton-line skeleton-subtitle" />
+        <div className="dashboard-stats">
+          {[0, 1, 2, 3].map((i) => <div key={i} className="dashboard-stat dashboard-stat-skeleton"><div className="skeleton-line" /><div className="skeleton-line skeleton-number" /></div>)}
+        </div>
+        <div className="dashboard-chart-skeleton"><div className="skeleton-line" /><div className="skeleton-line" /><div className="skeleton-line" /></div>
+      </div>
+    );
+  }
 
   const now = Date.now();
   const isOrg = report !== null;
@@ -180,7 +196,13 @@ export default function Dashboard({ token, userName }: { token: string; userName
             {isOrg ? 'ORG OPEN · ON TRACK VS OVERDUE' : 'MY OPEN · ON TRACK VS OVERDUE'}
           </div>
           {openCount === 0 ? (
-            <p className="muted">Nothing open — enjoy the calm.</p>
+            <div className="dashboard-empty">
+              <span className="dashboard-empty-illustration" aria-hidden="true">
+                <svg viewBox="0 0 72 64" focusable="false"><path d="M9 18h19l5 7h30v29H9z" /><path d="M9 18v-6h20l4 6M25 38h22M25 46h13" /></svg>
+              </span>
+              <strong>Nothing needs attention</strong>
+              <span className="muted">There are no open requests in this view.</span>
+            </div>
           ) : (
             <ResponsiveContainer width="100%" height={150}>
               <PieChart>

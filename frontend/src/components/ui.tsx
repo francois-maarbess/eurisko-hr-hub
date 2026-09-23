@@ -77,7 +77,12 @@ export function ErrorBox({ message }: { message: string }) {
 export function EmptyState({ message }: { message: string }) {
   return (
     <div className="empty-state" role="status">
-      <span className="empty-state-mark" aria-hidden="true">○</span>
+      <span className="empty-state-illustration" aria-hidden="true">
+        <svg viewBox="0 0 64 64" focusable="false">
+          <path d="M10 24h16l5 6h23v22H10z" />
+          <path d="M10 24v-6h17l4 6M20 41h24M20 47h15" />
+        </svg>
+      </span>
       <p>{message}</p>
     </div>
   );

@@ -8,6 +8,7 @@ import ErrorBoundary from './ErrorBoundary';
 import Dashboard from './Dashboard';
 import AppShell, { type AppView } from './AppShell';
 import { Button } from './components/ui';
+import QuickSwitcher, { type QuickSwitcherItem } from './components/QuickSwitcher';
 import { apiUrl } from './api';
 
 interface User {
@@ -30,6 +31,14 @@ interface InboxItem {
   createdAt: string;
 }
 
+interface QuickTicket {
+  id: string;
+  title: string;
+  status: string;
+  view: AppView;
+  claimant?: { displayName: string } | null;
+}
+
 export default function App() {
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -43,6 +52,8 @@ export default function App() {
   const [inbox, setInbox] = useState<InboxItem[]>([]);
   const [unread, setUnread] = useState(0);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
+  const [quickTickets, setQuickTickets] = useState<QuickTicket[]>([]);
 
   const handleLogin = (accessToken: string, userData: User) => {
     setToken(accessToken);
@@ -64,6 +75,7 @@ export default function App() {
     setInbox([]);
     setUnread(0);
     setInboxOpen(false);
+    setQuickSwitcherOpen(false);
     setFocusTicketId(null);
     setMemberships([]);
     setActiveView('overview');
@@ -105,6 +117,30 @@ export default function App() {
     if (focusTicketId) window.scrollTo({ top: 0 });
   }, [focusTicketId]);
 
+  useEffect(() => {
+    if (!token) {
+      setQuickTickets([]);
+      return;
+    }
+    const queueAvailable = user?.platformRole === 'SYSTEM_ADMIN' || memberships.length > 0;
+    const sources: { view: AppView; url: string }[] = [{ view: 'my', url: '/requests?view=mine' }];
+    if (queueAvailable) sources.push({ view: 'queue', url: '/requests?view=queue' });
+    Promise.all(
+      sources.map(async (source) => {
+        const response = await fetch(apiUrl(source.url), { headers: { Authorization: `Bearer ${token}` } });
+        if (!response.ok) return [] as QuickTicket[];
+        const data = await response.json();
+        return Array.isArray(data) ? data.slice(0, 12).map((ticket) => ({ ...ticket, view: source.view })) : [];
+      }),
+    )
+      .then((groups) => {
+        const unique = new Map<string, QuickTicket>();
+        groups.flat().forEach((ticket) => unique.set(ticket.id, ticket));
+        setQuickTickets(Array.from(unique.values()));
+      })
+      .catch(() => setQuickTickets([]));
+  }, [token, memberships.length, user?.platformRole, refreshKey]);
+
   // Power-user keys: c = new request, ? = shortcut help, Escape = back/close.
   // Typing inside inputs is never hijacked.
   useEffect(() => {
@@ -112,6 +148,11 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) return;
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setQuickSwitcherOpen(true);
+        return;
+      }
       if (e.key === '?') {
         e.preventDefault();
         setShortcutsOpen((o) => !o);
@@ -122,6 +163,7 @@ export default function App() {
       } else if (e.key === 'Escape') {
         setShortcutsOpen(false);
         setInboxOpen(false);
+        setQuickSwitcherOpen(false);
         if (focusTicketId) {
           setFocusTicketId(null);
           setActiveView(returnView);
@@ -139,6 +181,23 @@ export default function App() {
   const isAdmin = user.platformRole === 'SYSTEM_ADMIN';
   const isStaff = isAdmin || memberships.length > 0;
   const managerKey = `${activeView}-${refreshKey}`;
+
+  const switcherItems: QuickSwitcherItem[] = [
+    { id: 'overview', label: 'Overview', description: 'See workload, SLA health, and attention items.', group: 'Pages', onSelect: () => setActiveView('overview') },
+    { id: 'my', label: 'My Requests', description: 'Review requests you submitted.', group: 'Pages', onSelect: () => setActiveView('my') },
+    ...(isStaff ? [{ id: 'queue', label: 'Department Queue', description: 'Work your department queue in list or Kanban view.', group: 'Pages', onSelect: () => setActiveView('queue') }] : []),
+    { id: 'new', label: 'New Request', description: 'Create and route a service request.', group: 'Actions', onSelect: () => setActiveView('new') },
+    ...(isAdmin ? [{ id: 'admin', label: 'Administration', description: 'Manage users, departments, and request types.', group: 'Pages', onSelect: () => setActiveView('admin') }] : []),
+    { id: 'security', label: 'Security', description: 'Manage two-factor authentication.', group: 'Pages', onSelect: () => setActiveView('security') },
+    ...quickTickets.map((ticket) => ({
+      id: `ticket-${ticket.id}`,
+      label: ticket.title,
+      description: `${ticket.status.replace('_', ' ')}${ticket.claimant ? ` · Claimed by ${ticket.claimant.displayName}` : ''}`,
+      group: 'Requests',
+      keywords: ticket.view,
+      onSelect: () => openTicket(ticket.id),
+    })),
+  ];
 
   const notifButton = (
     <button
@@ -160,6 +219,7 @@ export default function App() {
 
   return (
     <>
+      {quickSwitcherOpen && <QuickSwitcher items={switcherItems} onClose={() => setQuickSwitcherOpen(false)} />}
       {shortcutsOpen && (
         <>
           <div className="modal-backdrop" onClick={() => setShortcutsOpen(false)} />
@@ -233,6 +293,7 @@ export default function App() {
           setFocusTicketId(null);
           setActiveView('new');
         }}
+        onQuickSwitcher={() => setQuickSwitcherOpen(true)}
         onShortcuts={() => setShortcutsOpen(true)}
         onSignOut={handleLogout}
         topRight={notifButton}
