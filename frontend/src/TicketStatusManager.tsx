@@ -936,11 +936,39 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
               </button>
               {activityOpen[ticket.id] && (
                 <div style={{ marginTop: '0.5rem', display: 'grid', gap: '0.4rem', background: '#f8fafc', padding: '0.65rem 0.85rem', borderRadius: '8px' }}>
-                  {(activityCache[ticket.id] || []).map((a) => {
+                  {(activityCache[ticket.id] || []).map((a, idx, arr) => {
                     const isStatus = a.label.startsWith('Status changed:');
                     const isReroute = a.label.startsWith('Re-routed');
+                    const isNote = a.label === 'Internal note added';
+                    const isCreated = a.label === 'Ticket created';
+                    const isRated = a.label.startsWith('Rated');
+                    const newStatus = isStatus ? a.label.replace('Status changed: ', '').split(' → ')[1] : '';
+                    const nodeColor = isCreated
+                      ? 'var(--navy)'
+                      : newStatus === 'COMPLETED' || isRated
+                        ? '#15803d'
+                        : newStatus === 'REJECTED'
+                          ? 'var(--danger)'
+                          : isNote
+                            ? '#7c3aed'
+                            : isReroute
+                              ? '#b45309'
+                              : isStatus
+                                ? 'var(--blue)'
+                                : 'var(--muted)';
+                    const isLast = idx === arr.length - 1;
                     return (
-                      <div key={a.id} style={{ fontSize: '0.85rem', borderLeft: '3px solid var(--blue-border)', paddingLeft: '0.6rem' }}>
+                      <div key={a.id} style={{ position: 'relative', paddingLeft: '1.35rem', paddingBottom: isLast ? 0 : '0.6rem', fontSize: '0.85rem' }}>
+                        {!isLast && (
+                          <span style={{ position: 'absolute', left: '5px', top: '16px', bottom: '-4px', width: '2px', background: 'var(--border)' }} />
+                        )}
+                        <span
+                          style={{
+                            position: 'absolute', left: 0, top: '3px', width: '12px', height: '12px',
+                            borderRadius: '999px', background: nodeColor, border: '2px solid #fff',
+                            boxShadow: '0 0 0 1px var(--border)',
+                          }}
+                        />
                         <div style={{ fontWeight: 700 }}>
                           {isStatus ? (
                             <span>
