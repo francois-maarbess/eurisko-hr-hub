@@ -12,6 +12,7 @@ export interface BoardTicket {
   claimedById?: string | null;
   claimant?: { displayName: string };
   department?: { code: string };
+  slaDueAt?: string | null;
 }
 
 interface KanbanBoardProps {
@@ -35,9 +36,10 @@ const PRIORITY_COLORS: Record<string, { background: string; color: string }> = {
   URGENT: { background: 'var(--danger-bg)', color: 'var(--danger)' },
 };
 
-function DraggableCard({ ticket, onOpen }: { ticket: BoardTicket; onOpen: (id: string) => void }) {
+function DraggableCard({ ticket, onOpen, quiet }: { ticket: BoardTicket; onOpen: (id: string) => void; quiet?: boolean }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: ticket.id });
   const pc = PRIORITY_COLORS[ticket.priority] || PRIORITY_COLORS.STANDARD;
+  const overdue = ticket.status !== 'COMPLETED' && ticket.slaDueAt != null && new Date(ticket.slaDueAt).getTime() < Date.now();
   return (
     <div
       ref={setNodeRef}
@@ -46,6 +48,7 @@ function DraggableCard({ ticket, onOpen }: { ticket: BoardTicket; onOpen: (id: s
       className={`board-card${isDragging ? ' dragging' : ''}`}
       style={{
         transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+        opacity: isDragging ? 0.45 : quiet ? 0.72 : 1,
       }}
     >
       <button
@@ -60,6 +63,11 @@ function DraggableCard({ ticket, onOpen }: { ticket: BoardTicket; onOpen: (id: s
         <Badge bg={pc.background} color={pc.color}>
           {formatEnum(ticket.priority)}
         </Badge>
+        {overdue && (
+          <Badge bg="var(--danger-bg)" color="var(--danger)">
+            Overdue
+          </Badge>
+        )}
         {ticket.department && (
           <span className="muted board-column-count">{ticket.department.code}</span>
         )}
@@ -92,7 +100,7 @@ function Column({ status, title, hint, tickets, onOpen }: {
         <div className="muted board-column-hint">{hint}</div>
       </div>
       {tickets.map((t) => (
-        <DraggableCard key={t.id} ticket={t} onOpen={onOpen} />
+        <DraggableCard key={t.id} ticket={t} onOpen={onOpen} quiet={status === 'COMPLETED'} />
       ))}
       {tickets.length === 0 && (
         <span className="muted board-empty">Drop tickets here</span>
