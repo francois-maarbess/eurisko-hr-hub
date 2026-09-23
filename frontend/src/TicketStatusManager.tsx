@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Badge, Button, EmptyState, ErrorBox, Field, Tabs, formatEnum } from './components/ui';
 import { apiUrl } from './api';
+import KanbanBoard, { type BoardStatus, type BoardTicket } from './KanbanBoard';
 
 type TicketStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'REJECTED';
 type TicketPriority = 'LOW' | 'STANDARD' | 'URGENT';
@@ -195,6 +196,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
   const [filterHasDocs, setFilterHasDocs] = useState(false);
   const [filterHasNotes, setFilterHasNotes] = useState(false);
   const [overdueOnly, setOverdueOnly] = useState(false);
+  const [boardView, setBoardView] = useState(false);
 
   // Per-ticket form inputs
   const [resolutionInputs, setResolutionInputs] = useState<Record<string, string>>({});
@@ -392,8 +394,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
     );
   };
 
-  const handleReject = async (ticket: TicketState) => {
-    const reason = (rejectionInputs[ticket.id] ?? '').trim();
+  const handleReject = async (ticket: TicketState) => {    const reason = (rejectionInputs[ticket.id] ?? '').trim();
     if (!reason) {
       setCardErrors((current) => ({ ...current, [ticket.id]: 'A rejection reason is required.' }));
       return;
@@ -410,6 +411,66 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
       { status: 'REJECTED', rejectionReason: reason },
     );
     setShowReject((c) => ({ ...c, [ticket.id]: false }));
+  };
+
+  // Kanban board: legality mirrors the list-view buttons exactly. Null =
+  // the drop may proceed; a string is the refusal reason shown as a toast.
+  const fullTicket = (b: BoardTicket): TicketState =>
+    tickets.find((t) => t.id === b.id) ?? (b as unknown as TicketState);
+
+  const canDropOnBoard = (b: BoardTicket, target: BoardStatus): string | null => {
+    const t = fullTicket(b);
+    const isOwner = t.employeeId === userId;
+    const inDept = memberDeptIds.has(t.departmentId);
+    if (['COMPLETED', 'CANCELLED', 'REJECTED'].includes(t.status)) {
+      return 'Finished tickets cannot move on the board.';
+    }
+    if (target === 'PENDING') return 'Tickets cannot move backwards — use the list view actions.';
+    if (target === 'IN_PROGRESS') {
+      if (isOwner) return 'You cannot claim your own request.';
+      if (t.claimedById && t.claimedById !== userId) return 'Already claimed by another agent.';
+      if (!(inDept || isAdmin)) return 'Only department staff can take this ticket.';
+      return null;
+    }
+    // COMPLETED from IN_PROGRESS.
+    if (t.status !== 'IN_PROGRESS') return 'Move the ticket through In Progress first.';
+    if (isOwner) return 'You cannot resolve your own request.';
+    if (!(inDept || isAdmin)) return 'Only department staff can complete this ticket.';
+    return null;
+  };
+
+  const boardDropProgress = (b: BoardTicket) => {
+    const t = fullTicket(b);
+    if (!t.claimedById) {
+      handleClaim(t);
+      return;
+    }
+    mutate(
+      t,
+      () =>
+        fetch(apiUrl(`/requests/${t.id}/status`), {
+          method: 'PATCH',
+          headers: authHeaders,
+          body: JSON.stringify({ status: 'IN_PROGRESS' }),
+        }),
+      'Moved to In Progress.',
+      { status: 'IN_PROGRESS' },
+    );
+  };
+
+  const boardDropComplete = (b: BoardTicket, note: string) => {
+    const t = fullTicket(b);
+    mutate(
+      t,
+      () =>
+        fetch(apiUrl(`/requests/${t.id}/status`), {
+          method: 'PATCH',
+          headers: authHeaders,
+          body: JSON.stringify({ status: 'COMPLETED', resolutionNote: note }),
+        }),
+      'Marked as completed.',
+      { status: 'COMPLETED', resolutionNote: note },
+    );
   };
 
   // Attachments handlers
@@ -714,6 +775,22 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
             >
               {sortOldest ? 'Oldest first ↑' : 'Newest first ↓'}
             </button>
+            <button
+              onClick={() => setBoardView((v) => !v)}
+              title={boardView ? 'Back to the list view' : 'Drag tickets across a board'}
+              style={{
+                border: '1px solid var(--border)',
+                background: boardView ? 'var(--blue-pale)' : '#fff',
+                borderRadius: '10px',
+                padding: '0.65rem 0.8rem',
+                cursor: 'pointer',
+                fontSize: '0.85rem',
+                fontWeight: 700,
+                color: boardView ? 'var(--blue)' : 'var(--muted)',
+              }}
+            >
+              {boardView ? '☰ List view' : '📋 Board view'}
+            </button>
           </div>
 
           <div className="row" style={{ gap: '0.4rem', flexWrap: 'wrap', marginTop: '-0.35rem' }}>
@@ -837,7 +914,16 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
         />
       )}
 
-      {visibleTickets.map((ticket) => {
+      {boardView && !focusTicketId ? (
+        <KanbanBoard
+          tickets={visibleTickets}
+          canDrop={canDropOnBoard}
+          onDropProgress={boardDropProgress}
+          onDropComplete={boardDropComplete}
+          onOpenTicket={(id) => onOpenTicket && onOpenTicket(id)}
+        />
+      ) : (
+      visibleTickets.map((ticket) => {
         const isOwner = ticket.employeeId === userId;
         const inMyDept = memberDeptIds.has(ticket.departmentId);
         const isTerminalCard = ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(ticket.status);
@@ -1369,7 +1455,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
             )}
           </div>
         );
-      })}
+      }))}
     </div>
   );
 }
