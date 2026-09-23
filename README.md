@@ -6,7 +6,7 @@
 
 An internal service hub for submitting, routing, tracking, and resolving employee requests.
 
-**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth with throttling + helmet · 79 automated tests.
+**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 80 automated tests.
 
 ## Demo (2 minutes)
 
@@ -74,18 +74,19 @@ cd frontend && npm run dev
    - `bob@acme.com` — IT Agent (claims and resolves tickets in the IT queue)
    *(Admins can create additional agents and employees anytime directly in the UI via the Administration Panel)*
 3. Create a request (or draft one with ✨ AI — **no API key needed**), manage it as admin/agent, resolve it
+4. Optional: enable **two-factor authentication** — scroll to the 🔐 card, scan the QR with any authenticator app, verify the code. Next sign-in asks for password + code (backup codes cover a lost phone).
 
 ## Running Tests
 
 ```bash
-npm test      # 79 tests (all deterministic, SQLite)
+npm test      # 80 tests (all deterministic, SQLite)
 npm run eval:ai  # 8 AI eval cases (offline, no key, no DB)
 ```
 
-79 tests covering:
+80 tests covering:
 - **Unit**: Status transitions (10) + AI extractor/validation/fallback/sensitive/off-topic (10) + SLA fallback (1) + password accounts (6) + purge & duplicate scoring (3)
 - **Integration**: Prisma ↔ SQLite database lifecycle (3)
-- **E2E (46)**: Full HTTP flow with auth, scoped views, create, claim, complete, documents lifecycle, notifications, duplicates, report, manager memberships, owner-cancel/admin-claim rules, validation, regression + AI draft endpoint + catalog + admin user lifecycle + SLA deadlines + breach center + rate limiting
+- **E2E (47)**: Full HTTP flow with auth, scoped views, create, claim, complete, documents lifecycle, notifications, duplicates, report, manager memberships, owner-cancel/admin-claim rules, validation, regression + AI draft endpoint + catalog + admin user lifecycle + SLA deadlines + breach center + rate limiting + TOTP two-factor
 
 ## AI-Assisted Intake (Week 4)
 

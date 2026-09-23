@@ -11,6 +11,17 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState('');
+
+  const finishLogin = async (accessToken: string) => {
+    // Get user profile
+    const meRes = await fetch(apiUrl('/auth/me'), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const user = await meRes.json();
+    onLogin(accessToken, user);
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,13 +41,40 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         return;
       }
 
-      // Get user profile
-      const meRes = await fetch(apiUrl('/auth/me'), {
-        headers: { Authorization: `Bearer ${data.accessToken}` },
-      });
-      const user = await meRes.json();
+      // Second factor required: hold the password session, ask for the code.
+      if (data.mfaRequired) {
+        setMfaToken(data.mfaToken);
+        setMfaCode('');
+        return;
+      }
 
-      onLogin(data.accessToken, user);
+      await finishLogin(data.accessToken);
+    } catch {
+      setError('Cannot reach the server');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMfaChallenge = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      const res = await fetch(apiUrl('/auth/mfa/challenge'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mfaToken, code: mfaCode }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        setError(data.error || data.message || 'Invalid authenticator code');
+        return;
+      }
+
+      await finishLogin(data.accessToken);
     } catch {
       setError('Cannot reach the server');
     } finally {
@@ -53,6 +91,29 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         </div>
         <p className="card-sub">Sign in with your company email</p>
 
+        {mfaToken ? (
+          <form onSubmit={handleMfaChallenge}>
+            <div className="field">
+              <label>Authenticator code</label>
+              <input
+                className="input"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value)}
+                placeholder="6-digit code"
+                required
+              />
+            </div>
+            <Button type="submit" block disabled={loading}>
+              {loading ? 'Verifying…' : 'Verify'}
+            </Button>
+            <p className="muted" style={{ fontSize: '0.8rem', marginTop: '0.5rem' }}>
+              Open your authenticator app — or use a saved backup code.
+            </p>
+          </form>
+        ) : (
         <form onSubmit={handleLogin}>
           <div className="field">
             <label>Email</label>
@@ -79,6 +140,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             {loading ? 'Signing in...' : 'Sign In'}
           </Button>
         </form>
+        )}
 
         {error && (
           <div style={{ marginTop: '1rem' }}>

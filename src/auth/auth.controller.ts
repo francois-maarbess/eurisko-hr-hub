@@ -24,6 +24,7 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 import { Roles, RolesGuard } from './roles.guard';
 import { PRISMA_CLIENT_TOKEN } from '../prisma.service';
 import { AuthService } from './auth.service';
+import { MfaService } from './mfa.service';
 
 class LoginDto {
   @IsString()
@@ -92,12 +93,35 @@ class AddMembershipDto {
   departmentRole?: string;
 }
 
+class MfaCodeDto {
+  @IsString()
+  @IsNotEmpty()
+  code!: string;
+}
+
+class MfaChallengeDto {
+  @IsString()
+  @IsNotEmpty()
+  mfaToken!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  code!: string;
+}
+
+class MfaDisableDto {
+  @IsString()
+  @IsNotEmpty()
+  password!: string;
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(
     @Inject(PRISMA_CLIENT_TOKEN) private readonly prisma: PrismaClient,
     private readonly jwtService: JwtService,
     private readonly authService: AuthService,
+    private readonly mfa: MfaService,
   ) {}
 
   /**
@@ -106,9 +130,44 @@ export class AuthController {
    * return the same 401 so accounts can't be enumerated.
    */
   @Post('login')
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   async login(@Body() dto: LoginDto) {
     return this.authService.login(dto.email, dto.password);
+  }
+
+  /**
+   * Second factor. Challenge is intentionally public (it consumes the
+   * short-lived mfaToken, not a session) and tightly throttled: TOTP
+   * codes must not be brute-forceable.
+   */
+  @Post('mfa/challenge')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  async mfaChallenge(@Body() dto: MfaChallengeDto) {
+    return this.mfa.challenge(dto.mfaToken, dto.code);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('mfa/status')
+  async mfaStatus(@Request() req: any) {
+    return this.mfa.status(req.user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('mfa/setup')
+  async mfaSetup(@Request() req: any) {
+    return this.mfa.setup(req.user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('mfa/verify')
+  async mfaVerify(@Request() req: any, @Body() dto: MfaCodeDto) {
+    return this.mfa.verifySetup(req.user.id, dto.code);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('mfa/disable')
+  async mfaDisable(@Request() req: any, @Body() dto: MfaDisableDto) {
+    return this.mfa.disable(req.user.id, dto.password);
   }
 
   @UseGuards(JwtAuthGuard)

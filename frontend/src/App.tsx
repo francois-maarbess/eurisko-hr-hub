@@ -3,6 +3,7 @@ import LoginPage from './LoginPage';
 import CreateRequestForm from './CreateRequestForm';
 import TicketStatusManager from './TicketStatusManager';
 import AdminPanel from './AdminPanel';
+import MfaSettings from './MfaSettings';
 import { Button } from './components/ui';
 import { apiUrl } from './api';
 
@@ -198,6 +199,7 @@ export default function App() {
               platformRole={user.platformRole}
               onOpenTicket={(id) => setFocusTicketId(id)}
             />
+            <MfaSettings token={token} />
           </>
         )}
       </main>

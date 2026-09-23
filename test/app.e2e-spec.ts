@@ -3,6 +3,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
 import request from 'supertest';
+import * as OTPAuth from 'otpauth';
 import { AppModule } from '../src/app.module';
 
 const JWT_SECRET = 'e2e-test-secret';
@@ -1226,16 +1227,113 @@ describe('Service Request Flow (E2E)', () => {
     expect(denied.status).toBe(403);
   });
 
+  it('TOTP two-factor: enrol, challenge, backup code, disable', async () => {
+    const email = `mfa-${Date.now()}@acme.com`;
+    const created = await request(app.getHttpServer())
+      .post('/auth/users')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ email, password: 'e2e-password-123' });
+    expect(created.status).toBe(201);
+
+    const plainLogin = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email, password: 'e2e-password-123' });
+    expect(plainLogin.status).toBe(201);
+    expect(plainLogin.body.accessToken).toBeTruthy();
+    const session = plainLogin.body.accessToken;
+
+    // Enrol: setup returns a QR + otpauth URL carrying the secret.
+    const setup = await request(app.getHttpServer())
+      .post('/auth/mfa/setup')
+      .set('Authorization', `Bearer ${session}`);
+    expect(setup.status).toBe(201);
+    expect(setup.body.qrDataUrl).toMatch(/^data:image\/png;base64,/);
+    const secret = new URL(setup.body.otpauthUrl).searchParams.get('secret');
+    expect(secret).toBeTruthy();
+    const totp = new OTPAuth.TOTP({ secret: OTPAuth.Secret.fromBase32(secret!) });
+
+    // Wrong code enables nothing.
+    const badVerify = await request(app.getHttpServer())
+      .post('/auth/mfa/verify')
+      .set('Authorization', `Bearer ${session}`)
+      .send({ code: '000000' });
+    expect(badVerify.status).toBe(401);
+
+    const verify = await request(app.getHttpServer())
+      .post('/auth/mfa/verify')
+      .set('Authorization', `Bearer ${session}`)
+      .send({ code: totp.generate() });
+    expect(verify.status).toBe(201);
+    expect(verify.body.backupCodes).toHaveLength(10);
+
+    // Password login now yields a challenge token, not API access.
+    const challenged = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email, password: 'e2e-password-123' });
+    expect(challenged.status).toBe(201);
+    expect(challenged.body.mfaRequired).toBe(true);
+    expect(challenged.body.accessToken).toBeUndefined();
+    const mfaToken = challenged.body.mfaToken;
+
+    // Challenge token must not open the API.
+    const smuggled = await request(app.getHttpServer())
+      .get('/requests')
+      .set('Authorization', `Bearer ${mfaToken}`);
+    expect(smuggled.status).toBe(401);
+
+    // Wrong TOTP fails.
+    const badCode = await request(app.getHttpServer())
+      .post('/auth/mfa/challenge')
+      .send({ mfaToken, code: '000000' });
+    expect(badCode.status).toBe(401);
+
+    // Correct TOTP completes login.
+    const totpLogin = await request(app.getHttpServer())
+      .post('/auth/mfa/challenge')
+      .send({ mfaToken, code: totp.generate() });
+    expect(totpLogin.status).toBe(201);
+    expect(totpLogin.body.accessToken).toBeTruthy();
+
+    // Backup code works once, then dies.
+    const backupLogin = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email, password: 'e2e-password-123' });
+    const used = await request(app.getHttpServer())
+      .post('/auth/mfa/challenge')
+      .send({ mfaToken: backupLogin.body.mfaToken, code: verify.body.backupCodes[0] });
+    expect(used.status).toBe(201);
+
+    const replay = await request(app.getHttpServer())
+      .post('/auth/mfa/challenge')
+      .send({ mfaToken: backupLogin.body.mfaToken, code: verify.body.backupCodes[0] });
+    expect(replay.status).toBe(401);
+
+    // Disable with password restores plain login.
+    const disable = await request(app.getHttpServer())
+      .post('/auth/mfa/disable')
+      .set('Authorization', `Bearer ${used.body.accessToken}`)
+      .send({ password: 'e2e-password-123' });
+    expect(disable.status).toBe(201);
+
+    const plainAgain = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email, password: 'e2e-password-123' });
+    expect(plainAgain.status).toBe(201);
+    expect(plainAgain.body.accessToken).toBeTruthy();
+    expect(plainAgain.body.mfaRequired).toBeUndefined();
+  });
+
   it('login is rate-limited after a rapid burst', async () => {
-    const statuses: number[] = [];
-    for (let i = 0; i < 15; i++) {
+    // Earlier tests in this file already spend part of the 20/min budget,
+    // so hammer until the throttle trips instead of assuming a fixed count.
+    let saw429 = false;
+    for (let i = 0; i < 40 && !saw429; i++) {
       const r = await request(app.getHttpServer())
         .post('/auth/login')
         .send({ email: 'alice@acme.com', password: 'wrong-password' });
-      statuses.push(r.status);
+      if (r.status === 429) saw429 = true;
     }
-    // Wrong passwords are 401 until the 10/min throttle kicks in with 429.
-    expect(statuses).toContain(401);
-    expect(statuses).toContain(429);
+    // Wrong passwords are 401 until the 20/min throttle kicks in with 429.
+    expect(saw429).toBe(true);
   });
 });

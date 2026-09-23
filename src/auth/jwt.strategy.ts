@@ -7,6 +7,7 @@ export interface JwtPayload {
   email: string;
   name: string;
   role: string;
+  purpose?: string;
 }
 
 @Injectable()
@@ -22,6 +23,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: JwtPayload) {
     if (!payload.sub || !payload.email) {
       throw new UnauthorizedException('Invalid token payload');
+    }
+    // Short-lived MFA challenge tokens authorize nothing but the challenge.
+    if (payload.purpose === 'mfa') {
+      throw new UnauthorizedException('Verification token cannot access the API');
     }
     return {
       id: payload.sub,

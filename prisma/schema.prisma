@@ -14,6 +14,9 @@ model User {
   passwordHash String?  // bcrypt hash; null = account not yet activated with a password
   platformRole String   @default("EMPLOYEE") // EMPLOYEE | SYSTEM_ADMIN
   active       Boolean  @default(true)
+  mfaSecret    String?  // base32 TOTP secret; set at enrolment, live after verify
+  mfaEnabled   Boolean  @default(false)
+  mfaBackupCodes String? // JSON array of sha256 hashes, single-use
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

@@ -11,6 +11,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import { PRISMA_CLIENT_TOKEN } from '../prisma.service';
+import { MfaService } from './mfa.service';
 
 const PLATFORM_ROLES = ['EMPLOYEE', 'SYSTEM_ADMIN'];
 const DEPARTMENT_ROLES = ['AGENT', 'MANAGER'];
@@ -34,9 +35,14 @@ export class AuthService {
   constructor(
     @Inject(PRISMA_CLIENT_TOKEN) private readonly prisma: PrismaClient,
     private readonly jwtService: JwtService,
+    // Optional so unit specs can construct the service without the MFA module.
+    private readonly mfa?: MfaService,
   ) {}
 
-  async login(email: string, password: string) {
+  async login(
+    email: string,
+    password: string,
+  ): Promise<{ accessToken?: string; mfaRequired?: true; mfaToken?: string }> {
     const normalized = (email || '').trim().toLowerCase();
     const user = await this.prisma.user.findUnique({ where: { email: normalized } });
     if (!user || !user.active) {
@@ -48,6 +54,11 @@ export class AuthService {
     const ok = await bcrypt.compare(password || '', user.passwordHash);
     if (!ok) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+    // Second factor: password OK but account has MFA — hand out a
+    // short-lived challenge token instead of API credentials.
+    if ((user as any).mfaEnabled && this.mfa) {
+      return { mfaRequired: true as const, mfaToken: this.mfa.issueMfaToken(user) };
     }
     return this.sign(user);
   }
