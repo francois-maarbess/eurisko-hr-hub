@@ -5,6 +5,7 @@ import TicketStatusManager from './TicketStatusManager';
 import AdminPanel from './AdminPanel';
 import MfaSettings from './MfaSettings';
 import ErrorBoundary from './ErrorBoundary';
+import Dashboard from './Dashboard';
 import { Button } from './components/ui';
 import { apiUrl } from './api';
 
@@ -181,6 +182,9 @@ export default function App() {
           </ErrorBoundary>
         ) : (
           <>
+            <ErrorBoundary section="dashboard">
+              <Dashboard token={token} userName={user.name} />
+            </ErrorBoundary>
             <CreateRequestForm
               token={token}
               catalogVersion={catalogVersion}
