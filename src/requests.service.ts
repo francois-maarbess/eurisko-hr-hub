@@ -71,12 +71,12 @@ export class RequestsService {
    * - mine (default): only requests I created. Nobody sees other people's
    *   tickets unless they have a reason to.
    * - queue: open tickets in MY departments (agents), everything open (admin).
-   * - claimed: open tickets claimed by me.
+   * - claimed: in-progress or completed tickets claimed by me.
    */
   async findAll(userId: string, view?: string) {
     if (view === 'claimed') {
       return this.prisma.request.findMany({
-        where: { claimedById: userId, ...this.openWhere() },
+        where: { claimedById: userId, status: { in: ['IN_PROGRESS', 'COMPLETED'] } },
         include: this.fullInclude,
         orderBy: { createdAt: 'desc' },
       });
@@ -315,6 +315,10 @@ export class RequestsService {
     if (dto.status === 'COMPLETED' || dto.status === 'REJECTED') {
       if (request.employeeId === userId) {
         throw new ConflictException('You cannot resolve your own request');
+      }
+
+      if (dto.status === 'COMPLETED' && request.claimedById !== userId) {
+        throw new ConflictException('Only the agent who claimed this request can complete it');
       }
 
       // Must be an active department member — or a system administrator,

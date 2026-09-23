@@ -490,6 +490,7 @@ a:focus-visible {
 .toolbar-button.active { background: var(--blue-pale); color: var(--blue); }
 .view-switcher { display: inline-flex; gap: 0.25rem; padding: 0.2rem; border: 1px solid var(--border); border-radius: 10px; background: #f8fafc; }
 .view-switcher .toolbar-button { border-color: transparent; padding: 0.45rem 0.7rem; }
+.queue-view-control { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.65rem 0.75rem; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
 .quick-filters { gap: 0.4rem; margin-top: -0.35rem; }
 .filter-button { border: 1px solid var(--border); background: #fff; color: inherit; border-radius: 999px; padding: 0.22rem 0.6rem; font: inherit; font-size: 0.76rem; font-weight: 700; cursor: pointer; }
 .filter-button.active { border-color: var(--blue); background: var(--blue-pale); color: var(--blue); }

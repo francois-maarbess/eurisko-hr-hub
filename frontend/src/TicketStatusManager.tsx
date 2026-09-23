@@ -436,6 +436,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
     // COMPLETED from IN_PROGRESS.
     if (t.status !== 'IN_PROGRESS') return 'Move the ticket through In Progress first.';
     if (isOwner) return 'You cannot resolve your own request.';
+    if (t.claimedById !== userId) return 'Only the agent who claimed this ticket can complete it.';
     if (!(inDept || isAdmin)) return 'Only department staff can complete this ticket.';
     return null;
   };
@@ -736,6 +737,28 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
         <>
           <Tabs options={tabOptions} value={view} onChange={(v) => setView(v as View)} />
 
+          {initialView !== 'mine' && (
+            <div className="queue-view-control">
+              <span className="muted">Queue view</span>
+              <div className="view-switcher" role="group" aria-label="Queue view">
+                <button
+                  className={`toolbar-button${!boardView ? ' active' : ''}`}
+                  onClick={() => setBoardView(false)}
+                  aria-pressed={!boardView}
+                >
+                  List
+                </button>
+                <button
+                  className={`toolbar-button${boardView ? ' active' : ''}`}
+                  onClick={() => setBoardView(true)}
+                  aria-pressed={boardView}
+                >
+                  Kanban
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="toolbar">
             <input
               className="input toolbar-search"
@@ -762,25 +785,6 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
             >
               {sortOldest ? 'Oldest first ↑' : 'Newest first ↓'}
             </button>
-            {initialView !== 'mine' && (
-              <div className="view-switcher" role="group" aria-label="Queue view">
-                <button
-                  className={`toolbar-button${!boardView ? ' active' : ''}`}
-                  onClick={() => setBoardView(false)}
-                  aria-pressed={!boardView}
-                >
-                  List
-                </button>
-                <button
-                  className={`toolbar-button${boardView ? ' active' : ''}`}
-                  onClick={() => setBoardView(true)}
-                  aria-pressed={boardView}
-                  title="Drag tickets across a board"
-                >
-                  Kanban
-                </button>
-              </div>
-            )}
           </div>
 
           <div className="row quick-filters">
@@ -863,6 +867,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
       {boardView && !focusTicketId ? (
         <KanbanBoard
           tickets={visibleTickets}
+          hidePending={view === 'claimed'}
           canDrop={canDropOnBoard}
           onDropProgress={boardDropProgress}
           onDropComplete={boardDropComplete}
@@ -875,7 +880,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
         const isTerminalCard = ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(ticket.status);
         const canClaim = (inMyDept || isAdmin) && ticket.status === 'PENDING' && !ticket.claimedById && !isOwner;
         const canCancel = isOwner && ticket.status === 'PENDING';
-        const canWork = (inMyDept || isAdmin) && !isOwner && ticket.status === 'IN_PROGRESS';
+        const canWork = (inMyDept || isAdmin) && !isOwner && ticket.status === 'IN_PROGRESS' && ticket.claimedById === userId;
         const isManager = isAdmin || memberships.some((m) => m.departmentId === ticket.departmentId && m.departmentRole === 'MANAGER');
         const canReroute = (isManager || isAdmin) && !isTerminalCard;
         const canRate = isOwner && ticket.status === 'COMPLETED' && ticket.rating == null;
@@ -946,7 +951,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
 
             {ticket.claimant && (
               <p className="muted" style={{ fontSize: '0.85rem', margin: '0.25rem 0' }}>
-                Assigned Agent: <strong>{ticket.claimant.displayName}</strong>
+                Claimed by <strong>{ticket.claimant.displayName}</strong>
               </p>
             )}
 

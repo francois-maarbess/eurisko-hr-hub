@@ -17,6 +17,7 @@ export interface BoardTicket {
 
 interface KanbanBoardProps {
   tickets: BoardTicket[];
+  hidePending?: boolean;
   /** Null = drop allowed; string = refusal reason shown as a toast. */
   canDrop: (ticket: BoardTicket, target: BoardStatus) => string | null;
   onDropProgress: (ticket: BoardTicket) => void;
@@ -74,7 +75,7 @@ function DraggableCard({ ticket, onOpen, quiet }: { ticket: BoardTicket; onOpen:
       </div>
       {ticket.claimant && (
         <div className="muted board-column-count mt-sm">
-          {ticket.claimant.displayName}
+          Claimed by {ticket.claimant.displayName}
         </div>
       )}
     </div>
@@ -115,7 +116,7 @@ function Column({ status, title, hint, tickets, onOpen }: {
  * Completed asks for the mandatory resolution note); anything else
  * snaps back with an explanatory toast.
  */
-export default function KanbanBoard({ tickets, canDrop, onDropProgress, onDropComplete, onOpenTicket }: KanbanBoardProps) {
+export default function KanbanBoard({ tickets, hidePending = false, canDrop, onDropProgress, onDropComplete, onOpenTicket }: KanbanBoardProps) {
   const [completing, setCompleting] = useState<BoardTicket | null>(null);
   const [note, setNote] = useState('');
   const [refusal, setRefusal] = useState<string | null>(null);
@@ -148,6 +149,7 @@ export default function KanbanBoard({ tickets, canDrop, onDropProgress, onDropCo
   };
 
   const boardTickets = tickets.filter((t) => t.status === 'PENDING' || t.status === 'IN_PROGRESS' || t.status === 'COMPLETED');
+  const columns = COLUMNS.filter((column) => !hidePending || column.status !== 'PENDING');
 
   return (
     <div>
@@ -158,7 +160,7 @@ export default function KanbanBoard({ tickets, canDrop, onDropProgress, onDropCo
       )}
       <DndContext onDragEnd={handleDragEnd}>
         <div className="board-grid">
-          {COLUMNS.map((c) => (
+          {columns.map((c) => (
             <Column
               key={c.status}
               status={c.status}

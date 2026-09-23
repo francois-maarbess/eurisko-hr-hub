@@ -296,6 +296,30 @@ describe('Service Request Flow (E2E)', () => {
     expect(res.body.status).toBe('COMPLETED');
   });
 
+  it('system admin cannot complete a request claimed by another agent', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+    const created = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        departmentId: dept!.id,
+        requestTypeId: rt!.id,
+        title: 'Ownership Completion Test',
+        description: 'An administrator must not silently complete another agent request',
+        priority: 'STANDARD',
+      });
+    await request(app.getHttpServer())
+      .patch(`/requests/${created.body.id}/claim`)
+      .set('Authorization', `Bearer ${agentToken}`);
+
+    const res = await request(app.getHttpServer())
+      .patch(`/requests/${created.body.id}/status`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'COMPLETED', resolutionNote: 'Admin attempted completion.' });
+    expect(res.status).toBe(409);
+  });
+
   it('rejects invalid transition from COMPLETED — regression protection', async () => {
     // Complete a fresh request, then try to reopen it
     const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
