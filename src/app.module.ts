@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module';
 import { PrismaModule } from './prisma.module';
 import { RequestsController } from './requests.controller';
@@ -12,6 +12,7 @@ import { NotificationsService } from './notifications.service';
 import { DepartmentsController } from './departments.controller';
 import { AuditService } from './audit.service';
 import { HealthController } from './health.controller';
+import { RequestLoggerMiddleware } from './request-logger.middleware';
 
 @Module({
   imports: [PrismaModule, AuthModule, AiModule],
@@ -25,4 +26,8 @@ import { HealthController } from './health.controller';
   ],
   providers: [RequestsService, AuditService, NotificationsService, DocumentsService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestLoggerMiddleware).forRoutes('*');
+  }
+}
