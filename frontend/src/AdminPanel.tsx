@@ -328,7 +328,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
             title="Platform overview"
             sub="Live ticket counts across every department."
           />
-          <div className="row" style={{ marginBottom: '0.75rem', alignItems: 'center' }}>
+          <div className="row mb-md">
             <span className="badge" style={{ background: '#fef3c7', color: '#92400e' }}>
               ★ CSAT {report.csatAverage != null ? report.csatAverage.toFixed(2) : '—'} ({report.csatCount} ratings)
             </span>
@@ -355,8 +355,8 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
               <strong>Active</strong> = requests currently pending or in-progress and requiring staff attention. <strong>Total</strong> = all requests ever created in that department, including completed, rejected, and cancelled ones.
             </p>
           )}
-          <div style={{ marginBottom: '1rem' }}>
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+          <div className="admin-overview">
+          <div className="pill-group mb-md">
             {Object.entries(report.byStatus).map(([status, count]) => (
               <span key={status} className="badge" style={{ background: 'var(--navy)', color: '#fff' }}>
                 {formatEnum(status)}: {count}
@@ -369,7 +369,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
               in {report.departments.filter((d) => d.breached > 0).length} department(s) — needs attention
             </div>
           )}
-          <div style={{ display: 'grid', gap: '0.4rem' }}>
+          <div className="admin-overview-list">
             {report.departments.map((d) => {
               const pct = d.total > 0 ? Math.round((d.open / d.total) * 100) : 0;
               const breachPct = d.total > 0 ? Math.round((d.breached / d.total) * 100) : 0;
@@ -407,7 +407,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
         title="Catalog — departments & request types"
         sub="Departments group work; request types are the pickable categories inside one department. Deactivating retires entries while history stays intact."
       />
-      <div style={{ display: 'grid', gap: '0.5rem', marginBottom: '1rem' }}>
+      <div className="admin-grid">
         {departments.map((d) => {
           const typesForDept = allTypes.filter((t) => t.departmentId === d.id);
           return (
@@ -422,7 +422,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
                   {d.active ? 'Deactivate' : 'Reactivate'}
                 </Button>
               </div>
-              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
+              <div className="admin-type-list">
                 {typesForDept.length === 0 && (
                   <span className="badge" style={{ background: '#fef3c7', color: '#b45309', textTransform: 'none' }}>
                     No request types yet — add one below so employees can select this department
@@ -450,22 +450,22 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
         })}
       </div>
       <form onSubmit={createDepartment}>
-        <div className="row">
-          <input className="input" style={{ flex: 1 }} value={newDeptCode} onChange={(e) => setNewDeptCode(e.target.value)} placeholder="CODE (e.g. LEGAL)" required />
-          <input className="input" style={{ flex: 2 }} value={newDeptName} onChange={(e) => setNewDeptName(e.target.value)} placeholder="Department name" required />
+        <div className="form-row">
+          <input className="input grow-1" value={newDeptCode} onChange={(e) => setNewDeptCode(e.target.value)} placeholder="CODE (e.g. LEGAL)" required />
+          <input className="input grow-2" value={newDeptName} onChange={(e) => setNewDeptName(e.target.value)} placeholder="Department name" required />
           <Button type="submit" variant="ghost" small>Add Dept</Button>
         </div>
       </form>
-      <form onSubmit={createRequestType} style={{ marginTop: '0.5rem' }}>
-        <div className="row">
-          <select className="select" style={{ flex: 1 }} value={newTypeDept} onChange={(e) => setNewTypeDept(e.target.value)} required>
+      <form onSubmit={createRequestType} className="admin-form">
+        <div className="form-row">
+          <select className="select grow-1" value={newTypeDept} onChange={(e) => setNewTypeDept(e.target.value)} required>
             <option value="">Select Dept…</option>
             {departments.map((d) => (
               <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
             ))}
           </select>
-          <input className="input" style={{ flex: 1 }} value={newTypeCode} onChange={(e) => setNewTypeCode(e.target.value)} placeholder="Type Code (e.g. LETTER)" required />
-          <input className="input" style={{ flex: 2 }} value={newTypeName} onChange={(e) => setNewTypeName(e.target.value)} placeholder="Type name (e.g. Verification Letter)" required />
+          <input className="input grow-1" value={newTypeCode} onChange={(e) => setNewTypeCode(e.target.value)} placeholder="Type Code (e.g. LETTER)" required />
+          <input className="input grow-2" value={newTypeName} onChange={(e) => setNewTypeName(e.target.value)} placeholder="Type name (e.g. Verification Letter)" required />
           <Button type="submit" variant="ghost" small>Add Type</Button>
         </div>
       </form>
@@ -517,7 +517,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
         </Button>
       </form>
 
-      {message && <p className="muted" style={{ marginTop: '0.75rem' }}>{message}</p>}
+      {message && <p className="muted admin-message">{message}</p>}
 
       <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '1.25rem 0' }} />
       <SectionHeader
@@ -525,7 +525,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
         title={`Users & memberships (${users.length})`}
         sub="Change platform roles, add or remove department memberships, deactivate accounts."
       />
-      <div style={{ display: 'grid', gap: '0.6rem' }}>
+      <div className="admin-grid">
         {users.map((u) => {
           const draft = memberDrafts[u.id] || { deptId: '', role: 'AGENT' };
           return (
@@ -539,8 +539,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
                 </div>
                 <div className="row">
                   <select
-                    className="select"
-                    style={{ width: 'auto', padding: '0.4rem 0.6rem', fontSize: '0.82rem' }}
+                    className="select admin-inline-select"
                     value={u.platformRole}
                     onChange={(e) => changeRole(u, e.target.value)}
                   >
@@ -554,19 +553,18 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
               </div>
               <div className="row" style={{ marginTop: '0.5rem' }}>
                 {u.memberships.filter((m) => m.active).map((m) => (
-                  <span className="badge" key={m.departmentId} style={{ background: 'var(--blue-pale)', color: '#1d4ed8', textTransform: 'none' }}>
+                  <span className="badge badge-blue" key={m.departmentId}>
                     {m.departmentCode || '?'} · {m.departmentRole}{' '}
                     <button
                       onClick={() => removeMembership(u, m.departmentId)}
-                      style={{ border: 'none', background: 'none', color: 'var(--danger)', cursor: 'pointer', fontWeight: 800 }}
+                      className="admin-removable"
                     >
                       ×
                     </button>
                   </span>
                 ))}
                 <select
-                  className="select"
-                  style={{ width: 'auto', padding: '0.3rem 0.5rem', fontSize: '0.78rem' }}
+                  className="select admin-mini-select"
                   value={draft.deptId}
                   onChange={(e) => setMemberDrafts((c) => ({ ...c, [u.id]: { ...draft, deptId: e.target.value } }))}
                 >
@@ -576,8 +574,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
                   ))}
                 </select>
                 <select
-                  className="select"
-                  style={{ width: 'auto', padding: '0.3rem 0.5rem', fontSize: '0.78rem' }}
+                  className="select admin-mini-select"
                   value={draft.role}
                   onChange={(e) => setMemberDrafts((c) => ({ ...c, [u.id]: { ...draft, role: e.target.value } }))}
                 >

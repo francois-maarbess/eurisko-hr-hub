@@ -89,25 +89,16 @@ export default function App() {
             <span className="brand-mark">H</span>
             <span>Service Request Hub</span>
           </div>
-          <div className="row">
+          <div className="topbar-actions">
             <button
+              className="notification-button"
               onClick={openInbox}
               title="Notifications"
-              style={{
-                position: 'relative', border: '1px solid var(--border)', background: '#fff',
-                borderRadius: '10px', padding: '0.45rem 0.7rem', cursor: 'pointer', fontSize: '0.85rem',
-                fontWeight: 700, color: 'var(--navy)',
-              }}
             >
               Notifications
               {unread > 0 && (
                 <span
-                  style={{
-                    position: 'absolute', top: '-8px', right: '-8px', background: 'var(--danger)',
-                    color: '#fff', borderRadius: '999px', minWidth: '20px', height: '20px',
-                    fontSize: '0.7rem', fontWeight: 800, display: 'flex',
-                    alignItems: 'center', justifyContent: 'center', padding: '0 4px',
-                  }}
+                  className="notification-count"
                 >
                   {unread > 99 ? '99+' : unread}
                 </span>
@@ -128,38 +119,23 @@ export default function App() {
           <>
             <div
               onClick={() => setInboxOpen(false)}
-              style={{ position: 'fixed', inset: 0, zIndex: 40 }}
+              className="notification-backdrop"
             />
             <div
-              className="card"
-              style={{
-                position: 'fixed',
-                top: '72px',
-                right: 'max(1.25rem, calc((100vw - 960px) / 2))',
-                width: 'min(380px, calc(100vw - 2.5rem))',
-                maxHeight: '60vh',
-                overflowY: 'auto',
-                zIndex: 41,
-                boxShadow: 'var(--shadow-md)',
-              }}
+              className="card notification-panel"
             >
-              <div className="row" style={{ justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+              <div className="row panel-heading">
                 <h3 className="card-title">Notifications</h3>
                 <Button variant="ghost" small onClick={markAllRead}>
                   Mark all read
                 </Button>
               </div>
               {inbox.length === 0 && <p className="muted">Nothing yet — activity on your requests lands here.</p>}
-              <div style={{ display: 'grid', gap: '0.5rem' }}>
+              <div className="notification-list">
                 {inbox.map((n) => (
                   <div
                     key={n.id}
-                    style={{
-                      background: n.readAt ? '#fff' : 'var(--blue-pale)',
-                      border: '1px solid var(--border)',
-                      borderRadius: '10px',
-                      padding: '0.6rem 0.8rem',
-                    }}
+                    className={`notification-item${n.readAt ? '' : ' unread'}`}
                   >
                     <div style={{ fontWeight: 700 }}>{n.title}</div>
                     <div className="muted">{n.body}</div>
@@ -201,7 +177,7 @@ export default function App() {
               </ErrorBoundary>
             )}
 
-            <h3 style={{ margin: '1.5rem 0 0.75rem', color: 'var(--navy)' }}>Request Queue</h3>
+            <h3 className="page-title">Request Queue</h3>
             <ErrorBoundary section="request queue">
               <TicketStatusManager
                 key={refreshKey}

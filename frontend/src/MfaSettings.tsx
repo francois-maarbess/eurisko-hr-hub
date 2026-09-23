@@ -92,17 +92,17 @@ export default function MfaSettings({ token }: { token: string }) {
   if (enabled === null) return null;
 
   return (
-    <div className="card" style={{ marginTop: '1.5rem' }}>
-      <h3 className="card-title">🔐 Two-factor authentication</h3>
+    <div className="card mfa-card">
+      <h3 className="card-title">Two-factor authentication</h3>
       {error && (
-        <div style={{ margin: '0.5rem 0' }}>
+        <div className="mfa-error">
           <ErrorBox message={error} />
         </div>
       )}
 
       {!enabled && !qr && !backupCodes && (
-        <div className="row" style={{ alignItems: 'center' }}>
-          <span className="muted" style={{ fontSize: '0.85rem' }}>
+        <div className="row mfa-status">
+          <span className="muted mfa-copy">
             Status: <strong>off</strong> — add an authenticator app for stronger sign-in.
           </span>
           <Button variant="ghost" small onClick={startSetup} disabled={busy}>
@@ -112,16 +112,15 @@ export default function MfaSettings({ token }: { token: string }) {
       )}
 
       {!enabled && qr && (
-        <div style={{ display: 'grid', gap: '0.6rem' }}>
-          <p className="muted" style={{ fontSize: '0.85rem', margin: 0 }}>
+        <div className="mfa-setup">
+          <p className="muted mfa-copy">
             1. Scan this QR code with your authenticator app (Google/Microsoft Authenticator, 1Password…),
             then 2. enter the 6-digit code below.
           </p>
-          <img src={qr} alt="Authenticator QR code" style={{ width: '180px', height: '180px' }} />
-          <div className="row">
+          <img className="mfa-qr" src={qr} alt="Authenticator QR code" />
+          <div className="row mfa-code-row">
             <input
-              className="input"
-              style={{ flex: 1 }}
+              className="input mfa-code-input"
               type="text"
               inputMode="numeric"
               value={code}
@@ -136,14 +135,14 @@ export default function MfaSettings({ token }: { token: string }) {
       )}
 
       {backupCodes && (
-        <div className="note-info" style={{ marginTop: '0.6rem' }}>
+        <div className="note-info mt-sm">
           <strong>Save these backup codes now</strong> — each works once if you lose your phone:
-          <div style={{ fontFamily: 'monospace', marginTop: '0.4rem', display: 'grid', gap: '0.15rem' }}>
+          <div className="backup-codes">
             {backupCodes.map((c) => (
               <span key={c}>{c}</span>
             ))}
           </div>
-          <div style={{ marginTop: '0.5rem' }}>
+          <div className="mt-sm">
             <Button variant="ghost" small onClick={() => setBackupCodes(null)}>
               Saved, hide them
             </Button>
@@ -152,8 +151,8 @@ export default function MfaSettings({ token }: { token: string }) {
       )}
 
       {enabled && !backupCodes && (
-        <div className="row" style={{ alignItems: 'center' }}>
-          <span className="muted" style={{ fontSize: '0.85rem' }}>
+        <div className="row mfa-status">
+          <span className="muted mfa-copy">
             Status: <strong>on</strong> — sign-in asks for your authenticator code.
           </span>
           {!confirmingDisable ? (
@@ -163,8 +162,7 @@ export default function MfaSettings({ token }: { token: string }) {
           ) : (
             <>
               <input
-                className="input"
-                style={{ flex: 1 }}
+                className="input mfa-code-input"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

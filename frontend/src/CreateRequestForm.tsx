@@ -187,7 +187,7 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
     <Card title="New Service Request">
       <div className="note-ai">
         <div className="note-ai-title">Describe it in your own words</div>
-        <Field label="">
+        <Field label="Request summary">
           <textarea
             className="textarea"
             value={aiText}
@@ -202,7 +202,7 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
             rows={2}
           />
         </Field>
-        <div className="row" style={{ alignItems: 'center' }}>
+        <div className="row ai-actions">
           <Button
             variant="ghost"
             onClick={handleAiDraft}
@@ -211,11 +211,11 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
           >
             {aiLoading ? 'Drafting...' : 'Draft with AI'}
           </Button>
-          <span className="muted" style={{ fontSize: '0.8rem' }} title="Press Ctrl+Enter (or Cmd+Enter on Mac) inside the description box to draft">
+          <span className="muted compact-help" title="Press Ctrl+Enter (or Cmd+Enter on Mac) inside the description box to draft">
             Ctrl+Enter
           </span>
         </div>
-        {aiNote && <p className="muted" style={{ marginTop: '0.5rem' }}>{aiNote}</p>}
+        {aiNote && <p className="muted mt-sm">{aiNote}</p>}
       </div>
 
       <form
@@ -261,7 +261,7 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
             ))}
           </select>
           {selectedDept && filteredTypes.length === 0 && (
-            <p className="muted" style={{ fontSize: '0.8rem', color: '#b45309', background: '#fef3c7', padding: '0.4rem 0.6rem', borderRadius: '6px', marginTop: '0.35rem' }}>
+            <p className="field-warning">
               This department has no active request types yet. An administrator must add at least one request type in the Administration panel before requests can be submitted.
             </p>
           )}
@@ -291,17 +291,17 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
           />
         </Field>
 
-        <div style={{ marginBottom: '0.8rem' }}>
+        <div className="duplicate-check">
           <Button variant="ghost" small onClick={handleCheckDuplicates} disabled={dupLoading} type="button">
             {dupLoading ? 'Checking…' : 'Check for duplicates'}
           </Button>
           {duplicates !== null && (
             duplicates.length === 0 ? (
-              <p className="muted" style={{ marginTop: '0.4rem' }}>No similar open requests. Good to go.</p>
+              <p className="muted mt-sm">No similar open requests. Good to go.</p>
             ) : (
-              <div className="note-info" style={{ background: 'var(--warning-bg)', border: 'none', marginTop: '0.5rem' }}>
+              <div className="note-info note-warning mt-sm">
                 <strong>{duplicates.length} similar open request{duplicates.length > 1 ? 's' : ''}:</strong>
-                <ul style={{ margin: '0.4rem 0 0.5rem', paddingLeft: '1.2rem' }}>
+                <ul className="plain-list">
                   {duplicates.map((d) => (
                     <li key={d.id}>{d.title} <span className="muted">({d.status})</span></li>
                   ))}
@@ -326,7 +326,7 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
 
         {error && <ErrorBox message={error} />}
 
-        <div style={{ marginTop: '1rem' }}>
+        <div className="submit-wrap">
           <Button type="submit" variant="success" block disabled={loading}>
             {loading ? 'Submitting...' : 'Submit Request'}
           </Button>

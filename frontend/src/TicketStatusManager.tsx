@@ -720,7 +720,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
   ];
 
   return (
-    <div style={{ display: 'grid', gap: '1rem' }}>
+    <div className="ticket-manager">
       {focusTicketId ? (
         <div>
           <button
@@ -738,17 +738,15 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
         <>
           <Tabs options={tabOptions} value={view} onChange={setView} />
 
-          <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap' }}>
+          <div className="toolbar">
             <input
-              className="input"
-              style={{ flex: 2, minWidth: '180px' }}
+              className="input toolbar-search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search requests by title, description, or dept…"
             />
             <select
-              className="select"
-              style={{ flex: 1, minWidth: '140px' }}
+              className="select toolbar-select"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
@@ -760,89 +758,45 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
               <option value="CANCELLED">Cancelled</option>
             </select>
             <button
+              className={`toolbar-button${sortOldest ? ' active' : ''}`}
               onClick={() => setSortOldest((s) => !s)}
               title="Toggle oldest/newest first"
-              style={{
-                border: '1px solid var(--border)',
-                background: '#fff',
-                borderRadius: '10px',
-                padding: '0.65rem 0.8rem',
-                cursor: 'pointer',
-                fontSize: '0.85rem',
-                fontWeight: 700,
-                color: sortOldest ? 'var(--blue)' : 'var(--muted)',
-              }}
             >
               {sortOldest ? 'Oldest first ↑' : 'Newest first ↓'}
             </button>
             <button
+              className={`toolbar-button${boardView ? ' active' : ''}`}
               onClick={() => setBoardView((v) => !v)}
               title={boardView ? 'Back to the list view' : 'Drag tickets across a board'}
-              style={{
-                border: '1px solid var(--border)',
-                background: boardView ? 'var(--blue-pale)' : '#fff',
-                borderRadius: '10px',
-                padding: '0.65rem 0.8rem',
-                cursor: 'pointer',
-                fontSize: '0.85rem',
-                fontWeight: 700,
-                color: boardView ? 'var(--blue)' : 'var(--muted)',
-              }}
             >
               {boardView ? 'List view' : 'Board view'}
             </button>
           </div>
 
-          <div className="row" style={{ gap: '0.4rem', flexWrap: 'wrap', marginTop: '-0.35rem' }}>
-            <span className="muted" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Quick filters:</span>
+          <div className="row quick-filters">
+            <span className="muted">Quick filters:</span>
         <button
+          className={`filter-button${filterUrgentOnly ? ' danger-active' : ''}`}
           onClick={() => setFilterUrgentOnly((u) => !u)}
-          style={{
-            border: filterUrgentOnly ? '1px solid var(--danger)' : '1px solid var(--border)',
-            background: filterUrgentOnly ? '#fee2e2' : '#fff',
-            color: filterUrgentOnly ? 'var(--danger)' : 'inherit',
-            borderRadius: '999px',
-            padding: '0.22rem 0.6rem',
-            fontSize: '0.76rem',
-            fontWeight: 700,
-            cursor: 'pointer',
-          }}
         >
           Urgent Only
         </button>
         <button
+          className={`filter-button${filterHasDocs ? ' active' : ''}`}
           onClick={() => setFilterHasDocs((d) => !d)}
-          style={{
-            border: filterHasDocs ? '1px solid var(--blue)' : '1px solid var(--border)',
-            background: filterHasDocs ? 'var(--blue-pale)' : '#fff',
-            color: filterHasDocs ? 'var(--blue)' : 'inherit',
-            borderRadius: '999px',
-            padding: '0.22rem 0.6rem',
-            fontSize: '0.76rem',
-            fontWeight: 700,
-            cursor: 'pointer',
-          }}
         >
           Has Attachments
         </button>
         {isStaff && (
           <button
+            className={`filter-button${filterHasNotes ? ' active' : ''}`}
             onClick={() => setFilterHasNotes((n) => !n)}
-            style={{
-              border: filterHasNotes ? '1px solid #7c3aed' : '1px solid var(--border)',
-              background: filterHasNotes ? '#ede9fe' : '#fff',
-              color: filterHasNotes ? '#7c3aed' : 'inherit',
-              borderRadius: '999px',
-              padding: '0.22rem 0.6rem',
-              fontSize: '0.76rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
           >
             Has Staff Notes
           </button>
         )}
         <button
+          className={`filter-button${overdueOnly ? ' danger-active' : ''}`}
           onClick={() => {
             setOverdueOnly((o) => {
               if (!o) setStatusFilter('ALL');
@@ -850,35 +804,17 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
             });
           }}
           title="Show only open tickets past their SLA deadline"
-          style={{
-            border: overdueOnly ? '1px solid var(--danger)' : '1px solid var(--border)',
-            background: overdueOnly ? '#fee2e2' : '#fff',
-            color: overdueOnly ? 'var(--danger)' : 'inherit',
-            borderRadius: '999px',
-            padding: '0.22rem 0.6rem',
-            fontSize: '0.76rem',
-            fontWeight: 700,
-            cursor: 'pointer',
-          }}
         >
           Overdue
         </button>
         {(filterUrgentOnly || filterHasDocs || filterHasNotes || overdueOnly) && (
           <button
+            className="filter-clear"
             onClick={() => {
               setFilterUrgentOnly(false);
               setFilterHasDocs(false);
               setFilterHasNotes(false);
               setOverdueOnly(false);
-            }}
-            style={{
-              border: 'none',
-              background: 'none',
-              color: 'var(--muted)',
-              fontSize: '0.76rem',
-              cursor: 'pointer',
-              textDecoration: 'underline',
-              marginLeft: '0.2rem',
             }}
           >
             Clear filters

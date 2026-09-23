@@ -43,40 +43,29 @@ function DraggableCard({ ticket, onOpen }: { ticket: BoardTicket; onOpen: (id: s
       ref={setNodeRef}
       {...listeners}
       {...attributes}
+      className={`board-card${isDragging ? ' dragging' : ''}`}
       style={{
-        background: '#fff',
-        border: '1px solid var(--border)',
-        borderRadius: '10px',
-        padding: '0.6rem 0.7rem',
-        cursor: 'grab',
-        opacity: isDragging ? 0.45 : 1,
         transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-        boxShadow: isDragging ? 'var(--shadow-md)' : 'none',
-        touchAction: 'none',
       }}
     >
       <button
         onClick={() => onOpen(ticket.id)}
         onPointerDown={(e) => e.stopPropagation()}
         title="Open ticket detail"
-        style={{
-          border: 'none', background: 'none', padding: 0, cursor: 'pointer',
-          fontWeight: 700, fontSize: '0.85rem', color: 'var(--navy)', textAlign: 'left',
-          display: 'block', width: '100%',
-        }}
+        className="board-card-title"
       >
         {ticket.title}
       </button>
-      <div className="pill-group" style={{ marginTop: '0.4rem' }}>
+      <div className="pill-group mt-sm">
         <Badge bg={pc.background} color={pc.color}>
           {formatEnum(ticket.priority)}
         </Badge>
         {ticket.department && (
-          <span className="muted" style={{ fontSize: '0.75rem' }}>{ticket.department.code}</span>
+          <span className="muted board-column-count">{ticket.department.code}</span>
         )}
       </div>
       {ticket.claimant && (
-        <div className="muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>
+        <div className="muted board-column-count mt-sm">
           {ticket.claimant.displayName}
         </div>
       )}
@@ -95,28 +84,18 @@ function Column({ status, title, hint, tickets, onOpen }: {
   return (
     <div
       ref={setNodeRef}
-      style={{
-        background: isOver ? 'var(--blue-pale)' : '#f8fafc',
-        border: `1px dashed ${isOver ? 'var(--blue)' : 'var(--border)'}`,
-        borderRadius: '12px',
-        padding: '0.6rem',
-        minHeight: '220px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.5rem',
-        transition: 'background 0.15s, border-color 0.15s',
-      }}
+      className={`board-column${isOver ? ' over' : ''}`}
     >
       <div>
-        <strong style={{ fontSize: '0.85rem' }}>{title}</strong>{' '}
-        <span className="muted" style={{ fontSize: '0.75rem' }}>({tickets.length})</span>
-        <div className="muted" style={{ fontSize: '0.72rem' }}>{hint}</div>
+        <strong className="board-column-title">{title}</strong>{' '}
+        <span className="muted board-column-count">({tickets.length})</span>
+        <div className="muted board-column-hint">{hint}</div>
       </div>
       {tickets.map((t) => (
         <DraggableCard key={t.id} ticket={t} onOpen={onOpen} />
       ))}
       {tickets.length === 0 && (
-        <span className="muted" style={{ fontSize: '0.78rem' }}>Drop tickets here</span>
+        <span className="muted board-empty">Drop tickets here</span>
       )}
     </div>
   );
@@ -165,12 +144,12 @@ export default function KanbanBoard({ tickets, canDrop, onDropProgress, onDropCo
   return (
     <div>
       {refusal && (
-        <div style={{ background: 'var(--danger-bg)', color: 'var(--danger)', borderRadius: '10px', padding: '0.6rem 0.9rem', fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.6rem' }}>
+        <div className="board-refusal">
           {refusal}
         </div>
       )}
       <DndContext onDragEnd={handleDragEnd}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+        <div className="board-grid">
           {COLUMNS.map((c) => (
             <Column
               key={c.status}
@@ -183,7 +162,7 @@ export default function KanbanBoard({ tickets, canDrop, onDropProgress, onDropCo
           ))}
         </div>
       </DndContext>
-      <p className="muted" style={{ fontSize: '0.78rem', marginTop: '0.5rem' }}>
+      <p className="muted board-help mt-sm">
         Drag cards between columns. Cancelled and rejected tickets stay in the list view.
       </p>
 
@@ -191,11 +170,10 @@ export default function KanbanBoard({ tickets, canDrop, onDropProgress, onDropCo
         <>
           <div
             onClick={() => setCompleting(null)}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', zIndex: 50 }}
+            className="modal-backdrop"
           />
           <div
-            className="card glass-panel"
-            style={{ position: 'fixed', zIndex: 51, left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 'min(440px, calc(100vw - 2.5rem))' }}
+            className="card glass-panel modal-card"
           >
             <h3 className="card-title">Complete “{completing.title}”</h3>
             <p className="card-sub">A resolution note is required to complete a ticket.</p>
@@ -207,7 +185,7 @@ export default function KanbanBoard({ tickets, canDrop, onDropProgress, onDropCo
               placeholder="What was done to resolve this?"
               autoFocus
             />
-            <div className="row" style={{ marginTop: '0.75rem' }}>
+            <div className="row mt-md">
               <Button
                 variant="success"
                 small

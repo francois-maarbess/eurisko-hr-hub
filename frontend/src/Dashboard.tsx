@@ -122,7 +122,7 @@ export default function Dashboard({ token, userName }: { token: string; userName
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 
   return (
-    <div className="card" style={{ marginBottom: '1.5rem' }}>
+    <div className="card dashboard-card">
       <h3 className="card-title">
         {greeting}, {userName.split(' ')[0]}
       </h3>
@@ -134,36 +134,36 @@ export default function Dashboard({ token, userName }: { token: string; userName
           : `${openCount} open ticket${openCount === 1 ? '' : 's'}${overdueCount > 0 ? `, ${overdueCount} past deadline` : ''}${isOrg ? ' org-wide' : ''}.`}
       </p>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.6rem', margin: '0.9rem 0' }}>
-        <div style={{ background: '#eff6ff', borderRadius: '10px', padding: '0.7rem 0.9rem' }}>
-          <div className="muted" style={{ fontSize: '0.75rem', fontWeight: 700 }}>{scope} OPEN</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: NAVY }}>{openCount}</div>
+      <div className="dashboard-stats">
+        <div className="dashboard-stat dashboard-stat-blue">
+          <div className="muted dashboard-stat-label">{scope} OPEN</div>
+          <div className="dashboard-stat-value" style={{ color: NAVY }}>{openCount}</div>
         </div>
-        <div style={{ background: overdueCount > 0 ? '#fee2e2' : '#f8fafc', borderRadius: '10px', padding: '0.7rem 0.9rem' }}>
-          <div className="muted" style={{ fontSize: '0.75rem', fontWeight: 700 }}>OVERDUE</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: overdueCount > 0 ? RED : NAVY }}>
+        <div className={`dashboard-stat ${overdueCount > 0 ? 'dashboard-stat-red' : 'dashboard-stat-neutral'}`}>
+          <div className="muted dashboard-stat-label">OVERDUE</div>
+          <div className="dashboard-stat-value" style={{ color: overdueCount > 0 ? RED : NAVY }}>
             {overdueCount}
           </div>
         </div>
-        <div style={{ background: '#f0fdf4', borderRadius: '10px', padding: '0.7rem 0.9rem' }}>
-          <div className="muted" style={{ fontSize: '0.75rem', fontWeight: 700 }}>SLA HEALTH</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: compliance === 100 ? GREEN : AMBER }}>
+        <div className="dashboard-stat dashboard-stat-green">
+          <div className="muted dashboard-stat-label">SLA HEALTH</div>
+          <div className="dashboard-stat-value" style={{ color: compliance === 100 ? GREEN : AMBER }}>
             {compliance}%
           </div>
         </div>
         {report && (
-          <div style={{ background: '#fefce8', borderRadius: '10px', padding: '0.7rem 0.9rem' }}>
-            <div className="muted" style={{ fontSize: '0.75rem', fontWeight: 700 }}>ORG CSAT</div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: NAVY }}>
+          <div className="dashboard-stat dashboard-stat-yellow">
+            <div className="muted dashboard-stat-label">ORG CSAT</div>
+            <div className="dashboard-stat-value" style={{ color: NAVY }}>
               {report.csatAverage != null ? `★ ${report.csatAverage.toFixed(1)}` : '—'}
             </div>
           </div>
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+      <div className="dashboard-charts">
         <div>
-          <div className="muted" style={{ fontSize: '0.78rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+          <div className="muted dashboard-chart-title">
             {isOrg ? 'ORG TICKETS · LAST 7 DAYS' : 'MY TICKETS · LAST 7 DAYS'}
           </div>
           <ResponsiveContainer width="100%" height={150}>
@@ -176,11 +176,11 @@ export default function Dashboard({ token, userName }: { token: string; userName
           </ResponsiveContainer>
         </div>
         <div>
-          <div className="muted" style={{ fontSize: '0.78rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+          <div className="muted dashboard-chart-title">
             {isOrg ? 'ORG OPEN · ON TRACK VS OVERDUE' : 'MY OPEN · ON TRACK VS OVERDUE'}
           </div>
           {openCount === 0 ? (
-            <p className="muted" style={{ fontSize: '0.85rem' }}>Nothing open — enjoy the calm.</p>
+            <p className="muted">Nothing open — enjoy the calm.</p>
           ) : (
             <ResponsiveContainer width="100%" height={150}>
               <PieChart>
@@ -196,13 +196,13 @@ export default function Dashboard({ token, userName }: { token: string; userName
       </div>
 
       {feed.length > 0 && (
-        <div style={{ marginTop: '0.8rem', display: 'grid', gap: '0.35rem' }}>
-          <div className="muted" style={{ fontSize: '0.78rem', fontWeight: 700 }}>{feedTitle}</div>
+        <div className="dashboard-feed">
+          <div className="muted dashboard-chart-title">{feedTitle}</div>
           {feed.map((t) => {
             const overdue = t.slaDueAt && new Date(t.slaDueAt).getTime() < now;
             return (
-              <div key={t.id} className="row" style={{ justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>
+              <div key={t.id} className="dashboard-feed-row">
+                <span className="dashboard-feed-title">
                   {t.title}
                 </span>
                 <span

@@ -85,7 +85,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   return (
     <div className="login-wrap">
       <div className="card login-card">
-        <div className="brand" style={{ marginBottom: '0.5rem' }}>
+        <div className="brand auth-brand">
           <span className="brand-mark">H</span>
           Internal Operations Hub
         </div>
@@ -109,7 +109,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             <Button type="submit" block disabled={loading}>
               {loading ? 'Verifying…' : 'Verify'}
             </Button>
-            <p className="muted" style={{ fontSize: '0.8rem', marginTop: '0.5rem' }}>
+            <p className="muted auth-help">
               Open your authenticator app — or use a saved backup code.
             </p>
           </form>
@@ -143,14 +143,14 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         )}
 
         {error && (
-          <div style={{ marginTop: '1rem' }}>
+          <div className="auth-error">
             <ErrorBox message={error} />
           </div>
         )}
 
-        <div className="note-info" style={{ marginTop: '1.25rem' }}>
+        <div className="note-info demo-note">
           <strong>Demo accounts</strong> (password for both: <code>Password123!</code>)
-          <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.2rem' }}>
+          <ul className="demo-list">
             <li><code>admin@acme.com</code> — System Admin</li>
             <li><code>alice@acme.com</code> — Employee</li>
           </ul>
