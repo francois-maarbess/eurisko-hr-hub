@@ -202,14 +202,19 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
             rows={2}
           />
         </Field>
-        <Button
-          variant="ghost"
-          onClick={handleAiDraft}
-          disabled={aiLoading}
-          small
-        >
-          {aiLoading ? 'Drafting...' : '✨ Draft with AI (Ctrl+Enter)'}
-        </Button>
+        <div className="row" style={{ alignItems: 'center' }}>
+          <Button
+            variant="ghost"
+            onClick={handleAiDraft}
+            disabled={aiLoading}
+            small
+          >
+            {aiLoading ? 'Drafting...' : '✨ Draft with AI'}
+          </Button>
+          <span className="muted" style={{ fontSize: '0.8rem' }} title="Press Ctrl+Enter (or Cmd+Enter on Mac) inside the description box to draft">
+            Ctrl+Enter
+          </span>
+        </div>
         {aiNote && <p className="muted" style={{ marginTop: '0.5rem' }}>{aiNote}</p>}
       </div>
 

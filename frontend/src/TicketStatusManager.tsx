@@ -763,7 +763,7 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <div className="muted" style={{ marginBottom: '0.25rem', fontSize: '0.85rem' }}>
-                  {ticket.id} {ticket.department && `· ${ticket.department.name} (${ticket.department.code})`}
+                  {ticket.department && `${ticket.department.name} (${ticket.department.code})`}
                   {ticket.requestType && ` · ${ticket.requestType.name}`}
                 </div>
                 <div style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--navy)' }}>

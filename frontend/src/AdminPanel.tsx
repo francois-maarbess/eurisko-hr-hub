@@ -50,6 +50,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
     csatCount: number;
   } | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [showCountsInfo, setShowCountsInfo] = useState(false);
 
   const exportCsv = async () => {
     setExporting(true);
@@ -325,16 +326,35 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
           <SectionHeader
             n="1"
             title="Platform overview"
-            sub="Live ticket counts across every department. “Active” means currently pending or in-progress requests requiring staff attention; “total” is lifetime requests."
+            sub="Live ticket counts across every department."
           />
-          <div className="row" style={{ marginBottom: '0.75rem' }}>
+          <div className="row" style={{ marginBottom: '0.75rem', alignItems: 'center' }}>
             <span className="badge" style={{ background: '#fef3c7', color: '#92400e' }}>
               ★ CSAT {report.csatAverage != null ? report.csatAverage.toFixed(2) : '—'} ({report.csatCount} ratings)
             </span>
             <Button variant="ghost" small onClick={exportCsv} disabled={exporting}>
               {exporting ? 'Exporting…' : '📥 Export to CSV'}
             </Button>
+            <button
+              onClick={() => setShowCountsInfo((s) => !s)}
+              title="What do “active” and “total” mean?"
+              aria-label="Explain active and total ticket counts"
+              style={{
+                width: '24px', height: '24px', borderRadius: '999px',
+                border: '1px solid var(--border)', background: '#fff',
+                color: 'var(--blue)', fontSize: '0.8rem', fontWeight: 800,
+                fontStyle: 'italic', fontFamily: 'Georgia, serif',
+                cursor: 'pointer', lineHeight: 1,
+              }}
+            >
+              i
+            </button>
           </div>
+          {showCountsInfo && (
+            <p className="muted" style={{ fontSize: '0.82rem', marginTop: 0 }}>
+              <strong>Active</strong> = requests currently pending or in-progress and requiring staff attention. <strong>Total</strong> = all requests ever created in that department, including completed, rejected, and cancelled ones.
+            </p>
+          )}
           <div style={{ marginBottom: '1rem' }}>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
             {Object.entries(report.byStatus).map(([status, count]) => (
@@ -351,7 +371,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
                   <div className="row" style={{ justifyContent: 'space-between', fontSize: '0.82rem' }}>
                     <strong>{d.code} · {d.name}</strong>
                     <span className="muted">
-                      <strong style={{ color: d.open > 0 ? 'var(--blue)' : 'inherit' }}>{d.open} active</strong> (pending/in-progress) · {d.total} total
+                      <strong style={{ color: d.open > 0 ? 'var(--blue)' : 'inherit' }}>{d.open} active</strong> · {d.total} total
                     </span>
                   </div>
                   <div style={{ height: '8px', borderRadius: '999px', background: 'var(--border)', marginTop: '0.25rem' }}>
