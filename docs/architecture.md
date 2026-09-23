@@ -77,3 +77,17 @@ flowchart TD
 Use a modular monolith for the initial implementation: one API deployment, one relational database, private object storage, and background workers. Keep domain modules separated internally (identity, catalog, requests, documents, notifications, audit) so independent services can be introduced only when operational evidence justifies them.
 
 Communication between client and API is synchronous REST. Notifications and maintenance are asynchronous because they must not block the core request transaction.
+
+## 8. Implementation notes (post-spec additions)
+
+* **SLA deadlines** are decided per ticket at creation (Groq content analysis
+  with static priority fallback) and stored as `slaDueAt`/`slaSource`; see
+  `docs/sla-design.md`. The breach center (`GET /requests/breach`) lists
+  open overdue tickets with queue-equivalent scoping.
+* **Healthcheck** (`GET /health`) returns 200 + version/uptime when the
+  database pings, **503** when it does not, so orchestrators restart or
+  alert on real outages.
+* **Edge hardening:** global 100 req/min/IP throttle (10/min on
+  `POST /auth/login`), helmet security headers (CSP relaxed for Swagger UI),
+  and one-line HTTP access logs without query strings or bodies.
+* **API docs** are served live at `/api-docs` (Swagger UI).

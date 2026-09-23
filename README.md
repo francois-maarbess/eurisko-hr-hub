@@ -6,7 +6,17 @@
 
 An internal service hub for submitting, routing, tracking, and resolving employee requests.
 
-**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt auth (password + TOTP + Google SSO) · 74 automated tests.
+**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth with throttling + helmet · 79 automated tests.
+
+## Demo (2 minutes)
+
+Full click-by-click script: [`DEMO.md`](./DEMO.md) — reset, seed the storyline, and tour employee → agent → admin.
+
+![Demo walkthrough](./docs/demo.gif)
+
+| Employee view | Admin overview |
+|---|---|
+| ![Employee queue](./docs/screenshot-queue.png) | ![Admin dashboard](./docs/screenshot-admin.png) |
 
 ## Quick Start
 
@@ -68,14 +78,14 @@ cd frontend && npm run dev
 ## Running Tests
 
 ```bash
-npm test      # 74 tests (all deterministic, SQLite)
+npm test      # 79 tests (all deterministic, SQLite)
 npm run eval:ai  # 8 AI eval cases (offline, no key, no DB)
 ```
 
-62 tests covering:
-- **Unit**: Status transitions (10) + AI extractor/validation/fallback/sensitive/off-topic (10) + password accounts (6) + purge & duplicate scoring (3)
+79 tests covering:
+- **Unit**: Status transitions (10) + AI extractor/validation/fallback/sensitive/off-topic (10) + SLA fallback (1) + password accounts (6) + purge & duplicate scoring (3)
 - **Integration**: Prisma ↔ SQLite database lifecycle (3)
-- **E2E (30)**: Full HTTP flow with auth, scoped views, create, claim, complete, documents lifecycle, notifications, duplicates, report, manager memberships, owner-cancel/admin-claim rules, validation, regression + AI draft endpoint + catalog + admin user lifecycle
+- **E2E (46)**: Full HTTP flow with auth, scoped views, create, claim, complete, documents lifecycle, notifications, duplicates, report, manager memberships, owner-cancel/admin-claim rules, validation, regression + AI draft endpoint + catalog + admin user lifecycle + SLA deadlines + breach center + rate limiting
 
 ## AI-Assisted Intake (Week 4)
 
