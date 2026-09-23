@@ -1225,4 +1225,17 @@ describe('Service Request Flow (E2E)', () => {
       .set('Authorization', `Bearer ${employeeToken}`);
     expect(denied.status).toBe(403);
   });
+
+  it('login is rate-limited after a rapid burst', async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 15; i++) {
+      const r = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: 'alice@acme.com', password: 'wrong-password' });
+      statuses.push(r.status);
+    }
+    // Wrong passwords are 401 until the 10/min throttle kicks in with 429.
+    expect(statuses).toContain(401);
+    expect(statuses).toContain(429);
+  });
 });

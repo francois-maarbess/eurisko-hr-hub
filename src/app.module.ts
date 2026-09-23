@@ -1,4 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module';
 import { PrismaModule } from './prisma.module';
 import { RequestsController } from './requests.controller';
@@ -15,7 +17,13 @@ import { HealthController } from './health.controller';
 import { RequestLoggerMiddleware } from './request-logger.middleware';
 
 @Module({
-  imports: [PrismaModule, AuthModule, AiModule],
+  imports: [
+    // 100 req/min/IP by default; sensitive routes set tighter limits.
+    ThrottlerModule.forRoot([{ name: 'default', ttl: 60000, limit: 100 }]),
+    PrismaModule,
+    AuthModule,
+    AiModule,
+  ],
   controllers: [
     RequestsController,
     CatalogController,
@@ -24,7 +32,13 @@ import { RequestLoggerMiddleware } from './request-logger.middleware';
     DepartmentsController,
     HealthController,
   ],
-  providers: [RequestsService, AuditService, NotificationsService, DocumentsService],
+  providers: [
+    RequestsService,
+    AuditService,
+    NotificationsService,
+    DocumentsService,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

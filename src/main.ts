@@ -11,6 +11,7 @@ if (!process.env['JWT_SECRET']) {
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -22,6 +23,9 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
   });
+
+  // Security headers; CSP off so Swagger UI's inline scripts keep working.
+  app.use(helmet({ contentSecurityPolicy: false }));
 
   app.useGlobalPipes(
     new ValidationPipe({

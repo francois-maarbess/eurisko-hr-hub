@@ -18,6 +18,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { JwtService } from '@nestjs/jwt';
+import { Throttle } from '@nestjs/throttler';
 import { PrismaClient } from '@prisma/client';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { Roles, RolesGuard } from './roles.guard';
@@ -105,6 +106,7 @@ export class AuthController {
    * return the same 401 so accounts can't be enumerated.
    */
   @Post('login')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   async login(@Body() dto: LoginDto) {
     return this.authService.login(dto.email, dto.password);
   }
