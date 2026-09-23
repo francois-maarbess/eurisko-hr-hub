@@ -20,6 +20,8 @@ interface TicketState {
   feedbackNote?: string | null;
   completedAt?: string | null;
   createdAt: string;
+  slaDueAt?: string | null;
+  slaSource?: string | null;
   department?: { id: string; code: string; name: string };
   requestType?: { code: string; name: string };
   owner?: { id: string; displayName: string };
@@ -78,20 +80,30 @@ const PRIORITY_COLORS: Record<TicketPriority, { background: string; color: strin
 
 type View = 'mine' | 'queue' | 'claimed';
 
-function getSlaInfo(ticket: TicketState): { label: string; bg: string; color: string } {
+function getSlaInfo(ticket: TicketState): { label: string; bg: string; color: string; title: string } {
+  // Prefer the stored per-ticket deadline (AI-set when Groq configured,
+  // rule-based otherwise); fall back to legacy priority math for tickets
+  // created before deadlines existed.
+  const hasStored = !!ticket.slaDueAt;
   const targetHours = ticket.priority === 'URGENT' ? 4 : ticket.priority === 'STANDARD' ? 24 : 48;
-  const targetMs = targetHours * 3600000;
-  const createdMs = new Date(ticket.createdAt).getTime();
-  const deadlineMs = createdMs + targetMs;
+  const deadlineMs = hasStored
+    ? new Date(ticket.slaDueAt as string).getTime()
+    : new Date(ticket.createdAt).getTime() + targetHours * 3600000;
+  const sourceTitle = hasStored
+    ? ticket.slaSource === 'AI'
+      ? 'AI-estimated deadline from ticket content'
+      : 'Standard deadline for this priority'
+    : 'Standard deadline for this priority';
   const isTerminal = ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(ticket.status);
 
   if (ticket.status === 'COMPLETED' && ticket.completedAt) {
     const completedMs = new Date(ticket.completedAt).getTime();
     const met = completedMs <= deadlineMs;
     return {
-      label: met ? `✓ SLA Met (${targetHours}h)` : `SLA Breached`,
+      label: met ? `✓ SLA Met` : `SLA Breached`,
       bg: met ? '#dcfce7' : '#fee2e2',
       color: met ? '#15803d' : '#b91c1c',
+      title: `${sourceTitle} · finished ${met ? 'on time' : 'late'}`,
     };
   }
 
@@ -100,6 +112,7 @@ function getSlaInfo(ticket: TicketState): { label: string; bg: string; color: st
       label: `SLA: ${targetHours}h`,
       bg: '#f1f5f9',
       color: 'var(--muted)',
+      title: sourceTitle,
     };
   }
 
@@ -110,18 +123,21 @@ function getSlaInfo(ticket: TicketState): { label: string; bg: string; color: st
       label: `⚠️ SLA Overdue (+${overdueHrs}h)`,
       bg: '#fee2e2',
       color: '#b91c1c',
+      title: `${sourceTitle} · overdue by about ${overdueHrs}h`,
     };
   }
 
   const remainingHrs = Math.floor(remainingMs / 3600000);
   const remainingMins = Math.floor((remainingMs % 3600000) / 60000);
   const text = remainingHrs > 0 ? `${remainingHrs}h ${remainingMins}m` : `${remainingMins}m`;
-  const isWarning = remainingMs < 3600000 || remainingMs < targetMs * 0.25;
+  const slaTargetMs = deadlineMs - new Date(ticket.createdAt).getTime();
+  const isWarning = remainingMs < 3600000 || remainingMs < slaTargetMs * 0.25;
 
   return {
     label: `⏱ SLA: ${text} left`,
     bg: isWarning ? '#fef3c7' : '#eff6ff',
     color: isWarning ? '#b45309' : '#1d4ed8',
+    title: `${sourceTitle} · ${text} remaining`,
   };
 }
 
@@ -746,7 +762,7 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
         const canRejectPending = (inMyDept || isAdmin) && !isOwner && ticket.status === 'PENDING';
         const canManageDocs = inMyDept || isAdmin;
         const canDownloadDocs = canManageDocs || (isOwner && isTerminalCard);
-        const canReadNotes = (inMyDept || isAdmin) && !isOwner;
+        const canReadNotes = (inMyDept || isAdmin) && (!isOwner || isAdmin);
         const ticketError = cardErrors[ticket.id];
 
         const sla = getSlaInfo(ticket);
@@ -772,9 +788,11 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
                 {ticket.owner && <div className="muted" style={{ fontSize: '0.85rem' }}>Requested by {ticket.owner.displayName}</div>}
               </div>
               <div className="pill-group">
-                <Badge bg={sla.bg} color={sla.color}>
-                  {sla.label}
-                </Badge>
+                <span title={sla.title}>
+                  <Badge bg={sla.bg} color={sla.color}>
+                    {sla.label}
+                  </Badge>
+                </span>
                 <Badge bg={PRIORITY_COLORS[ticket.priority].background} color={PRIORITY_COLORS[ticket.priority].color}>
                   {formatEnum(ticket.priority)}
                 </Badge>
@@ -845,7 +863,7 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
                         )}
                         <div className="muted" style={{ fontSize: '0.78rem', marginTop: '0.15rem' }}>
                           {a.actor}
-                          {!isReroute && a.details ? ` · ${a.details}` : ''} · {a.timestamp ? new Date(a.timestamp).toLocaleString() : ''}
+                          {!isReroute && a.details && !/^note [a-z0-9]+$/i.test(a.details) ? ` · ${a.details}` : ''} · {a.timestamp ? new Date(a.timestamp).toLocaleString() : ''}
                         </div>
                       </div>
                     );

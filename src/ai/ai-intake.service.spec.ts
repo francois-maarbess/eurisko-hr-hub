@@ -151,4 +151,20 @@ describe('AI-assisted intake (Week 4)', () => {
       /workplace requests/,
     );
   });
+
+  it('SLA estimator falls back to priority targets without a key', async () => {
+    const svc = new AiIntakeService(stubPrisma, new LocalAiProvider(), undefined as any);
+    await expect(svc.decideSlaHours('my laptop is on fire', 'URGENT')).resolves.toEqual({
+      hours: 4,
+      source: 'RULE',
+    });
+    await expect(svc.decideSlaHours('need a new mouse', 'STANDARD')).resolves.toEqual({
+      hours: 24,
+      source: 'RULE',
+    });
+    await expect(svc.decideSlaHours('new mouse when convenient', 'LOW')).resolves.toEqual({
+      hours: 48,
+      source: 'RULE',
+    });
+  });
 });

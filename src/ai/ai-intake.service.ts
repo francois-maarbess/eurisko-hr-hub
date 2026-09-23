@@ -151,4 +151,22 @@ export class AiIntakeService {
       sensitive: result.sensitive === true,
     };
   }
+
+  /**
+   * Decides how many hours a ticket gets before its SLA deadline.
+   * Groq reads the actual urgency when a key is configured; anything
+   * (missing key, network, bad response) falls back to static priority
+   * targets — creation never blocks on the LLM.
+   */
+  async decideSlaHours(text: string, priority: string): Promise<{ hours: number; source: 'AI' | 'RULE' }> {
+    if (process.env['GROQ_API_KEY']) {
+      try {
+        const hours = await this.groq.estimateSlaHours(text, priority);
+        return { hours, source: 'AI' };
+      } catch (e) {
+        this.logger.warn(`SLA estimator failed, using priority fallback: ${(e as Error).message}`);
+      }
+    }
+    return { hours: priority === 'URGENT' ? 4 : priority === 'STANDARD' ? 24 : 48, source: 'RULE' };
+  }
 }

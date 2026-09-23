@@ -1037,6 +1037,81 @@ describe('Service Request Flow (E2E)', () => {
     expect(empty.status).toBe(400);
   });
 
+  it('admin-owner reads staff notes on their own ticket; timeline shows a snippet, never a raw ID', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+    const created = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        departmentId: dept!.id,
+        requestTypeId: rt!.id,
+        title: `Admin Notes Probe ${Date.now()}`,
+        description: 'Admin owns this ticket but must still see staff work',
+        priority: 'STANDARD',
+      });
+    const id = created.body.id;
+
+    const posted = await request(app.getHttpServer())
+      .post(`/requests/${id}/notes`)
+      .set('Authorization', `Bearer ${agentToken}`)
+      .send({ content: 'Replacement unit ordered from the vendor today.' });
+    expect(posted.status).toBe(201);
+
+    // Admin owns the ticket yet reads the note list fine.
+    const adminList = await request(app.getHttpServer())
+      .get(`/requests/${id}/notes`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(adminList.status).toBe(200);
+    expect(adminList.body.some((n: any) => n.content.includes('Replacement unit'))).toBe(true);
+
+    // Timeline entry carries a readable snippet, not "note <cuid>".
+    const timeline = await request(app.getHttpServer())
+      .get(`/requests/${id}/activity`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(timeline.status).toBe(200);
+    const noteEvents = timeline.body.filter((a: any) => a.label === 'Internal note added');
+    expect(noteEvents.length).toBeGreaterThanOrEqual(1);
+    for (const e of noteEvents) {
+      expect(e.details || '').not.toMatch(/^note [a-z0-9]+$/i);
+    }
+    expect(noteEvents.some((e: any) => (e.details || '').includes('Replacement unit'))).toBe(true);
+  });
+
+  it('created tickets carry an SLA deadline; reroute refreshes it', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+    const hr = await prisma.department.findFirst({ where: { code: 'HR' } });
+    const letter = await prisma.requestType.findFirst({ where: { departmentId: hr!.id } });
+    const before = Date.now();
+    const created = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        departmentId: dept!.id,
+        requestTypeId: rt!.id,
+        title: `SLA Probe ${Date.now()}`,
+        description: 'Deadline must be set without any AI key configured',
+        priority: 'STANDARD',
+      });
+    expect(created.status).toBe(201);
+    // No GROQ key in tests: rule fallback gives ~24h for STANDARD.
+    expect(created.body.slaSource).toBe('RULE');
+    const dueMs = new Date(created.body.slaDueAt).getTime() - before;
+    expect(dueMs).toBeGreaterThan(23 * 3600_000);
+    expect(dueMs).toBeLessThan(25 * 3600_000);
+
+    // Re-routing reopens the ticket with a fresh deadline.
+    const moved = await request(app.getHttpServer())
+      .patch(`/requests/${created.body.id}/reroute`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ newDepartmentId: hr!.id, newRequestTypeId: letter!.id, reason: 'sla refresh check' });
+    expect(moved.status).toBe(200);
+    expect(moved.body.status).toBe('PENDING');
+    expect(new Date(moved.body.slaDueAt).getTime()).toBeGreaterThanOrEqual(before);
+    expect(moved.body.slaSource).toBe('RULE');
+  });
+
   it('owner rates a completed ticket once; others and bad values rejected', async () => {
     const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
     const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });

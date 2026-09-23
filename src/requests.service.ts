@@ -5,6 +5,7 @@ import { UpdateStatusDto } from './dto/update-status.dto';
 import { PRISMA_CLIENT_TOKEN } from './prisma.service';
 import { AuditService } from './audit.service';
 import { NotificationsService } from './notifications.service';
+import { AiIntakeService } from './ai/ai-intake.service';
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   PENDING: ['IN_PROGRESS', 'CANCELLED', 'REJECTED'],
@@ -30,7 +31,23 @@ export class RequestsService {
     @Inject(PRISMA_CLIENT_TOKEN) private readonly prisma: PrismaClient,
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
+    // Optional so unit specs can construct the service without the AI module.
+    private readonly ai?: AiIntakeService,
   ) {}
+
+  /** AI-decided deadline with static fallback — never throws, never blocks. */
+  private async slaFor(title: string, description: string, priority: string) {
+    try {
+      if (this.ai) {
+        const { hours, source } = await this.ai.decideSlaHours(`${title}\n${description}`, priority);
+        return { slaDueAt: new Date(Date.now() + hours * 3600_000), slaSource: source };
+      }
+    } catch {
+      // Fall through to the rule-based deadline below.
+    }
+    const hours = priority === 'URGENT' ? 4 : priority === 'STANDARD' ? 24 : 48;
+    return { slaDueAt: new Date(Date.now() + hours * 3600_000), slaSource: 'RULE' as const };
+  }
 
   private openWhere() {
     return { status: { notIn: ['COMPLETED', 'CANCELLED', 'REJECTED'] } };
@@ -137,7 +154,9 @@ export class RequestsService {
     }
 
     // Request row + audit row atomically; notifications fan out after commit
-    // and can never fail the write.
+    // and can never fail the write. The SLA deadline is decided BEFORE the
+    // transaction so no LLM call ever holds a database transaction open.
+    const sla = await this.slaFor(dto.title, dto.description, dto.priority);
     const created = await this.prisma.$transaction(async (tx) => {
       const req = await tx.request.create({
         data: {
@@ -148,6 +167,8 @@ export class RequestsService {
           description: dto.description,
           priority: dto.priority,
           status: 'PENDING',
+          slaDueAt: sla.slaDueAt,
+          slaSource: sla.slaSource,
         },
         include: { department: true, requestType: true },
       });
@@ -390,6 +411,9 @@ export class RequestsService {
       reason,
     });
 
+    // Re-routed tickets reopen as PENDING with a fresh deadline, decided
+    // BEFORE the transaction so no LLM call ever holds it open.
+    const sla = await this.slaFor(request.title, request.description, request.priority);
     await this.prisma.$transaction(async (tx) => {
       await tx.request.update({
         where: { id },
@@ -401,6 +425,8 @@ export class RequestsService {
           resolutionNote: null,
           rejectionReason: null,
           completedAt: null,
+          slaDueAt: sla.slaDueAt,
+          slaSource: sla.slaSource,
         },
       });
       await tx.auditLog.create({
@@ -499,11 +525,13 @@ export class RequestsService {
     const note = await this.prisma.staffNote.create({
       data: { requestId: id, authorId: userId, content: text },
     });
+    // Timeline shows a readable snippet — never a raw database ID.
+    const snippet = text.length > 80 ? `${text.slice(0, 80)}…` : text;
     await this.audit.append({
       requestId: id,
       actorId: userId,
       action: 'STAFF_NOTE_ADDED',
-      newValue: `note ${note.id}`,
+      newValue: snippet,
     });
     return note;
   }
@@ -511,7 +539,9 @@ export class RequestsService {
   async listStaffNotes(id: string, userId: string) {
     const viewer = await this.viewerOf(userId);
     const request = await this.findOne(id, viewer);
-    if (request.employeeId === userId) {
+    // Requesters can't read internal notes — unless they're a system admin
+    // (admins routinely own test/demo tickets and must still see staff work).
+    if (request.employeeId === userId && viewer.platformRole !== 'SYSTEM_ADMIN') {
       throw new ForbiddenException('Requesters cannot read internal staff notes.');
     }
     if (viewer.platformRole !== 'SYSTEM_ADMIN') {

@@ -80,4 +80,50 @@ export class GroqAiProvider implements AiProvider {
       sensitive: parsed.sensitive === true,
     };
   }
+
+  /**
+   * Estimates how many hours a ticket should take, from its content and
+   * priority. Returns an integer clamped to 1–72. Throws on any failure
+   * (missing key, network, bad response) so callers fall back to rules.
+   */
+  async estimateSlaHours(text: string, priority: string): Promise<number> {
+    const apiKey = process.env['GROQ_API_KEY'];
+    if (!apiKey) throw new Error('GROQ_API_KEY is not set.');
+
+    const model = process.env['GROQ_MODEL'] || 'openai/gpt-oss-20b';
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+        // Groq sits behind Cloudflare, which rejects non-browser clients.
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0,
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You triage internal service-desk tickets. Output ONLY a raw JSON object: { "hours": <integer> }. ' +
+              'Pick how many hours this ticket should take to resolve: 1-4 for true emergencies ' +
+              '(system down, security incident, safety issue, employee fully blocked), 4-12 for urgent but ' +
+              'workable issues, 12-48 for routine work. Weight the stated priority, but override it when the ' +
+              'content clearly disagrees (e.g. "laptop on fire" is 1 hour even at STANDARD; "new mouse when ' +
+              'convenient" is 48 hours even at URGENT). Reply with the number only, no explanation.',
+          },
+          { role: 'user', content: `Priority: ${priority}\nTicket: ${text.slice(0, 1000)}` },
+        ],
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) throw new Error(`Groq rejected the request (HTTP ${res.status}).`);
+
+    const body = (await res.json()) as any;
+    const hours = Math.round(Number(body?.choices?.[0]?.message?.content ? JSON.parse(body.choices[0].message.content).hours : NaN));
+    if (!Number.isFinite(hours)) throw new Error('Groq returned no usable hours.');
+    return Math.min(72, Math.max(1, hours));
+  }
 }

@@ -85,6 +85,8 @@ model Request {
   completedAt    DateTime?
   rating         Int?
   feedbackNote   String?
+  slaDueAt       DateTime?
+  slaSource      String?   // 'AI' | 'RULE' — who set the deadline
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
