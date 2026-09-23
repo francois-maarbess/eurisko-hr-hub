@@ -30,6 +30,7 @@ export default function App() {
   const [inboxOpen, setInboxOpen] = useState(false);
   const [inbox, setInbox] = useState<InboxItem[]>([]);
   const [unread, setUnread] = useState(0);
+  const [focusTicketId, setFocusTicketId] = useState<string | null>(null);
 
   const handleLogin = (accessToken: string, userData: User) => {
     setToken(accessToken);
@@ -43,6 +44,7 @@ export default function App() {
     setInbox([]);
     setUnread(0);
     setInboxOpen(false);
+    setFocusTicketId(null);
   };
 
   const refreshInbox = async (t: string = token!) => {
@@ -164,21 +166,40 @@ export default function App() {
           </>
         )}
 
-        <CreateRequestForm
-          token={token}
-          catalogVersion={catalogVersion}
-          onCreated={() => { setRefreshKey((k) => k + 1); if (token) refreshInbox(token); }}
-        />
-
-        {user.platformRole === 'SYSTEM_ADMIN' && (
-          <AdminPanel
+        {focusTicketId ? (
+          <TicketStatusManager
+            key={refreshKey}
             token={token}
-            onCatalogChange={() => setCatalogVersion((v) => v + 1)}
+            userId={user.id}
+            platformRole={user.platformRole}
+            focusTicketId={focusTicketId}
+            onBack={() => setFocusTicketId(null)}
           />
-        )}
+        ) : (
+          <>
+            <CreateRequestForm
+              token={token}
+              catalogVersion={catalogVersion}
+              onCreated={() => { setRefreshKey((k) => k + 1); if (token) refreshInbox(token); }}
+            />
 
-        <h3 style={{ margin: '1.5rem 0 0.75rem', color: 'var(--navy)' }}>Request Queue</h3>
-        <TicketStatusManager key={refreshKey} token={token} userId={user.id} platformRole={user.platformRole} />
+            {user.platformRole === 'SYSTEM_ADMIN' && (
+              <AdminPanel
+                token={token}
+                onCatalogChange={() => setCatalogVersion((v) => v + 1)}
+              />
+            )}
+
+            <h3 style={{ margin: '1.5rem 0 0.75rem', color: 'var(--navy)' }}>Request Queue</h3>
+            <TicketStatusManager
+              key={refreshKey}
+              token={token}
+              userId={user.id}
+              platformRole={user.platformRole}
+              onOpenTicket={(id) => setFocusTicketId(id)}
+            />
+          </>
+        )}
       </main>
     </>
   );

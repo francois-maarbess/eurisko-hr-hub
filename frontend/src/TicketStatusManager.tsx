@@ -173,9 +173,12 @@ interface TicketStatusManagerProps {
   token: string;
   userId: string;
   platformRole: string;
+  focusTicketId?: string | null;
+  onBack?: () => void;
+  onOpenTicket?: (id: string) => void;
 }
 
-export default function TicketStatusManager({ token, userId, platformRole }: TicketStatusManagerProps) {
+export default function TicketStatusManager({ token, userId, platformRole, focusTicketId, onBack, onOpenTicket }: TicketStatusManagerProps) {
   // Core lists & navigation state
   const [tickets, setTickets] = useState<TicketState[]>([]);
   const [view, setView] = useState<View>('mine');
@@ -249,13 +252,17 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
 
   const fetchTickets = async (v: View) => {
     try {
-      // Overdue mode pulls the server-side breach list (queue-scoped,
-      // most overdue first) instead of the current tab.
-      const url = overdueOnly ? apiUrl('/requests/breach') : apiUrl(`/requests?view=${v}`);
+      // Focus mode shows one ticket (detail view); overdue mode pulls the
+      // server-side breach list; otherwise the current tab.
+      const url = focusTicketId
+        ? apiUrl(`/requests/${focusTicketId}`)
+        : overdueOnly
+          ? apiUrl('/requests/breach')
+          : apiUrl(`/requests?view=${v}`);
       const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.message || 'Failed to load requests.');
-      setTickets(data as TicketState[]);
+      setTickets(focusTicketId ? [data as TicketState] : (data as TicketState[]));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to load requests.';
       setCardErrors((current) => ({ ...current, global: message }));
@@ -273,7 +280,7 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
 
   useEffect(() => {
     fetchTickets(view);
-  }, [token, view, overdueOnly]);
+  }, [token, view, overdueOnly, focusTicketId]);
 
   const mutate = async (ticket: TicketState, fn: () => Promise<Response>, successMsg?: string) => {
     setLoading(true);
@@ -619,49 +626,64 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
 
   return (
     <div style={{ display: 'grid', gap: '1rem' }}>
-      <Tabs options={tabOptions} value={view} onChange={setView} />
+      {focusTicketId ? (
+        <div>
+          <button
+            onClick={onBack}
+            style={{
+              border: '1px solid var(--border)', background: '#fff', borderRadius: '10px',
+              padding: '0.5rem 0.9rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700,
+              color: 'var(--blue)',
+            }}
+          >
+            ← Back to requests
+          </button>
+        </div>
+      ) : (
+        <>
+          <Tabs options={tabOptions} value={view} onChange={setView} />
 
-      <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap' }}>
-        <input
-          className="input"
-          style={{ flex: 2, minWidth: '180px' }}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search requests by title, description, or dept…"
-        />
-        <select
-          className="select"
-          style={{ flex: 1, minWidth: '140px' }}
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-        >
-          <option value="ALL">All statuses</option>
-          <option value="PENDING">Pending</option>
-          <option value="IN_PROGRESS">In Progress</option>
-          <option value="COMPLETED">Completed</option>
-          <option value="REJECTED">Rejected</option>
-          <option value="CANCELLED">Cancelled</option>
-        </select>
-        <button
-          onClick={() => setSortOldest((s) => !s)}
-          title="Toggle oldest/newest first"
-          style={{
-            border: '1px solid var(--border)',
-            background: '#fff',
-            borderRadius: '10px',
-            padding: '0.65rem 0.8rem',
-            cursor: 'pointer',
-            fontSize: '0.85rem',
-            fontWeight: 700,
-            color: sortOldest ? 'var(--blue)' : 'var(--muted)',
-          }}
-        >
-          {sortOldest ? 'Oldest first ↑' : 'Newest first ↓'}
-        </button>
-      </div>
+          <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap' }}>
+            <input
+              className="input"
+              style={{ flex: 2, minWidth: '180px' }}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search requests by title, description, or dept…"
+            />
+            <select
+              className="select"
+              style={{ flex: 1, minWidth: '140px' }}
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="ALL">All statuses</option>
+              <option value="PENDING">Pending</option>
+              <option value="IN_PROGRESS">In Progress</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="REJECTED">Rejected</option>
+              <option value="CANCELLED">Cancelled</option>
+            </select>
+            <button
+              onClick={() => setSortOldest((s) => !s)}
+              title="Toggle oldest/newest first"
+              style={{
+                border: '1px solid var(--border)',
+                background: '#fff',
+                borderRadius: '10px',
+                padding: '0.65rem 0.8rem',
+                cursor: 'pointer',
+                fontSize: '0.85rem',
+                fontWeight: 700,
+                color: sortOldest ? 'var(--blue)' : 'var(--muted)',
+              }}
+            >
+              {sortOldest ? 'Oldest first ↑' : 'Newest first ↓'}
+            </button>
+          </div>
 
-      <div className="row" style={{ gap: '0.4rem', flexWrap: 'wrap', marginTop: '-0.35rem' }}>
-        <span className="muted" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Quick filters:</span>
+          <div className="row" style={{ gap: '0.4rem', flexWrap: 'wrap', marginTop: '-0.35rem' }}>
+            <span className="muted" style={{ fontSize: '0.78rem', fontWeight: 600 }}>Quick filters:</span>
         <button
           onClick={() => setFilterUrgentOnly((u) => !u)}
           style={{
@@ -752,6 +774,8 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
           </button>
         )}
       </div>
+        </>
+      )}
 
       {toast && (
         <div style={{ background: 'var(--navy)', color: '#fff', borderRadius: '10px', padding: '0.7rem 0.9rem', fontWeight: 600 }}>
@@ -811,7 +835,20 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
                   {ticket.requestType && ` · ${ticket.requestType.name}`}
                 </div>
                 <div style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--navy)' }}>
-                  {highlightMatch(ticket.title, query)}
+                  {onOpenTicket && !focusTicketId ? (
+                    <button
+                      onClick={() => onOpenTicket(ticket.id)}
+                      title="Open ticket detail"
+                      style={{
+                        border: 'none', background: 'none', padding: 0, cursor: 'pointer',
+                        fontWeight: 800, fontSize: '1.05rem', color: 'var(--navy)', textAlign: 'left',
+                      }}
+                    >
+                      {highlightMatch(ticket.title, query)}
+                    </button>
+                  ) : (
+                    highlightMatch(ticket.title, query)
+                  )}
                 </div>
                 {ticket.owner && <div className="muted" style={{ fontSize: '0.85rem' }}>Requested by {ticket.owner.displayName}</div>}
               </div>
