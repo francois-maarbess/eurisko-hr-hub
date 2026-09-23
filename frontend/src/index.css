@@ -1,13 +1,19 @@
 /* Internal Operations Service Hub — design tokens + shared primitives.
-   Brand family: navy / blue / pale blue. Light theme only. */
+   Calm operations cockpit: neutral canvas, ink/navy structure, one blue
+   action accent, amber/red reserved for warnings and overdue work.
+   Light theme only. */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700;9..40,800&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 :root {
-  --navy: #0f172a;
-  --blue: #2563eb;
+  --navy: #0f172a;          /* ink: navigation, headings */
+  --ink-soft: #334155;
+  --blue: #2563eb;          /* single action accent */
   --blue-dark: #1d4ed8;
   --blue-pale: #eff6ff;
   --blue-border: #bfdbfe;
 
+  --canvas: #f8fafc;        /* neutral page background */
   --bg: #f1f5f9;
   --card: #ffffff;
   --text: #0f172a;
@@ -27,7 +33,13 @@
   --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08);
   --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.1);
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  /* App shell geometry (4px base scale) */
+  --content-max: 1200px;
+  --sidebar-w: 240px;
+  --header-h: 64px;
+
+  --sans: 'DM Sans', 'Source Sans 3', system-ui, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
 
   color-scheme: light;
 }
@@ -39,7 +51,7 @@
 body {
   margin: 0;
   font-family: var(--sans);
-  background: var(--bg);
+  background: var(--canvas);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
 }
@@ -572,4 +584,182 @@ a:focus-visible {
   .mfa-qr { width: 150px; height: 150px; }
   .mfa-code-row > * { flex: 1 1 100%; }
   .section-header { margin-top: 1.1rem; }
+}
+
+/* ---------- application shell ---------- */
+
+.shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  background: var(--navy);
+  color: #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 1.25rem 0.85rem;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 800;
+  font-size: 1.02rem;
+  color: #fff;
+  padding: 0 0.5rem 1.1rem;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1;
+}
+
+.sidebar-link {
+  border: none;
+  background: none;
+  text-align: left;
+  color: #94a3b8;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.sidebar-link:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+
+.sidebar-link-active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.sidebar-user {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  padding-top: 0.9rem;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.sidebar-user-name {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: #fff;
+}
+
+.sidebar-user-role {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.sidebar-signout {
+  margin-top: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: none;
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 0.45rem 0.7rem;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sidebar-signout:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.shell-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.shell-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+
+.shell-header-inner {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: 0.7rem 1.25rem;
+  min-height: var(--header-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.shell-crumb {
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: var(--navy);
+}
+
+.shell-sub {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.shell-content {
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 3rem;
+}
+
+.mobile-nav {
+  display: none;
+  gap: 0.3rem;
+  overflow-x: auto;
+  padding: 0 1.25rem 0.6rem;
+}
+
+.mobile-link {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 999px;
+  padding: 0.35rem 0.8rem;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.mobile-link-active {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+
+@media (max-width: 900px) {
+  .sidebar {
+    display: none;
+  }
+  .mobile-nav {
+    display: flex;
+  }
+  .shell-sub {
+    display: none;
+  }
 }

@@ -177,13 +177,15 @@ interface TicketStatusManagerProps {
   focusTicketId?: string | null;
   onBack?: () => void;
   onOpenTicket?: (id: string) => void;
+  initialView?: View;
+  initialBoard?: boolean;
 }
 
-export default function TicketStatusManager({ token, userId, platformRole, focusTicketId, onBack, onOpenTicket }: TicketStatusManagerProps) {
+export default function TicketStatusManager({ token, userId, platformRole, focusTicketId, onBack, onOpenTicket, initialView, initialBoard }: TicketStatusManagerProps) {
   // Core lists & navigation state
   const [tickets, setTickets] = useState<TicketState[]>([]);
   const [listLoading, setListLoading] = useState(true);
-  const [view, setView] = useState<View>('mine');
+  const [view, setView] = useState<View>(initialView ?? 'mine');
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [loading, setLoading] = useState(false);
   const [cardErrors, setCardErrors] = useState<CardErrorState>({});
@@ -196,7 +198,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
   const [filterHasDocs, setFilterHasDocs] = useState(false);
   const [filterHasNotes, setFilterHasNotes] = useState(false);
   const [overdueOnly, setOverdueOnly] = useState(false);
-  const [boardView, setBoardView] = useState(false);
+  const [boardView, setBoardView] = useState(initialBoard ?? false);
 
   // Per-ticket form inputs
   const [resolutionInputs, setResolutionInputs] = useState<Record<string, string>>({});
