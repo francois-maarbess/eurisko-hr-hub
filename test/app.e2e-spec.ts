@@ -1112,6 +1112,45 @@ describe('Service Request Flow (E2E)', () => {
     expect(moved.body.slaSource).toBe('RULE');
   });
 
+  it('breach center lists only open overdue tickets, most overdue first', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+    const mk = (title: string) =>
+      request(app.getHttpServer())
+        .post('/requests')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({ departmentId: dept!.id, requestTypeId: rt!.id, title, description: 'breach probe', priority: 'STANDARD' });
+
+    const old = await mk(`Breach Old ${Date.now()}`);
+    const newer = await mk(`Breach New ${Date.now()}`);
+    const done = await mk(`Breach Done ${Date.now()}`);
+    // Backdate deadlines directly: old is most overdue, done is terminal.
+    await prisma.request.update({ where: { id: old.body.id }, data: { slaDueAt: new Date(Date.now() - 5 * 3600_000) } });
+    await prisma.request.update({ where: { id: newer.body.id }, data: { slaDueAt: new Date(Date.now() - 1 * 3600_000) } });
+    await prisma.request.update({
+      where: { id: done.body.id },
+      data: { slaDueAt: new Date(Date.now() - 9 * 3600_000), status: 'COMPLETED', completedAt: new Date() },
+    });
+
+    const res = await request(app.getHttpServer())
+      .get('/requests/breach')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    const ids = res.body.map((r: any) => r.id);
+    expect(ids).toContain(old.body.id);
+    expect(ids).toContain(newer.body.id);
+    expect(ids).not.toContain(done.body.id);
+    // Most overdue first.
+    expect(ids.indexOf(old.body.id)).toBeLessThan(ids.indexOf(newer.body.id));
+
+    // Plain employees outside every department see nothing.
+    const stranger = await request(app.getHttpServer())
+      .get('/requests/breach')
+      .set('Authorization', `Bearer ${employeeToken}`);
+    expect(stranger.status).toBe(200);
+    expect(stranger.body).toEqual([]);
+  });
+
   it('owner rates a completed ticket once; others and bad values rejected', async () => {
     const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
     const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });

@@ -101,6 +101,11 @@ export class RequestsController {
     return this.requestsService.exportCsv();
   }
 
+  @Get('breach')
+  breached(@CurrentUser() user: any) {
+    return this.requestsService.getBreached(user.id);
+  }
+
   @Get(':id/audit')
   async auditTrail(@Param('id') id: string, @CurrentUser() user: any) {
     // findOne enforces the same read gate: existence never leaks to strangers.

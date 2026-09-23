@@ -119,6 +119,38 @@ export class RequestsService {
   }
 
   /**
+   * SLA breach center: open tickets past their deadline, scoped exactly
+   * like the queue (my departments for agents, everything for admins),
+   * most overdue first. Tickets without a stored deadline never appear.
+   */
+  async getBreached(userId: string) {
+    const overdue = {
+      status: { notIn: TERMINAL_STATUSES },
+      slaDueAt: { lt: new Date() },
+    };
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (user?.platformRole === 'SYSTEM_ADMIN') {
+      return this.prisma.request.findMany({
+        where: overdue,
+        include: this.fullInclude,
+        orderBy: { slaDueAt: 'asc' },
+      });
+    }
+    const memberships = await this.prisma.departmentMember.findMany({
+      where: { userId, active: true },
+    });
+    if (memberships.length === 0) return [];
+    return this.prisma.request.findMany({
+      where: {
+        departmentId: { in: memberships.map((m) => m.departmentId) },
+        ...overdue,
+      },
+      include: this.fullInclude,
+      orderBy: { slaDueAt: 'asc' },
+    });
+  }
+
+  /**
    * Resource-level read gate (acceptance 2/3): the owner, an active member
    * of the owning department, or a system admin. Anything else is 403 —
    * existence of the row is never confirmed to strangers.

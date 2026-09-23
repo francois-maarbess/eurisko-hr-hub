@@ -190,6 +190,7 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
   const [filterUrgentOnly, setFilterUrgentOnly] = useState(false);
   const [filterHasDocs, setFilterHasDocs] = useState(false);
   const [filterHasNotes, setFilterHasNotes] = useState(false);
+  const [overdueOnly, setOverdueOnly] = useState(false);
 
   // Per-ticket form inputs
   const [resolutionInputs, setResolutionInputs] = useState<Record<string, string>>({});
@@ -248,7 +249,10 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
 
   const fetchTickets = async (v: View) => {
     try {
-      const response = await fetch(apiUrl(`/requests?view=${v}`), { headers: { Authorization: `Bearer ${token}` } });
+      // Overdue mode pulls the server-side breach list (queue-scoped,
+      // most overdue first) instead of the current tab.
+      const url = overdueOnly ? apiUrl('/requests/breach') : apiUrl(`/requests?view=${v}`);
+      const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.message || 'Failed to load requests.');
       setTickets(data as TicketState[]);
@@ -269,7 +273,7 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
 
   useEffect(() => {
     fetchTickets(view);
-  }, [token, view]);
+  }, [token, view, overdueOnly]);
 
   const mutate = async (ticket: TicketState, fn: () => Promise<Response>, successMsg?: string) => {
     setLoading(true);
@@ -705,12 +709,34 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
             💬 Has Staff Notes
           </button>
         )}
-        {(filterUrgentOnly || filterHasDocs || filterHasNotes) && (
+        <button
+          onClick={() => {
+            setOverdueOnly((o) => {
+              if (!o) setStatusFilter('ALL');
+              return !o;
+            });
+          }}
+          title="Show only open tickets past their SLA deadline"
+          style={{
+            border: overdueOnly ? '1px solid var(--danger)' : '1px solid var(--border)',
+            background: overdueOnly ? '#fee2e2' : '#fff',
+            color: overdueOnly ? 'var(--danger)' : 'inherit',
+            borderRadius: '999px',
+            padding: '0.22rem 0.6rem',
+            fontSize: '0.76rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >
+          ⚠️ Overdue
+        </button>
+        {(filterUrgentOnly || filterHasDocs || filterHasNotes || overdueOnly) && (
           <button
             onClick={() => {
               setFilterUrgentOnly(false);
               setFilterHasDocs(false);
               setFilterHasNotes(false);
+              setOverdueOnly(false);
             }}
             style={{
               border: 'none',
@@ -738,13 +764,15 @@ export default function TicketStatusManager({ token, userId, platformRole }: Tic
       {visibleTickets.length === 0 && (
         <EmptyState
           message={
-            query || statusFilter !== 'ALL'
-              ? 'No requests match this search.'
-              : view === 'queue'
-                ? 'No open requests in your departments.'
-                : view === 'claimed'
-                  ? 'No claimed requests yet.'
-                  : 'No requests yet. Create one above.'
+            overdueOnly
+              ? 'No overdue tickets — everything is on time. 🎉'
+              : query || statusFilter !== 'ALL'
+                ? 'No requests match this search.'
+                : view === 'queue'
+                  ? 'No open requests in your departments.'
+                  : view === 'claimed'
+                    ? 'No claimed requests yet.'
+                    : 'No requests yet. Create one above.'
           }
         />
       )}
