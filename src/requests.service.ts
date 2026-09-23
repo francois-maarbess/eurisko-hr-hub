@@ -653,6 +653,12 @@ export class RequestsService {
       _count: true,
     });
     const totalMap = new Map(totalByDept.map((r) => [r.departmentId, r._count]));
+    const breachedByDept = await this.prisma.request.groupBy({
+      by: ['departmentId'],
+      where: { status: { notIn: TERMINAL_STATUSES }, slaDueAt: { lt: new Date() } },
+      _count: true,
+    });
+    const breachedMap = new Map(breachedByDept.map((r) => [r.departmentId, r._count]));
     const csat = await this.prisma.request.aggregate({
       where: { rating: { not: null } },
       _avg: { rating: true },
@@ -665,6 +671,7 @@ export class RequestsService {
         name: d.name,
         open: openMap.get(d.id) || 0,
         total: totalMap.get(d.id) || 0,
+        breached: breachedMap.get(d.id) || 0,
       })),
       csatAverage: csat._avg.rating == null ? null : Math.round(csat._avg.rating * 100) / 100,
       csatCount: csat._count.rating,

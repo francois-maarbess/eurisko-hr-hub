@@ -763,6 +763,12 @@ describe('Service Request Flow (E2E)', () => {
     expect(res.status).toBe(200);
     expect(res.body.byStatus.PENDING).toBeGreaterThanOrEqual(1);
     expect(res.body.departments.some((d: any) => d.code === 'IT')).toBe(true);
+    for (const d of res.body.departments) {
+      expect(typeof d.open).toBe('number');
+      expect(typeof d.total).toBe('number');
+      expect(typeof d.breached).toBe('number');
+      expect(d.breached).toBeLessThanOrEqual(d.open);
+    }
 
     const denied = await request(app.getHttpServer())
       .get('/requests/report')

@@ -45,7 +45,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
   const [memberDrafts, setMemberDrafts] = useState<Record<string, { deptId: string; role: string }>>({});
   const [report, setReport] = useState<{
     byStatus: Record<string, number>;
-    departments: { code: string; name: string; open: number; total: number }[];
+    departments: { code: string; name: string; open: number; total: number; breached: number }[];
     csatAverage: number | null;
     csatCount: number;
   } | null>(null);
@@ -363,19 +363,35 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
               </span>
             ))}
           </div>
+          {report.departments.reduce((n, d) => n + d.breached, 0) > 0 && (
+            <div className="badge" style={{ background: '#fee2e2', color: 'var(--danger)', marginBottom: '0.75rem' }}>
+              ⚠️ {report.departments.reduce((n, d) => n + d.breached, 0)} ticket(s) past their SLA deadline
+              in {report.departments.filter((d) => d.breached > 0).length} department(s) — needs attention
+            </div>
+          )}
           <div style={{ display: 'grid', gap: '0.4rem' }}>
             {report.departments.map((d) => {
               const pct = d.total > 0 ? Math.round((d.open / d.total) * 100) : 0;
+              const breachPct = d.total > 0 ? Math.round((d.breached / d.total) * 100) : 0;
               return (
                 <div key={d.code}>
                   <div className="row" style={{ justifyContent: 'space-between', fontSize: '0.82rem' }}>
                     <strong>{d.code} · {d.name}</strong>
                     <span className="muted">
                       <strong style={{ color: d.open > 0 ? 'var(--blue)' : 'inherit' }}>{d.open} active</strong> · {d.total} total
+                      {d.breached > 0 && (
+                        <span style={{ color: 'var(--danger)', fontWeight: 700 }}> · {d.breached} overdue</span>
+                      )}
                     </span>
                   </div>
-                  <div style={{ height: '8px', borderRadius: '999px', background: 'var(--border)', marginTop: '0.25rem' }}>
+                  <div style={{ height: '8px', borderRadius: '999px', background: 'var(--border)', marginTop: '0.25rem', position: 'relative', overflow: 'hidden' }}>
                     <div style={{ height: '100%', width: `${pct}%`, borderRadius: '999px', background: 'var(--blue)' }} />
+                    {breachPct > 0 && (
+                      <div
+                        title={`${d.breached} ticket(s) past their SLA deadline`}
+                        style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${breachPct}%`, borderRadius: '999px', background: 'var(--danger)' }}
+                      />
+                    )}
                   </div>
                 </div>
               );
