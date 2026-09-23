@@ -402,3 +402,38 @@ body {
   background-size: 800px 100%;
   animation: skeleton-shimmer 1.3s ease-in-out infinite;
 }
+
+/* ---------- focus visibility & micro-interactions ---------- */
+
+.btn:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.btn-primary,
+.btn-success {
+  transition: filter 0.15s, transform 0.08s, box-shadow 0.15s;
+}
+
+.btn-primary:hover:not(:disabled),
+.btn-success:hover:not(:disabled) {
+  filter: brightness(1.06);
+  box-shadow: 0 4px 14px rgba(29, 78, 216, 0.25);
+}
+
+.btn-primary:active:not(:disabled),
+.btn-success:active:not(:disabled) {
+  transform: scale(0.97);
+  box-shadow: none;
+}
+
+/* Subtle frosted glass for overlay surfaces (dropdowns, modals). */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.16);
+}
