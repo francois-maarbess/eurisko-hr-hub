@@ -738,7 +738,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
         </div>
       ) : (
         <>
-          <Tabs options={tabOptions} value={view} onChange={setView} />
+          <Tabs options={tabOptions} value={view} onChange={(v) => setView(v as View)} />
 
           <div className="toolbar">
             <input
@@ -1185,7 +1185,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                     onKeyDown={(e) => {
                       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                         e.preventDefault();
-                        void handleComplete(ticket);
+                        void handleResolve(ticket);
                       }
                     }}
                     placeholder="Enter resolution details (Ctrl+Enter to complete)"
