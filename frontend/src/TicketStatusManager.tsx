@@ -178,10 +178,9 @@ interface TicketStatusManagerProps {
   onBack?: () => void;
   onOpenTicket?: (id: string) => void;
   initialView?: View;
-  initialBoard?: boolean;
 }
 
-export default function TicketStatusManager({ token, userId, platformRole, focusTicketId, onBack, onOpenTicket, initialView, initialBoard }: TicketStatusManagerProps) {
+export default function TicketStatusManager({ token, userId, platformRole, focusTicketId, onBack, onOpenTicket, initialView }: TicketStatusManagerProps) {
   // Core lists & navigation state
   const [tickets, setTickets] = useState<TicketState[]>([]);
   const [listLoading, setListLoading] = useState(true);
@@ -198,7 +197,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
   const [filterHasDocs, setFilterHasDocs] = useState(false);
   const [filterHasNotes, setFilterHasNotes] = useState(false);
   const [overdueOnly, setOverdueOnly] = useState(false);
-  const [boardView, setBoardView] = useState(initialBoard ?? false);
+  const [boardView, setBoardView] = useState(false);
 
   // Per-ticket form inputs
   const [resolutionInputs, setResolutionInputs] = useState<Record<string, string>>({});
@@ -711,15 +710,12 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
         : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
 
-  const tabOptions = [
-    { value: 'mine' as View, label: 'My Requests' },
-    ...(isStaff
-      ? [
-          { value: 'queue' as View, label: 'Department Queue' },
-          { value: 'claimed' as View, label: 'Claimed by Me' },
-        ]
-      : []),
-  ];
+  const tabOptions = initialView === 'mine'
+    ? [{ value: 'mine' as View, label: 'My Requests' }]
+    : [
+        { value: 'queue' as View, label: 'Department Queue' },
+        { value: 'claimed' as View, label: 'Claimed by Me' },
+      ];
 
   return (
     <div className="ticket-manager">
@@ -766,13 +762,25 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
             >
               {sortOldest ? 'Oldest first ↑' : 'Newest first ↓'}
             </button>
-            <button
-              className={`toolbar-button${boardView ? ' active' : ''}`}
-              onClick={() => setBoardView((v) => !v)}
-              title={boardView ? 'Back to the list view' : 'Drag tickets across a board'}
-            >
-              {boardView ? 'List view' : 'Board view'}
-            </button>
+            {initialView !== 'mine' && (
+              <div className="view-switcher" role="group" aria-label="Queue view">
+                <button
+                  className={`toolbar-button${!boardView ? ' active' : ''}`}
+                  onClick={() => setBoardView(false)}
+                  aria-pressed={!boardView}
+                >
+                  List
+                </button>
+                <button
+                  className={`toolbar-button${boardView ? ' active' : ''}`}
+                  onClick={() => setBoardView(true)}
+                  aria-pressed={boardView}
+                  title="Drag tickets across a board"
+                >
+                  Kanban
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="row quick-filters">

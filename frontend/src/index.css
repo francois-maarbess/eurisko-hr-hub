@@ -464,6 +464,8 @@ a:focus-visible {
   font-weight: 700;
 }
 .notification-button { position: relative; padding: 0.45rem 0.7rem; font-size: 0.85rem; }
+.bell-button { position: relative; display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--navy); cursor: pointer; }
+.bell-button svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
 .notification-count {
   position: absolute; top: -8px; right: -8px; min-width: 20px; height: 20px;
   padding: 0 4px; display: inline-flex; align-items: center; justify-content: center;
@@ -486,6 +488,8 @@ a:focus-visible {
 .toolbar-select { flex: 1 1 150px; min-width: 140px; }
 .toolbar-button { padding: 0.65rem 0.8rem; font-size: 0.85rem; color: var(--muted); }
 .toolbar-button.active { background: var(--blue-pale); color: var(--blue); }
+.view-switcher { display: inline-flex; gap: 0.25rem; padding: 0.2rem; border: 1px solid var(--border); border-radius: 10px; background: #f8fafc; }
+.view-switcher .toolbar-button { border-color: transparent; padding: 0.45rem 0.7rem; }
 .quick-filters { gap: 0.4rem; margin-top: -0.35rem; }
 .filter-button { border: 1px solid var(--border); background: #fff; color: inherit; border-radius: 999px; padding: 0.22rem 0.6rem; font: inherit; font-size: 0.76rem; font-weight: 700; cursor: pointer; }
 .filter-button.active { border-color: var(--blue); background: var(--blue-pale); color: var(--blue); }

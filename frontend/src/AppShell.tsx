@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button } from './components/ui';
 
-export type AppView = 'overview' | 'my' | 'queue' | 'kanban' | 'new' | 'admin' | 'security';
+export type AppView = 'overview' | 'my' | 'queue' | 'new' | 'admin' | 'security';
 
 interface NavItem {
   id: AppView;
@@ -14,7 +14,6 @@ const NAV: NavItem[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'my', label: 'My Requests' },
   { id: 'queue', label: 'Department Queue', staffOnly: true },
-  { id: 'kanban', label: 'Kanban Board', staffOnly: true },
   { id: 'admin', label: 'Administration', adminOnly: true },
   { id: 'security', label: 'Security' },
 ];
@@ -23,7 +22,6 @@ const VIEW_TITLES: Record<AppView, { title: string; sub: string }> = {
   overview: { title: 'Overview', sub: 'What needs attention, and how the operation is doing.' },
   my: { title: 'My Requests', sub: 'Everything you submitted, and where each request stands.' },
   queue: { title: 'Department Queue', sub: 'Open work in your departments, oldest and most urgent first.' },
-  kanban: { title: 'Kanban Board', sub: 'Drag tickets across the workflow.' },
   new: { title: 'New Request', sub: 'Describe the issue once — it routes to the right department.' },
   admin: { title: 'Administration', sub: 'People, catalog, and platform reporting.' },
   security: { title: 'Security', sub: 'Sign-in protection for your account.' },

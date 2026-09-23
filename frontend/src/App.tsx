@@ -142,24 +142,16 @@ export default function App() {
 
   const notifButton = (
     <button
+      className="bell-button"
       onClick={openInbox}
-      title="Notifications"
-      style={{
-        position: 'relative', border: '1px solid var(--border)', background: '#fff',
-        borderRadius: '10px', padding: '0.45rem 0.7rem', cursor: 'pointer', fontSize: '0.85rem',
-        fontWeight: 700, color: 'var(--navy)',
-      }}
+      title={unread > 0 ? `${unread} unread notifications` : 'Notifications'}
+      aria-label={unread > 0 ? `${unread} unread notifications` : 'Notifications'}
     >
-      Notifications
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
+      </svg>
       {unread > 0 && (
-        <span
-          style={{
-            position: 'absolute', top: '-8px', right: '-8px', background: 'var(--danger)',
-            color: '#fff', borderRadius: '999px', minWidth: '20px', height: '20px',
-            fontSize: '0.7rem', fontWeight: 800, display: 'flex',
-            alignItems: 'center', justifyContent: 'center', padding: '0 4px',
-          }}
-        >
+        <span className="notification-count">
           {unread > 99 ? '99+' : unread}
         </span>
       )}
@@ -282,18 +274,6 @@ export default function App() {
               userId={user.id}
               platformRole={user.platformRole}
               initialView="queue"
-              onOpenTicket={openTicket}
-            />
-          </ErrorBoundary>
-        ) : activeView === 'kanban' ? (
-          <ErrorBoundary section="request queue">
-            <TicketStatusManager
-              key={managerKey}
-              token={token}
-              userId={user.id}
-              platformRole={user.platformRole}
-              initialView="queue"
-              initialBoard
               onOpenTicket={openTicket}
             />
           </ErrorBoundary>
