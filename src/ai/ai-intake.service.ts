@@ -137,6 +137,7 @@ export class AiIntakeService {
       result = await primary.extractDraft(clean, catalog);
     } catch (e) {
       if (primary === this.local) throw e;
+      this.recordProviderError((e as Error).message);
       this.logger.warn(
         `AI provider "${primary.name}" failed, falling back to local: ${(e as Error).message}`,
       );
@@ -164,9 +165,29 @@ export class AiIntakeService {
         const hours = await this.groq.estimateSlaHours(text, priority);
         return { hours, source: 'AI' };
       } catch (e) {
+        this.recordProviderError((e as Error).message);
         this.logger.warn(`SLA estimator failed, using priority fallback: ${(e as Error).message}`);
       }
     }
     return { hours: priority === 'URGENT' ? 4 : priority === 'STANDARD' ? 24 : 48, source: 'RULE' };
+  }
+
+  private lastErrorAt: string | null = null;
+  private lastErrorMessage: string | null = null;
+
+  private recordProviderError(message: string) {
+    this.lastErrorAt = new Date().toISOString();
+    this.lastErrorMessage = message.slice(0, 200);
+  }
+
+  /** Surfaced on /health: which provider is live and when it last failed. */
+  providerStatus() {
+    const configured = !!process.env['GROQ_API_KEY'];
+    return {
+      provider: configured ? 'groq' : 'local',
+      model: configured ? process.env['GROQ_MODEL'] || 'openai/gpt-oss-20b' : 'offline-rules',
+      lastErrorAt: this.lastErrorAt,
+      lastErrorMessage: this.lastErrorMessage,
+    };
   }
 }

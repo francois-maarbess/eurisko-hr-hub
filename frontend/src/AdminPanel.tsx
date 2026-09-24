@@ -52,6 +52,14 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
   } | null>(null);
   const [exporting, setExporting] = useState(false);
   const [showCountsInfo, setShowCountsInfo] = useState(false);
+  const [sysHealth, setSysHealth] = useState<{
+    status: string;
+    database: string;
+    uptimeSeconds: number;
+    migrations: { applied: number; pending: number };
+    outbox: { pending: number; failed: number };
+    ai: { provider: string; model: string };
+  } | null>(null);
 
   const exportCsv = async () => {
     setExporting(true);
@@ -103,6 +111,12 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
 
   useEffect(() => {
     load();
+    fetch(apiUrl('/health'))
+      .then((r) => r.json())
+      .then((h) => {
+        if (h && typeof h.status === 'string') setSysHealth(h);
+      })
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -363,6 +377,23 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
             <p className="muted" style={{ fontSize: '0.82rem', marginTop: 0 }}>
               <strong>Active</strong> = requests currently pending or in-progress and requiring staff attention. <strong>Total</strong> = all requests ever created in that department, including completed, rejected, and cancelled ones.
             </p>
+          )}
+          {sysHealth && (
+            <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+              <span
+                className="badge"
+                title={`Uptime ${Math.floor(sysHealth.uptimeSeconds / 60)}m · migrations applied ${sysHealth.migrations.applied}, pending ${sysHealth.migrations.pending}`}
+                style={{ background: sysHealth.status === 'ok' ? 'var(--success-bg)' : 'var(--danger-bg)', color: sysHealth.status === 'ok' ? 'var(--success)' : 'var(--danger)' }}
+              >
+                System {sysHealth.status === 'ok' ? 'healthy' : sysHealth.status} · DB {sysHealth.database}
+              </span>
+              <span className="badge" style={{ background: '#f1f5f9', color: 'var(--muted)' }} title="Notification outbox backlog">
+                Outbox {sysHealth.outbox.pending} pending{sysHealth.outbox.failed > 0 ? ` · ${sysHealth.outbox.failed} failed` : ''}
+              </span>
+              <span className="badge" style={{ background: '#f1f5f9', color: 'var(--muted)' }} title={`AI model: ${sysHealth.ai.model}`}>
+                AI: {sysHealth.ai.provider}
+              </span>
+            </div>
           )}
           <div className="admin-overview">
           <div className="pill-group mb-md">

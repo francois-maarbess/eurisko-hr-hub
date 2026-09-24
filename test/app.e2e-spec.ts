@@ -1629,4 +1629,18 @@ describe('Service Request Flow (E2E)', () => {
     // Wrong passwords are 401 until the 20/min throttle kicks in with 429.
     expect(saw429).toBe(true);
   });
+
+  it('health reports database, migrations, outbox, and AI status', async () => {
+    const res = await request(app.getHttpServer()).get('/health');
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('ok');
+    expect(res.body.database).toBe('connected');
+    expect(typeof res.body.version).toBe('string');
+    expect(typeof res.body.uptimeSeconds).toBe('number');
+    expect(res.body.migrations.pending).toBe(0);
+    expect(res.body.migrations.applied).toBeGreaterThan(0);
+    expect(typeof res.body.outbox.pending).toBe('number');
+    expect(typeof res.body.outbox.failed).toBe('number');
+    expect(['groq', 'local']).toContain(res.body.ai.provider);
+  });
 });
