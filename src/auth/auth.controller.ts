@@ -136,13 +136,13 @@ export class AuthController {
    * return the same 401 so accounts can't be enumerated.
    */
   @Post('login')
-  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  @Throttle({ default: { limit: Number(process.env['LOGIN_THROTTLE_LIMIT'] || 20), ttl: 60000 } })
   async login(@Body() dto: LoginDto) {
     return this.authService.login(dto.email, dto.password);
   }
 
   @Post('refresh')
-  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  @Throttle({ default: { limit: Number(process.env['LOGIN_THROTTLE_LIMIT'] || 20), ttl: 60000 } })
   async refresh(@Body() dto: RefreshDto) {
     return this.authService.refresh(dto.refreshToken);
   }
@@ -159,7 +159,7 @@ export class AuthController {
    * codes must not be brute-forceable.
    */
   @Post('mfa/challenge')
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Throttle({ default: { limit: Number(process.env['MFA_THROTTLE_LIMIT'] || 5), ttl: 60000 } })
   async mfaChallenge(@Body() dto: MfaChallengeDto) {
     return this.mfa.challenge(dto.mfaToken, dto.code);
   }

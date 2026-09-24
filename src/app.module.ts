@@ -18,8 +18,15 @@ import { RequestLoggerMiddleware } from './request-logger.middleware';
 
 @Module({
   imports: [
-    // 100 req/min/IP by default; sensitive routes set tighter limits.
-    ThrottlerModule.forRoot([{ name: 'default', ttl: 60000, limit: 100 }]),
+    // All limits env-overridable (see .env.example); code values are
+    // local-dev defaults. forRoot runs after dotenv/config loads in main.
+    ThrottlerModule.forRoot([
+      {
+        name: 'default',
+        ttl: Number(process.env['THROTTLE_TTL_MS'] || 60_000),
+        limit: Number(process.env['THROTTLE_LIMIT'] || 100),
+      },
+    ]),
     PrismaModule,
     AuthModule,
     AiModule,
