@@ -47,11 +47,13 @@ function weekdayLabel(isoDay: string): string {
 
 /**
  * Command center. Admins (report available) see org-wide numbers — they
- * are accountable for every request. Everyone else sees their own
- * tickets only, with explicitly personal labels.
+ * are accountable for every request. Department staff see their
+ * departments' queue numbers — they are accountable for that work.
+ * Everyone else sees their own tickets only, with explicit labels.
  */
-export default function Dashboard({ token, userName }: { token: string; userName: string }) {
+export default function Dashboard({ token, userName, isStaff }: { token: string; userName: string; isStaff: boolean }) {
   const [mine, setMine] = useState<MiniTicket[]>([]);
+  const [queue, setQueue] = useState<MiniTicket[]>([]);
   const [breached, setBreached] = useState<MiniTicket[]>([]);
   const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,13 +63,15 @@ export default function Dashboard({ token, userName }: { token: string; userName
     (async () => {
       try {
         const headers = { Authorization: `Bearer ${token}` };
-        const [mineRes, breachRes, reportRes] = await Promise.all([
+        const [mineRes, queueRes, breachRes, reportRes] = await Promise.all([
           fetch(apiUrl('/requests?view=mine'), { headers }),
+          fetch(apiUrl('/requests?view=queue'), { headers }),
           fetch(apiUrl('/requests/breach'), { headers }),
           fetch(apiUrl('/requests/report'), { headers }),
         ]);
         if (cancelled) return;
         if (mineRes.ok) setMine(await mineRes.json());
+        if (queueRes.ok) setQueue(await queueRes.json());
         if (breachRes.ok) setBreached(await breachRes.json());
         if (reportRes.ok) setReport(await reportRes.json());
       } catch {
@@ -96,19 +100,23 @@ export default function Dashboard({ token, userName }: { token: string; userName
 
   const now = Date.now();
   const isOrg = report !== null;
+  const isTeam = !isOrg && isStaff;
 
-  // Personal numbers (employees) vs org numbers (admins).
+  // Admins: org sums. Staff: department queue + dept-scoped breach list.
+  // Plain employees: their own tickets only.
   const openMine = mine.filter((t) => !TERMINAL.includes(t.status));
   const overdueMine = openMine.filter((t) => t.slaDueAt && new Date(t.slaDueAt).getTime() < now);
   const orgOpen = (report?.departments || []).reduce((n, d) => n + d.open, 0);
   const orgBreached = (report?.departments || []).reduce((n, d) => n + d.breached, 0);
 
-  const openCount = isOrg ? orgOpen : openMine.length;
-  const overdueCount = isOrg ? orgBreached : overdueMine.length;
+  const openCount = isOrg ? orgOpen : isTeam ? queue.length : openMine.length;
+  const overdueCount = isOrg ? orgBreached : isTeam ? breached.length : overdueMine.length;
   const onTrack = openCount - overdueCount;
   const compliance = openCount === 0 ? 100 : Math.round((onTrack / openCount) * 100);
-  const scope = isOrg ? 'ORG' : 'MY';
+  const scope = isOrg ? 'ORG' : isTeam ? 'TEAM' : 'MY';
+  const scopeSuffix = isOrg ? ' org-wide' : isTeam ? ' in your departments' : '';
 
+  const volumeSource = isOrg || !isTeam ? mine : queue;
   const volume = isOrg && report
     ? report.volume.map((v) => ({ name: weekdayLabel(v.day), tickets: v.count }))
     : (() => {
@@ -120,7 +128,7 @@ export default function Dashboard({ token, userName }: { token: string; userName
         }
         return days.map((d) => ({
           name: d.label,
-          tickets: mine.filter((t) => dayKey(new Date(t.createdAt)) === d.key).length,
+          tickets: volumeSource.filter((t) => dayKey(new Date(t.createdAt)) === d.key).length,
         }));
       })();
 
@@ -129,9 +137,11 @@ export default function Dashboard({ token, userName }: { token: string; userName
     { name: 'Overdue', value: overdueCount },
   ];
 
-  // Overdue first (backend returns breach most-overdue-first), then open.
+  // Overdue first (backend returns breach most-overdue-first), then the
+  // scope's open tickets (team queue for staff, own tickets otherwise).
   const attention = breached.slice(0, 5);
-  const feed = attention.length > 0 ? attention : openMine.slice(0, 5);
+  const openFallback = (isTeam ? queue : openMine).slice(0, 5);
+  const feed = attention.length > 0 ? attention : openFallback;
   const feedTitle = attention.length > 0 ? 'Needs attention' : 'Active tickets';
 
   const hour = new Date().getHours();
@@ -146,8 +156,10 @@ export default function Dashboard({ token, userName }: { token: string; userName
         {openCount === 0
           ? isOrg
             ? 'All clear across every department.'
-            : 'All clear — nothing open on your plate.'
-          : `${openCount} open ticket${openCount === 1 ? '' : 's'}${overdueCount > 0 ? `, ${overdueCount} past deadline` : ''}${isOrg ? ' org-wide' : ''}.`}
+            : isTeam
+              ? 'All clear in your departments.'
+              : 'All clear — nothing open on your plate.'
+          : `${openCount} open ticket${openCount === 1 ? '' : 's'}${overdueCount > 0 ? `, ${overdueCount} past deadline` : ''}${scopeSuffix}.`}
       </p>
 
       <div className="dashboard-stats">
@@ -180,7 +192,7 @@ export default function Dashboard({ token, userName }: { token: string; userName
       <div className="dashboard-charts">
         <div>
           <div className="muted dashboard-chart-title">
-            {isOrg ? 'ORG TICKETS · LAST 7 DAYS' : 'MY TICKETS · LAST 7 DAYS'}
+            {isOrg ? 'ORG TICKETS · LAST 7 DAYS' : isTeam ? 'TEAM TICKETS · LAST 7 DAYS' : 'MY TICKETS · LAST 7 DAYS'}
           </div>
           <ResponsiveContainer width="100%" height={150}>
             <BarChart data={volume} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
@@ -193,7 +205,7 @@ export default function Dashboard({ token, userName }: { token: string; userName
         </div>
         <div>
           <div className="muted dashboard-chart-title">
-            {isOrg ? 'ORG OPEN · ON TRACK VS OVERDUE' : 'MY OPEN · ON TRACK VS OVERDUE'}
+            {isOrg ? 'ORG OPEN · ON TRACK VS OVERDUE' : isTeam ? 'TEAM OPEN · ON TRACK VS OVERDUE' : 'MY OPEN · ON TRACK VS OVERDUE'}
           </div>
           {openCount === 0 ? (
             <div className="dashboard-empty">

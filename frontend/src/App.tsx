@@ -314,7 +314,7 @@ export default function App() {
           </ErrorBoundary>
         ) : activeView === 'overview' ? (
           <ErrorBoundary section="dashboard">
-            <Dashboard token={token} userName={user.name} />
+            <Dashboard token={token} userName={user.name} isStaff={isStaff} />
           </ErrorBoundary>
         ) : activeView === 'my' ? (
           <ErrorBoundary section="request queue">
