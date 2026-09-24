@@ -25,12 +25,52 @@ export class NotificationsService implements OnModuleInit {
     // Minutely outbox sweep without a scheduler dependency (keeps the
     // ts-jest CommonJS setup intact). Never throws; each run is self-healing.
     const timer = setInterval(() => {
-      this.deliverPendingEvents().catch((e) =>
+      this.sweep().catch((e) =>
         this.logger.error(`Outbox sweep failed: ${(e as Error).message}`),
       );
     }, 60_000);
     const maybeUnref = (timer as unknown as { unref?: () => void }).unref;
     if (typeof maybeUnref === 'function') maybeUnref.call(timer);
+  }
+
+  /** One full sweep: overdue detection first, then webhook delivery. */
+  async sweep() {
+    await this.overdueScan();
+    await this.deliverPendingEvents();
+  }
+
+  /**
+   * Overdue detector. Open tickets past their SLA deadline each get one
+   * `request.overdue` event per UTC day (idempotency key) — safe to run
+   * every minute; only genuinely new breaches create rows.
+   */
+  async overdueScan(now: Date = new Date()) {
+    try {
+      const day = now.toISOString().slice(0, 10);
+      const breached = await this.prisma.request.findMany({
+        where: {
+          status: { notIn: ['COMPLETED', 'CANCELLED', 'REJECTED'] },
+          slaDueAt: { lt: now },
+        },
+        select: { id: true, claimedById: true },
+      });
+      for (const t of breached) {
+        await this.emit({
+          requestId: t.id,
+          eventType: 'request.overdue',
+          payload: { claimedById: t.claimedById, day },
+          idempotencyKey: `req-${t.id}-overdue-${day}`,
+        });
+        await this.fanout({
+          requestId: t.id,
+          eventType: 'request.overdue',
+          actorId: 'system',
+          newClaimantId: t.claimedById || undefined,
+        });
+      }
+    } catch (e) {
+      this.logger.error(`Overdue scan failed: ${(e as Error).message}`);
+    }
   }
 
   async emit(input: {
@@ -121,6 +161,17 @@ export class NotificationsService implements OnModuleInit {
           toEmployee('Your request changed hands', `“${short}” is being handled by someone new.`);
           break;
         }
+        case 'request.overdue': {
+          // Staff-actionable: claimant first, else the whole department.
+          if (input.newClaimantId) {
+            rows.push({ userId: input.newClaimantId, type: input.eventType, title: 'SLA deadline passed', body: `“${short}” is overdue — act now.` });
+          } else {
+            for (const id of staffIds) {
+              rows.push({ userId: id, type: input.eventType, title: 'SLA deadline passed', body: `“${short}” is overdue and unclaimed.` });
+            }
+          }
+          break;
+        }
         default:
           return;
       }
@@ -160,6 +211,15 @@ export class NotificationsService implements OnModuleInit {
       data: { readAt: new Date() },
     });
     return res.count;
+  }
+
+  /** Dead-letter visibility: webhook events that exhausted retries. */
+  async failedEvents() {
+    return this.prisma.notificationEvent.findMany({
+      where: { status: 'FAILED' },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
   }
 
   async deliverPendingEvents() {

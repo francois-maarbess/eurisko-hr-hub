@@ -29,6 +29,7 @@ interface InboxItem {
   body: string;
   readAt: string | null;
   createdAt: string;
+  requestId?: string | null;
 }
 
 interface QuickTicket {
@@ -107,6 +108,31 @@ export default function App() {
     }).catch(() => {});
     refreshInbox(token);
   };
+
+  const openFromInbox = async (n: InboxItem) => {
+    if (!token) return;
+    if (!n.readAt) {
+      await fetch(apiUrl(`/notifications/${n.id}/read`), {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {});
+      refreshInbox(token);
+    }
+    if (n.requestId) {
+      setInboxOpen(false);
+      openTicket(n.requestId);
+    }
+  };
+
+  const groupedInbox = (() => {
+    const groups = new Map<string, InboxItem[]>();
+    for (const n of inbox) {
+      const key = n.requestId || n.id;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(n);
+    }
+    return [...groups.entries()];
+  })();
 
   const openTicket = (id: string) => {
     setReturnView(activeView === 'new' || activeView === 'admin' || activeView === 'security' ? 'my' : activeView);
@@ -260,18 +286,37 @@ export default function App() {
             </div>
             {inbox.length === 0 && <p className="muted">Nothing yet — activity on your requests lands here.</p>}
             <div style={{ display: 'grid', gap: '0.5rem' }}>
-              {inbox.map((n) => (
+              {groupedInbox.map(([key, items]) => (
                 <div
-                  key={n.id}
+                  key={key}
                   style={{
-                    background: n.readAt ? '#fff' : 'var(--blue-pale)',
                     border: '1px solid var(--border)',
                     borderRadius: '10px',
-                    padding: '0.6rem 0.8rem',
+                    overflow: 'hidden',
                   }}
                 >
-                  <div style={{ fontWeight: 700 }}>{n.title}</div>
-                  <div className="muted">{n.body}</div>
+                  {items.map((n, i) => (
+                    <button
+                      key={n.id}
+                      onClick={() => openFromInbox(n)}
+                      title={n.requestId ? 'Open the related request' : undefined}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        textAlign: 'left',
+                        border: 'none',
+                        borderTop: i === 0 ? 'none' : '1px solid var(--border)',
+                        background: n.readAt ? '#fff' : 'var(--blue-pale)',
+                        padding: '0.6rem 0.8rem',
+                        cursor: n.requestId ? 'pointer' : 'default',
+                        font: 'inherit',
+                        color: 'inherit',
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{n.title}</div>
+                      <div className="muted" style={{ fontSize: '0.8rem' }}>{n.body}</div>
+                    </button>
+                  ))}
                 </div>
               ))}
             </div>

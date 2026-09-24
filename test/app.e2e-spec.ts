@@ -803,11 +803,104 @@ describe('Service Request Flow (E2E)', () => {
       .patch('/notifications/read-all')
       .set('Authorization', `Bearer ${agentToken}`);
     expect(readAll.status).toBe(200);
-
     const after = await request(app.getHttpServer())
       .get('/notifications/unread-count')
       .set('Authorization', `Bearer ${agentToken}`);
     expect(after.body.count).toBe(0);
+  });
+
+  it('notifications: per-item read clears one item and items link to requests', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+    const created = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        departmentId: dept!.id,
+        requestTypeId: rt!.id,
+        title: `Per-Item Probe ${Date.now()}`,
+        description: 'Each inbox row must be individually readable and linked',
+        priority: 'STANDARD',
+      });
+    const id = created.body.id;
+
+    const inbox = await request(app.getHttpServer())
+      .get('/notifications')
+      .set('Authorization', `Bearer ${agentToken}`);
+    const row = inbox.body.find((n: any) => n.requestId === id && !n.readAt);
+    expect(row).toBeTruthy();
+
+    const one = await request(app.getHttpServer())
+      .patch(`/notifications/${row.id}/read`)
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(one.status).toBe(200);
+    expect(one.body.read).toBe(true);
+
+    const again = await request(app.getHttpServer())
+      .patch(`/notifications/${row.id}/read`)
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(again.body.read).toBe(false);
+
+    // Another user's row is untouchable.
+    const stranger = await request(app.getHttpServer())
+      .patch(`/notifications/${row.id}/read`)
+      .set('Authorization', `Bearer ${employeeToken}`);
+    expect(stranger.body.read).toBe(false);
+  });
+
+  it('notifications: overdue sweep notifies once per day, failures are visible', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+    const created = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        departmentId: dept!.id,
+        requestTypeId: rt!.id,
+        title: `Overdue Sweep Probe ${Date.now()}`,
+        description: 'Deadline already passed at creation time',
+        priority: 'STANDARD',
+      });
+    const id = created.body.id;
+    await request(app.getHttpServer())
+      .patch(`/requests/${id}/claim`)
+      .set('Authorization', `Bearer ${agentToken}`);
+    await prisma.request.update({
+      where: { id },
+      data: { slaDueAt: new Date(Date.now() - 2 * 3600_000) },
+    });
+
+    const sweep = await request(app.getHttpServer())
+      .post('/notifications/sweep')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(sweep.status).toBe(201);
+    expect(sweep.body.swept).toBe(true);
+
+    const inbox = await request(app.getHttpServer())
+      .get('/notifications')
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(inbox.body.some((n: any) => n.requestId === id && n.type === 'request.overdue')).toBe(true);
+
+    // Second sweep same day: idempotent, no duplicate event.
+    await request(app.getHttpServer())
+      .post('/notifications/sweep')
+      .set('Authorization', `Bearer ${adminToken}`);
+    const events = await prisma.notificationEvent.findMany({
+      where: { requestId: id, eventType: 'request.overdue' },
+    });
+    expect(events.length).toBe(1);
+
+    // Non-admins cannot trigger sweeps or read the dead letter.
+    const denied = await request(app.getHttpServer())
+      .post('/notifications/sweep')
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(denied.status).toBe(403);
+
+    const failed = await request(app.getHttpServer())
+      .get('/notifications/failed')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(failed.status).toBe(200);
+    expect(Array.isArray(failed.body)).toBe(true);
   });
 
   it('duplicate check warns on twins and stays silent otherwise', async () => {

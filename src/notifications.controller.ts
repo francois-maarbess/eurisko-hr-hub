@@ -1,6 +1,7 @@
-import { Controller, Get, Param, Patch, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { Roles, RolesGuard } from './auth/roles.guard';
 import { CurrentUser } from './auth/current-user.decorator';
 
 @Controller('notifications')
@@ -26,5 +27,20 @@ export class NotificationsController {
   @Patch('read-all')
   markAllRead(@CurrentUser() user: any) {
     return this.notifications.markAllRead(user.id).then((count) => ({ read: count }));
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SYSTEM_ADMIN')
+  @Post('sweep')
+  async sweep() {
+    await this.notifications.sweep();
+    return { swept: true };
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SYSTEM_ADMIN')
+  @Get('failed')
+  failed() {
+    return this.notifications.failedEvents();
   }
 }
