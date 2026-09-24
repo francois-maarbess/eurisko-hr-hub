@@ -496,6 +496,17 @@ a:focus-visible {
 .filter-button.active { border-color: var(--blue); background: var(--blue-pale); color: var(--blue); }
 .filter-button.danger-active { border-color: var(--danger); background: var(--danger-bg); color: var(--danger); }
 .filter-clear { border: 0; background: none; color: var(--muted); font-size: 0.76rem; cursor: pointer; text-decoration: underline; }
+.queue-section-heading { margin: 0; font-size: 1rem; }
+.active-filter-chips { flex-wrap: wrap; margin-top: 0.45rem; }
+.result-count { margin: 0.45rem 0; color: var(--muted); font-size: 0.8rem; }
+.board-card-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.65rem; }
+.board-card-actions button { opacity: 0; }
+.board-card:focus-within .board-card-actions button,
+.board-card-actions button:focus-visible { opacity: 1; }
+.private-staff-label { display: inline-flex; margin: 0.25rem 0.35rem; padding: 0.12rem 0.42rem; border: 1px solid var(--blue-border); border-radius: 999px; background: var(--blue-pale); color: var(--blue-dark); font-size: 0.7rem; font-weight: 700; }
+.admin-loading-skeleton { display: grid; gap: 0.65rem; margin: 0.75rem 0; padding: 1rem; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
+.admin-loading-skeleton .skeleton-line { height: 1rem; }
+.admin-empty-result { padding: 1.25rem; text-align: center; }
 .empty-state { display: grid; justify-items: center; gap: 0.45rem; padding: 2rem 1rem; color: var(--muted); text-align: center; }
 .empty-state p { margin: 0; max-width: 32rem; }
 .empty-state-illustration { width: 64px; height: 64px; display: grid; place-items: center; border: 1px solid var(--blue-border); border-radius: 18px; background: var(--blue-pale); color: var(--blue); }
@@ -621,6 +632,8 @@ kbd { min-width: 1.4rem; padding: 0.12rem 0.35rem; border: 1px solid var(--borde
   .card, .admin-zone { padding: 1rem; }
   .toolbar > * { flex: 1 1 100%; }
   .toolbar-button { min-height: 42px; }
+  .board-grid { grid-template-columns: minmax(0, 1fr); }
+  .board-column { min-width: 0; }
   .quick-filters { margin-top: 0; }
   .quick-filters .muted { flex-basis: 100%; }
   .dashboard-charts { grid-template-columns: 1fr; }

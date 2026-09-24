@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Field, Section, Tabs } from './components/ui';
+import { Button, Field, Modal, Section, Tabs } from './components/ui';
 import { formatDateTime, formatEnum } from './format';
 import { apiUrl } from './api';
 
@@ -34,6 +34,8 @@ interface CatalogType {
 
 export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) {
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [initialDataLoading, setInitialDataLoading] = useState(true);
+  const [userToDeactivate, setUserToDeactivate] = useState<AdminUser | null>(null);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -73,6 +75,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
     id: string; requestId: string | null; action: string; actorName: string; createdAt: string;
   }[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [auditSearched, setAuditSearched] = useState(false);
   const [sysHealth, setSysHealth] = useState<{
     status: string;
     database: string;
@@ -124,6 +127,8 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
 
   const searchAudit = async () => {
     setAuditLoading(true);
+    setAuditSearched(false);
+    setAuditRows([]);
     try {
       const params = new URLSearchParams();
       if (auditActor.trim()) params.set('actor', auditActor.trim());
@@ -132,7 +137,10 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
       const res = await fetch(apiUrl(`/audit?${params.toString()}`), {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) setAuditRows(await res.json());
+      if (res.ok) {
+        setAuditRows(await res.json());
+        setAuditSearched(true);
+      }
     } catch {
       // Keep previous rows.
     } finally {
@@ -169,9 +177,12 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
       if (uRes.ok) setUsers(await uRes.json());
       if (dRes.ok) setDepartments(await dRes.json());
       if (tRes.ok) setAllTypes(await tRes.json());
+      if (!uRes.ok || !dRes.ok || !tRes.ok) setMessage('Could not load all users and catalog data.');
       void loadReport();
     } catch {
       setMessage('Cannot reach the server');
+    } finally {
+      setInitialDataLoading(false);
     }
   };
 
@@ -601,6 +612,8 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
               {auditLoading ? 'Searching…' : 'Search audit'}
             </Button>
           </div>
+          {auditLoading && <div className="admin-loading-skeleton" aria-label="Searching audit"><span className="skeleton-line" /><span className="skeleton-line" /><span className="skeleton-line" /></div>}
+          {!auditLoading && auditSearched && auditRows.length === 0 && <p className="muted admin-empty-result">No results found.</p>}
           {auditRows.length > 0 && (
             <div className="admin-overview-list" style={{ marginTop: '0.6rem' }}>
               {auditRows.slice(0, 20).map((r) => (
@@ -614,7 +627,8 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
         </Section>
       )}
 
-      {adminTab === 'catalog' && (
+      {adminTab === 'catalog' && initialDataLoading && <div className="admin-loading-skeleton" aria-label="Loading users and catalog"><span className="skeleton-line" /><span className="skeleton-line" /><span className="skeleton-line" /></div>}
+      {adminTab === 'catalog' && !initialDataLoading && (
         <Section
           title="Catalog — departments & request types"
           sub="Departments group work; request types are the pickable categories inside one department. Deactivating retires entries while history stays intact."
@@ -684,7 +698,8 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
         </Section>
       )}
 
-      {adminTab === 'users' && (
+      {adminTab === 'users' && initialDataLoading && <div className="admin-loading-skeleton" aria-label="Loading users and catalog"><span className="skeleton-line" /><span className="skeleton-line" /><span className="skeleton-line" /></div>}
+      {adminTab === 'users' && !initialDataLoading && (
         <>
         <Section
           title="Create user account"
@@ -748,13 +763,13 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
         />
       </div>
       <div className="admin-grid">
-        {users
-          .filter((u) => {
+        {(() => {
+          const filteredUsers = users.filter((u) => {
             const q = userQuery.trim().toLowerCase();
             if (!q) return true;
             return u.displayName.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
-          })
-          .map((u) => {
+          });
+          return <>{filteredUsers.length === 0 ? <p className="muted admin-empty-result">No results found.</p> : filteredUsers.map((u) => {
           const draft = memberDrafts[u.id] || { deptId: '', role: 'AGENT' };
           return (
             <div className="admin-row" key={u.id} style={{ opacity: u.active ? 1 : 0.6 }}>
@@ -774,7 +789,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
                     <option value="EMPLOYEE">Employee</option>
                     <option value="SYSTEM_ADMIN">System Admin</option>
                   </select>
-                  <Button variant="ghost" small onClick={() => toggleActive(u)}>
+                  <Button variant="ghost" small onClick={() => u.active ? setUserToDeactivate(u) : toggleActive(u)}>
                     {u.active ? 'Deactivate' : 'Reactivate'}
                   </Button>
                 </div>
@@ -815,10 +830,19 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
               </div>
             </div>
           );
-        })}
+        })}</>;
+        })()}
       </div>
         </Section>
         </>
+      )}
+      {userToDeactivate && (
+        <Modal title={`Deactivate ${userToDeactivate.displayName}?`} sub="They will no longer be able to sign in. Their request history will remain available." onClose={() => setUserToDeactivate(null)}>
+          <div className="row">
+            <Button variant="danger" small onClick={async () => { await toggleActive(userToDeactivate); setUserToDeactivate(null); }}>Deactivate user</Button>
+            <Button variant="ghost" small onClick={() => setUserToDeactivate(null)}>Cancel</Button>
+          </div>
+        </Modal>
       )}
     </div>
   );

@@ -38,7 +38,14 @@ const PRIORITY_COLORS: Record<string, { background: string; color: string }> = {
   URGENT: { background: 'var(--danger-bg)', color: 'var(--danger)' },
 };
 
-function DraggableCard({ ticket, onOpen, quiet }: { ticket: BoardTicket; onOpen: (id: string) => void; quiet?: boolean }) {
+function DraggableCard({ ticket, onOpen, quiet, canDrop, onProgress, onComplete }: {
+  ticket: BoardTicket;
+  onOpen: (id: string) => void;
+  quiet?: boolean;
+  canDrop: (ticket: BoardTicket, target: BoardStatus) => string | null;
+  onProgress: (ticket: BoardTicket) => void;
+  onComplete: (ticket: BoardTicket) => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: ticket.id });
   const pc = PRIORITY_COLORS[ticket.priority] || PRIORITY_COLORS.STANDARD;
   // Wall-clock read for the overdue badge; purely presentational.
@@ -50,6 +57,9 @@ function DraggableCard({ ticket, onOpen, quiet }: { ticket: BoardTicket; onOpen:
       {...listeners}
       {...attributes}
       className={`board-card${isDragging ? ' dragging' : ''}`}
+      onKeyDownCapture={(e) => {
+        if (e.target instanceof HTMLButtonElement) e.stopPropagation();
+      }}
       style={{
         transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
         opacity: isDragging ? 0.45 : quiet ? 0.72 : 1,
@@ -81,16 +91,31 @@ function DraggableCard({ ticket, onOpen, quiet }: { ticket: BoardTicket; onOpen:
           Claimed by {ticket.claimant.displayName}
         </div>
       )}
+      <div className="board-card-actions">
+        {ticket.status === 'PENDING' && !canDrop(ticket, 'IN_PROGRESS') && (
+          <Button small variant="ghost" onPointerDown={(e) => e.stopPropagation()} onClick={() => onProgress(ticket)}>
+            Move to In Progress
+          </Button>
+        )}
+        {ticket.status === 'IN_PROGRESS' && !canDrop(ticket, 'COMPLETED') && (
+          <Button small variant="ghost" onPointerDown={(e) => e.stopPropagation()} onClick={() => onComplete(ticket)}>
+            Move to Completed
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
 
-function Column({ status, title, hint, tickets, onOpen }: {
+function Column({ status, title, hint, tickets, onOpen, canDrop, onProgress, onComplete }: {
   status: BoardStatus;
   title: string;
   hint: string;
   tickets: BoardTicket[];
   onOpen: (id: string) => void;
+  canDrop: (ticket: BoardTicket, target: BoardStatus) => string | null;
+  onProgress: (ticket: BoardTicket) => void;
+  onComplete: (ticket: BoardTicket) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   return (
@@ -104,7 +129,7 @@ function Column({ status, title, hint, tickets, onOpen }: {
         <div className="muted board-column-hint">{hint}</div>
       </div>
       {tickets.map((t) => (
-        <DraggableCard key={t.id} ticket={t} onOpen={onOpen} quiet={status === 'COMPLETED'} />
+        <DraggableCard key={t.id} ticket={t} onOpen={onOpen} quiet={status === 'COMPLETED'} canDrop={canDrop} onProgress={onProgress} onComplete={onComplete} />
       ))}
       {tickets.length === 0 && (
         <span className="muted board-empty">Drop tickets here</span>
@@ -151,6 +176,16 @@ export default function KanbanBoard({ tickets, hidePending = false, canDrop, onD
     refuse('Tickets cannot move backwards — use the list view actions.');
   };
 
+  const requestComplete = (ticket: BoardTicket) => {
+    const blocked = canDrop(ticket, 'COMPLETED');
+    if (blocked) {
+      refuse(blocked);
+      return;
+    }
+    setCompleting(ticket);
+    setNote('');
+  };
+
   const boardTickets = tickets.filter((t) => t.status === 'PENDING' || t.status === 'IN_PROGRESS' || t.status === 'COMPLETED');
   const columns = COLUMNS.filter((column) => !hidePending || column.status !== 'PENDING');
 
@@ -171,6 +206,9 @@ export default function KanbanBoard({ tickets, hidePending = false, canDrop, onD
               hint={c.hint}
               tickets={boardTickets.filter((t) => t.status === c.status)}
               onOpen={onOpenTicket}
+              canDrop={canDrop}
+              onProgress={onDropProgress}
+              onComplete={requestComplete}
             />
           ))}
         </div>

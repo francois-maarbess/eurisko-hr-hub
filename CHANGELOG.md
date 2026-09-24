@@ -1,12 +1,31 @@
 # Changelog
 
 All instructor-visible changes. SQLite-only, zero new prerequisites — every entry
-preserves `cp .env.example .env && npm install && npm run db:reset`.
+preserves the SQLite setup and locked npm dependencies.
+
+## Unreleased (queue, trust, and onboarding polish)
+
+**Queue workflow**
+- Department Queue is clearly grouped; list/board and sorting preferences persist.
+- Search, status, quick filters, and sorting can be cleared or removed individually;
+  result counts make filtered queues easier to understand.
+- Kanban cards support keyboard status actions as well as drag-and-drop.
+
+**Trust and admin safety**
+- Staff-only notes and activity are labeled as private to staff.
+- Confirmations protect takeover, rerouting, user deactivation, and MFA disable.
+- Admin loading and empty search results are explicit instead of silent.
+
+**Instructor setup**
+- The documented Node.js range matches the current Vite toolchain and CI.
+- Quick Start uses locked installs and gives correct environment-file copy commands
+  for macOS, Linux, PowerShell, and Command Prompt.
 
 ## Unreleased (gaps pass — 90 backend + 10 frontend tests, 9 AI evals)
 
 **Zero-config safety**
-- `engines: node>=18` (root + frontend), `npm run verify` single pre-push gate.
+- Node.js engine requirement documented in both manifests; `npm run verify` is the
+  single pre-push gate.
 - `PORT` honored by the API; Vite auto-picks a free port if 5173 is busy.
 - `npm run db:doctor` read-only health check; README troubleshooting box.
 - Seed holds exactly 3 users (alice, bob, admin); e2e self-provisions its stranger.

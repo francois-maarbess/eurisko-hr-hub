@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Button, ErrorBox } from './components/ui';
+import { Button, ErrorBox, Modal } from './components/ui';
 import { apiUrl } from './api';
 
 /**
@@ -163,7 +163,7 @@ export default function MfaSettings({ token }: { token: string }) {
               Disable
             </Button>
           ) : (
-            <>
+            <Modal title="Disable two-factor authentication?" sub="This reduces sign-in security. Confirm with your password to continue." onClose={() => { setConfirmingDisable(false); setPassword(''); }}>
               <input
                 className="input mfa-code-input"
                 type="password"
@@ -174,7 +174,8 @@ export default function MfaSettings({ token }: { token: string }) {
               <Button variant="danger" small onClick={disable} disabled={busy}>
                 Confirm disable
               </Button>
-            </>
+              <Button variant="ghost" small onClick={() => { setConfirmingDisable(false); setPassword(''); }}>Cancel</Button>
+            </Modal>
           )}
         </div>
       )}

@@ -1,7 +1,7 @@
 # Internal Operations Service Hub
 
 ![CI](https://github.com/francois-maarbess/eurisko-hr-hub/actions/workflows/ci.yml/badge.svg)
-![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
+![Node](https://img.shields.io/badge/node-20.19%2B%20%7C%2022.12%2B-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 An internal service hub for submitting, routing, tracking, and resolving employee requests.
@@ -18,7 +18,7 @@ Full click-by-click script: [`DEMO.md`](./DEMO.md) — reset, seed the storyline
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 20.19+ or 22.12+
 - npm
 
 ### 1. Clone and install
@@ -26,9 +26,31 @@ Full click-by-click script: [`DEMO.md`](./DEMO.md) — reset, seed the storyline
 ```bash
 git clone https://github.com/francois-maarbess/eurisko-hr-hub.git
 cd eurisko-hr-hub
-cp .env.example .env   # Windows CMD: copy .env.example .env
-npm install
-cd frontend && npm install && cd ..
+```
+
+Copy the example environment file:
+
+```bash
+# macOS / Linux
+cp .env.example .env
+```
+
+```powershell
+# Windows PowerShell
+Copy-Item .env.example .env
+```
+
+```cmd
+:: Windows Command Prompt
+copy .env.example .env
+```
+
+Install the exact locked dependencies and initialize a clean local database:
+
+```bash
+npm ci
+cd frontend && npm ci && cd ..
+npm run db:reset
 ```
 
 Need a pristine demo database any time (tests and experiments pollute
@@ -53,15 +75,7 @@ npm run db:reset
 > https://console.groq.com) to enable the LLM provider for AI intake.
 > Without it, the built-in offline extractor handles everything.
 
-### 2. Set up the database
-
-```bash
-npx prisma generate
-npx prisma migrate dev
-npx tsx prisma/seed.ts
-```
-
-### 3. Start the app
+### 2. Start the app
 
 ```bash
 # Terminal 1 — Backend (port 3000)
@@ -71,7 +85,7 @@ npm run start:dev
 cd frontend && npm run dev
 ```
 
-### 4. Use the app
+### 3. Use the app
 
 1. Open `http://localhost:5173`
 2. Log in with email + password (demo password: `Password123!`):

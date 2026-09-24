@@ -4,7 +4,7 @@
   "description": "Internal Operations Service Hub",
   "private": true,
   "engines": {
-    "node": ">=18"
+    "node": "^20.19.0 || >=22.12.0"
   },
   "scripts": {
     "build": "nest build",

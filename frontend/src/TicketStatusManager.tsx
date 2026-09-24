@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Badge, Button, EmptyState, ErrorBox, Field, Tabs } from './components/ui';
+import { Badge, Button, EmptyState, ErrorBox, Field, Modal, Tabs } from './components/ui';
 import { formatEnum, toRef } from './format';
 import { apiUrl } from './api';
 import KanbanBoard, { type BoardStatus, type BoardTicket } from './KanbanBoard';
@@ -223,7 +223,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
   const [cardErrors, setCardErrors] = useState<CardErrorState>({});
 
   // Filtering, search & sorting — persisted per browser so a queue
-  // setup survives reloads (modes like board/overdue intentionally don't).
+  // setup, layout, and sorting survive reloads; temporary overdue mode does not.
   const loadSavedFilters = (): Record<string, any> => {
     try {
       return JSON.parse(localStorage.getItem('tsm-filters-v1') || '{}');
@@ -235,12 +235,14 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
   const [savedFilters] = useState<Record<string, any>>(loadSavedFilters);
   const [query, setQuery] = useState(typeof savedFilters.query === 'string' ? savedFilters.query : '');
   const [statusFilter, setStatusFilter] = useState<string>(typeof savedFilters.statusFilter === 'string' ? savedFilters.statusFilter : 'ALL');
-  const [sortMode, setSortMode] = useState<'newest' | 'oldest' | 'deadline'>('newest');
+  const [sortMode, setSortMode] = useState<'newest' | 'oldest' | 'deadline'>(
+    savedFilters.sortMode === 'oldest' || savedFilters.sortMode === 'deadline' ? savedFilters.sortMode : 'newest',
+  );
   const [filterUrgentOnly, setFilterUrgentOnly] = useState(!!savedFilters.filterUrgentOnly);
   const [filterHasDocs, setFilterHasDocs] = useState(!!savedFilters.filterHasDocs);
   const [filterHasNotes, setFilterHasNotes] = useState(!!savedFilters.filterHasNotes);
   const [overdueOnly, setOverdueOnly] = useState(false);
-  const [boardView, setBoardView] = useState(false);
+  const [boardView, setBoardView] = useState(initialView !== 'mine' && !!savedFilters.boardView);
 
   // Per-ticket form inputs
   const [resolutionInputs, setResolutionInputs] = useState<Record<string, string>>({});
@@ -283,9 +285,10 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
   // mirrored into a ref so the single global listener never goes stale.
   const [selectedIdx, setSelectedIdx] = useState(0);
   const idxRef = React.useRef(0);
-  const listRef = React.useRef<{ ids: string[]; open?: (id: string) => void; detail: boolean }>({
+  const listRef = React.useRef<{ ids: string[]; open?: (id: string) => void; detail: boolean; board: boolean }>({
     ids: [],
     detail: false,
+    board: initialView !== 'mine' && !!savedFilters.boardView,
   });
   // Debounced search: input stays instant, heavy filter/highlight runs 300ms
   // after typing stops so large queues don't re-filter per keystroke.
@@ -368,12 +371,12 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
     try {
       localStorage.setItem(
         'tsm-filters-v1',
-        JSON.stringify({ query, statusFilter, filterUrgentOnly, filterHasDocs, filterHasNotes }),
+        JSON.stringify({ query, statusFilter, filterUrgentOnly, filterHasDocs, filterHasNotes, boardView, sortMode }),
       );
     } catch {
       // Private mode / quota: filters simply don't persist.
     }
-  }, [query, statusFilter, filterUrgentOnly, filterHasDocs, filterHasNotes]);
+  }, [query, statusFilter, filterUrgentOnly, filterHasDocs, filterHasNotes, boardView, sortMode]);
 
   const mutate = async (
     ticket: TicketState,
@@ -829,23 +832,34 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
   const sortLabel = sortMode === 'deadline' ? 'Deadline first' : sortMode === 'oldest' ? 'Oldest first ↑' : 'Newest first ↓';
   const cycleSort = () =>
     setSortMode((s) => (s === 'newest' ? 'oldest' : s === 'oldest' ? 'deadline' : 'newest'));
+  const clearFilters = () => {
+    setQuery('');
+    setStatusFilter('ALL');
+    setSortMode('newest');
+    setFilterUrgentOnly(false);
+    setFilterHasDocs(false);
+    setFilterHasNotes(false);
+    setOverdueOnly(false);
+  };
 
   // Render-clamped selection (no effect needed — clamping is pure).
   const sel = Math.min(selectedIdx, Math.max(visibleTickets.length - 1, 0));
 
   // Mirror the latest list into the ref (plain assignment, no setState).
   useEffect(() => {
-    listRef.current = { ids: visibleTickets.map((t) => t.id), open: onOpenTicket, detail: !!focusTicketId };
-  }, [visibleTickets, onOpenTicket, focusTicketId]);
+    listRef.current = { ids: visibleTickets.map((t) => t.id), open: onOpenTicket, detail: !!focusTicketId, board: boardView };
+  }, [visibleTickets, onOpenTicket, focusTicketId, boardView]);
 
-  // j/k moves selection, Enter opens. Typing and detail view are ignored.
+  // j/k moves selection and Enter opens in list mode only. Typing, detail,
+  // and board controls are ignored so their own keyboard actions can run.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) return;
+      if (el?.closest('button, a, [role="button"], [role="tab"], [role="checkbox"]')) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      const { ids, open, detail } = listRef.current;
-      if (detail || ids.length === 0 || !open) return;
+      const { ids, open, detail, board } = listRef.current;
+      if (detail || board || ids.length === 0 || !open) return;
       if (e.key === 'j' || e.key === 'J') {
         e.preventDefault();
         setSelectedIdx((i) => {
@@ -898,6 +912,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
         </div>
       ) : (
         <>
+          {initialView !== 'mine' && <h2 className="queue-section-heading">Department Queue</h2>}
           <Tabs options={tabOptions} value={view} onChange={(v) => setView(v as View)} />
 
           {initialView !== 'mine' && (
@@ -906,14 +921,14 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
               <div className="view-switcher" role="group" aria-label="Queue view">
                 <button
                   className={`toolbar-button${!boardView ? ' active' : ''}`}
-                  onClick={() => setBoardView(false)}
+                  onClick={() => { listRef.current.board = false; setBoardView(false); }}
                   aria-pressed={!boardView}
                 >
                   List
                 </button>
                 <button
                   className={`toolbar-button${boardView ? ' active' : ''}`}
-                  onClick={() => setBoardView(true)}
+                  onClick={() => { listRef.current.board = true; setBoardView(true); }}
                   aria-pressed={boardView}
                 >
                   Kanban
@@ -984,20 +999,18 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
         >
           Overdue
         </button>
-        {(filterUrgentOnly || filterHasDocs || filterHasNotes || overdueOnly) && (
-          <button
-            className="filter-clear"
-            onClick={() => {
-              setFilterUrgentOnly(false);
-              setFilterHasDocs(false);
-              setFilterHasNotes(false);
-              setOverdueOnly(false);
-            }}
-          >
-            Clear filters
-          </button>
-        )}
-      </div>
+        </div>
+          <div className="row active-filter-chips" aria-label="Active filters">
+            {query.trim() && <button className="filter-button" onClick={() => setQuery('')} aria-label="Remove search filter">Search: {query.trim()} ×</button>}
+            {statusFilter !== 'ALL' && <button className="filter-button" onClick={() => setStatusFilter('ALL')} aria-label="Remove status filter">Status: {formatEnum(statusFilter)} ×</button>}
+            {filterUrgentOnly && <button className="filter-button danger-active" onClick={() => setFilterUrgentOnly(false)}>Urgent only ×</button>}
+            {filterHasDocs && <button className="filter-button active" onClick={() => setFilterHasDocs(false)}>Has attachments ×</button>}
+            {filterHasNotes && isStaff && <button className="filter-button active" onClick={() => setFilterHasNotes(false)}>Has staff notes ×</button>}
+            {overdueOnly && <button className="filter-button danger-active" onClick={() => setOverdueOnly(false)}>Overdue ×</button>}
+            {sortMode !== 'newest' && <button className="filter-button" onClick={() => setSortMode('newest')}>Sort: {sortLabel} ×</button>}
+            {(query.trim() || statusFilter !== 'ALL' || sortMode !== 'newest' || filterUrgentOnly || filterHasDocs || filterHasNotes || overdueOnly) && <button className="filter-clear" onClick={clearFilters}>Clear filters</button>}
+          </div>
+          <div className="result-count" aria-live="polite">Showing {visibleTickets.length} of {tickets.length}</div>
         </>
       )}
 
@@ -1212,6 +1225,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                             a.label
                           )}
                         </div>
+                        {isNote && isStaff && <span className="private-staff-label">Private to staff</span>}
                         {isReroute && a.details && (
                           <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '4px', padding: '0.25rem 0.45rem', marginTop: '0.2rem', fontSize: '0.76rem' }}>
                             <strong>Audit Reason:</strong> {a.details}
@@ -1328,8 +1342,9 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                     padding: 0,
                   }}
                 >
-                  {notesOpen[ticket.id] ? '▾ Internal Staff Notes (Private)' : '▸ Internal Staff Notes (Private)'}
-                </button>
+                {notesOpen[ticket.id] ? '▾ Internal Staff Notes' : '▸ Internal Staff Notes'}
+              </button>
+              <span className="private-staff-label">Private to staff</span>
                 {notesOpen[ticket.id] && (
                   <div style={{ marginTop: '0.4rem', display: 'grid', gap: '0.4rem', background: '#f8fafc', padding: '0.65rem 0.85rem', borderRadius: '8px' }}>
                     {(notesCache[ticket.id] || []).map((n) => (
@@ -1523,17 +1538,14 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                 </Button>
               )}
               {canTakeover && showTakeover[ticket.id] && (
-                <Button
-                  variant="primary"
-                  small
-                  onClick={() => {
-                    handleTakeover(ticket);
-                    setShowTakeover((c) => ({ ...c, [ticket.id]: false }));
-                  }}
-                  disabled={loading}
-                >
-                  {loading ? '...' : 'Confirm takeover'}
-                </Button>
+                <Modal title="Take over this request?" sub="The current assignee will be replaced with you." onClose={() => setShowTakeover((c) => ({ ...c, [ticket.id]: false }))}>
+                  <div className="row">
+                    <Button variant="primary" small onClick={() => { handleTakeover(ticket); setShowTakeover((c) => ({ ...c, [ticket.id]: false })); }} disabled={loading}>
+                      {loading ? 'Taking over…' : 'Confirm takeover'}
+                    </Button>
+                    <Button variant="ghost" small onClick={() => setShowTakeover((c) => ({ ...c, [ticket.id]: false }))}>Cancel</Button>
+                  </div>
+                </Modal>
               )}
               {canCancel && (
                 <Button variant="ghost" small onClick={() => handleCancel(ticket)} disabled={loading}>
@@ -1573,9 +1585,10 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
               )}
             </div>
 
-            {/* Inline Re-route Modal/Box */}
+            {/* Re-route confirmation dialog */}
             {rerouteFor === ticket.id && (
-              <div style={{ marginTop: '0.75rem', border: '1px dashed var(--blue-border)', borderRadius: '10px', padding: '0.75rem', display: 'grid', gap: '0.5rem', background: 'var(--blue-pale)' }}>
+              <Modal title="Re-route request" sub="Choose the destination and provide an audit reason before confirming." onClose={() => setRerouteFor(null)}>
+              <div style={{ display: 'grid', gap: '0.5rem' }}>
                 <strong style={{ fontSize: '0.9rem', color: 'var(--navy)' }}>Re-route to another department</strong>
                 <div className="row" style={{ gap: '0.5rem' }}>
                   <select
@@ -1625,6 +1638,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                   </Button>
                 </div>
               </div>
+              </Modal>
             )}
           </div>
         );
