@@ -229,7 +229,6 @@ export default function KanbanBoard({ tickets, hidePending = false, canDrop, onD
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="What was done to resolve this?"
-            autoFocus
           />
           <div className="row mt-md">
             <Button

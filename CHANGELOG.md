@@ -5,6 +5,14 @@ preserves the SQLite setup and locked npm dependencies.
 
 ## Unreleased (queue, trust, and onboarding polish)
 
+**Dialog and readability fixes**
+- Modal dialogs no longer steal focus while typing; the first field is focused
+  once on open (fixes resolution notes, takeover/reroute reasons, MFA disable).
+- Ticket detail shows only the human `REQ-XXXXXX` reference; the raw database
+  ID is no longer displayed.
+- The `claimed` queue tab is now labeled "My History" with per-tab captions
+  explaining My Work (open workload) vs history (including completed).
+
 **Queue workflow**
 - Department Queue is clearly grouped; list/board and sorting preferences persist.
 - Search, status, quick filters, and sorting can be cleared or removed individually;

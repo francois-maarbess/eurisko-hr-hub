@@ -892,8 +892,18 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
         { value: 'queue' as View, label: 'Department Queue' },
         { value: 'unassigned' as View, label: 'Unassigned' },
         { value: 'mywork' as View, label: 'My Work' },
-        { value: 'claimed' as View, label: 'Claimed by Me' },
+        { value: 'claimed' as View, label: 'My History' },
       ];
+
+  // "My Work" is the live workload (open tickets you claimed); "My History"
+  // is everything you ever claimed, including completed ones.
+  const tabCaption: Record<View, string> = {
+    mine: 'Requests you submitted.',
+    queue: 'Open work in your departments.',
+    unassigned: 'Open tickets waiting for someone to claim them.',
+    mywork: 'Your open workload — tickets you claimed and are still working.',
+    claimed: 'Your history — everything you claimed, including completed.',
+  };
 
   return (
     <div className="ticket-manager">
@@ -914,6 +924,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
         <>
           {initialView !== 'mine' && <h2 className="queue-section-heading">Department Queue</h2>}
           <Tabs options={tabOptions} value={view} onChange={(v) => setView(v as View)} />
+          <p className="muted mt-sm" style={{ fontSize: '0.8rem' }}>{tabCaption[view]}</p>
 
           {initialView !== 'mine' && (
             <div className="queue-view-control">
@@ -1136,7 +1147,6 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
               <>
                 <div className="muted" style={{ fontSize: '0.8rem' }}>
                   Reference <strong style={{ color: 'var(--navy)' }}>{toRef(ticket.id)}</strong>
-                  {' · '}Full ID <span style={{ fontFamily: 'monospace' }}>{ticket.id}</span>
                 </div>
                 <Tracker status={ticket.status} />
                 {isOwner && ticket.status === 'PENDING' && (

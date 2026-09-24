@@ -136,13 +136,23 @@ export function Alert({ tone, children }: { tone: 'info' | 'warn' | 'danger' | '
 export function Modal({ title, sub, onClose, children }: { title: string; sub?: string; onClose: () => void; children: React.ReactNode }) {
   const panelRef = React.useRef<HTMLDivElement>(null);
   const prevFocus = React.useRef<Element | null>(null);
+  // Latest onClose without re-running the effect: parents pass a fresh
+  // arrow function every render (e.g. on each keystroke), and re-running
+  // would yank focus out of the dialog's inputs mid-typing.
+  const onCloseRef = React.useRef(onClose);
+  React.useEffect(() => {
+    onCloseRef.current = onClose;
+  });
   React.useEffect(() => {
     prevFocus.current = document.activeElement;
-    // Focus the panel on open so screen readers land inside the dialog.
-    panelRef.current?.focus();
+    // Focus once on mount: prefer the first field so typing starts
+    // immediately; fall back to the panel for button-only dialogs.
+    const panel = panelRef.current;
+    const firstField = panel?.querySelector<HTMLElement>('input, textarea, select');
+    (firstField ?? panel)?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        onCloseRef.current();
         return;
       }
       // Focus trap: keep Tab cycling inside the dialog.
@@ -172,7 +182,7 @@ export function Modal({ title, sub, onClose, children }: { title: string; sub?: 
       // Restore focus to whatever opened the dialog.
       (prevFocus.current as HTMLElement | null)?.focus?.();
     };
-  }, [onClose]);
+  }, []);
   return (
     <>
       <div className="modal-backdrop" onClick={onClose} />
