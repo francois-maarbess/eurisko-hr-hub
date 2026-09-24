@@ -5,6 +5,14 @@ preserves the SQLite setup and locked npm dependencies.
 
 ## Unreleased (queue, trust, and onboarding polish)
 
+**Finish pass: contrast, touch, states, demo docs**
+- Success green darkened to `#15803d` (WCAG AA on fills, alerts, and badges).
+- Minimum 24px touch targets on filters, board titles, and remove buttons;
+  board move buttons stay visible on touch devices.
+- Audit search shows errors and no-results explicitly; overview has a skeleton.
+- Request form enforces backend length caps with live counters; DEMO documents
+  the keyboard-only and narrow-screen paths.
+
 **Dialog and readability fixes**
 - Modal dialogs no longer steal focus while typing; the first field is focused
   once on open (fixes resolution notes, takeover/reroute reasons, MFA disable).

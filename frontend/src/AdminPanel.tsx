@@ -76,6 +76,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
   }[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditSearched, setAuditSearched] = useState(false);
+  const [auditError, setAuditError] = useState('');
   const [sysHealth, setSysHealth] = useState<{
     status: string;
     database: string;
@@ -128,7 +129,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
   const searchAudit = async () => {
     setAuditLoading(true);
     setAuditSearched(false);
-    setAuditRows([]);
+    setAuditError('');
     try {
       const params = new URLSearchParams();
       if (auditActor.trim()) params.set('actor', auditActor.trim());
@@ -137,12 +138,15 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
       const res = await fetch(apiUrl(`/audit?${params.toString()}`), {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) {
-        setAuditRows(await res.json());
-        setAuditSearched(true);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || 'Audit search failed.');
       }
-    } catch {
-      // Keep previous rows.
+      setAuditRows(await res.json());
+      setAuditSearched(true);
+    } catch (err) {
+      // Never blank the panel silently: keep prior rows and say what happened.
+      setAuditError(err instanceof Error ? err.message : 'Cannot reach the server.');
     } finally {
       setAuditLoading(false);
     }
@@ -417,6 +421,9 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
         onChange={(v) => setAdminTab(v as 'overview' | 'catalog' | 'users')}
       />
 
+      {adminTab === 'overview' && !report && (
+        <div className="admin-loading-skeleton" aria-label="Loading platform overview"><span className="skeleton-line" /><span className="skeleton-line" /><span className="skeleton-line" /></div>
+      )}
       {adminTab === 'overview' && report && (
         <Section
           title="Platform overview"
@@ -613,7 +620,8 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
             </Button>
           </div>
           {auditLoading && <div className="admin-loading-skeleton" aria-label="Searching audit"><span className="skeleton-line" /><span className="skeleton-line" /><span className="skeleton-line" /></div>}
-          {!auditLoading && auditSearched && auditRows.length === 0 && <p className="muted admin-empty-result">No results found.</p>}
+          {!auditLoading && auditError && <div className="alert-error" role="alert">{auditError}</div>}
+          {!auditLoading && !auditError && auditSearched && auditRows.length === 0 && <p className="muted admin-empty-result">No results found.</p>}
           {auditRows.length > 0 && (
             <div className="admin-overview-list" style={{ marginTop: '0.6rem' }}>
               {auditRows.slice(0, 20).map((r) => (

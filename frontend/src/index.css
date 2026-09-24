@@ -20,7 +20,7 @@
   --muted: #64748b;
   --border: #e2e8f0;
 
-  --success: #16a34a;
+  --success: #15803d; /* text-safe green: 5.02 white-on-fill, 4.57+ on success-bg (WCAG AA) */
   --success-bg: #dcfce7;
   --danger: #dc2626;
   --danger-bg: #fee2e2;
@@ -492,10 +492,10 @@ a:focus-visible {
 .view-switcher .toolbar-button { border-color: transparent; padding: 0.45rem 0.7rem; }
 .queue-view-control { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.65rem 0.75rem; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
 .quick-filters { gap: 0.4rem; margin-top: -0.35rem; }
-.filter-button { border: 1px solid var(--border); background: #fff; color: inherit; border-radius: 999px; padding: 0.22rem 0.6rem; font: inherit; font-size: 0.76rem; font-weight: 700; cursor: pointer; }
+.filter-button { border: 1px solid var(--border); background: #fff; color: inherit; border-radius: 999px; padding: 0.22rem 0.6rem; min-height: 24px; font: inherit; font-size: 0.76rem; font-weight: 700; cursor: pointer; }
 .filter-button.active { border-color: var(--blue); background: var(--blue-pale); color: var(--blue); }
 .filter-button.danger-active { border-color: var(--danger); background: var(--danger-bg); color: var(--danger); }
-.filter-clear { border: 0; background: none; color: var(--muted); font-size: 0.76rem; cursor: pointer; text-decoration: underline; }
+.filter-clear { border: 0; background: none; color: var(--muted); font-size: 0.76rem; cursor: pointer; text-decoration: underline; min-height: 24px; padding: 0 0.25rem; }
 .queue-section-heading { margin: 0; font-size: 1rem; }
 .active-filter-chips { flex-wrap: wrap; margin-top: 0.45rem; }
 .result-count { margin: 0.45rem 0; color: var(--muted); font-size: 0.8rem; }
@@ -503,6 +503,11 @@ a:focus-visible {
 .board-card-actions button { opacity: 0; }
 .board-card:focus-within .board-card-actions button,
 .board-card-actions button:focus-visible { opacity: 1; }
+/* Touch devices have no hover/focus affordance: actions stay visible. */
+@media (hover: none) {
+  .board-card-actions button { opacity: 1; }
+}
+.board-card-actions button { min-height: 24px; }
 .private-staff-label { display: inline-flex; margin: 0.25rem 0.35rem; padding: 0.12rem 0.42rem; border: 1px solid var(--blue-border); border-radius: 999px; background: var(--blue-pale); color: var(--blue-dark); font-size: 0.7rem; font-weight: 700; }
 .admin-loading-skeleton { display: grid; gap: 0.65rem; margin: 0.75rem 0; padding: 1rem; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
 .admin-loading-skeleton .skeleton-line { height: 1rem; }
@@ -568,12 +573,12 @@ a:focus-visible {
 .admin-form { margin-top: 0.5rem; }
 .admin-inline-select { width: auto; padding: 0.4rem 0.6rem; font-size: 0.82rem; }
 .admin-mini-select { width: auto; padding: 0.3rem 0.5rem; font-size: 0.78rem; }
-.admin-removable { border: 0; background: none; color: var(--danger); cursor: pointer; font-weight: 800; }
+.admin-removable { border: 0; background: none; color: var(--danger); cursor: pointer; font-weight: 800; min-width: 24px; min-height: 24px; padding: 0.1rem 0.3rem; }
 .admin-message { margin-top: 0.75rem; }
 .board-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; }
 .board-card { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 0.6rem 0.7rem; cursor: grab; touch-action: none; }
 .board-card.dragging { opacity: 0.45; box-shadow: var(--shadow-md); }
-.board-card-title { border: 0; background: none; padding: 0; width: 100%; color: var(--navy); cursor: pointer; display: block; font: inherit; font-size: 0.85rem; font-weight: 700; text-align: left; }
+.board-card-title { border: 0; background: none; padding: 0.15rem 0; min-height: 24px; width: 100%; color: var(--navy); cursor: pointer; display: block; font: inherit; font-size: 0.85rem; font-weight: 700; text-align: left; }
 .board-column { display: flex; flex-direction: column; gap: 0.5rem; min-height: 220px; padding: 0.6rem; border: 1px dashed var(--border); border-radius: 12px; background: #f8fafc; transition: background 0.15s, border-color 0.15s; }
 .board-column.over { border-color: var(--blue); background: var(--blue-pale); }
 .board-column-title { font-size: 0.85rem; }

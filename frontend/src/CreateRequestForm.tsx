@@ -361,10 +361,13 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Title (min 3 chars)"
+            placeholder="Title (3–200 chars)"
             minLength={3}
+            maxLength={200}
             required
+            aria-describedby="title-count"
           />
+          <p id="title-count" className="muted mt-sm" style={{ fontSize: '0.78rem' }}>{title.length}/200</p>
         </Field>
 
         <Field label="Description *">
@@ -372,11 +375,14 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
             className="textarea"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Description (min 10 chars)"
+            placeholder="Description (10–2000 chars)"
             minLength={10}
+            maxLength={2000}
             rows={3}
             required
+            aria-describedby="description-count"
           />
+          <p id="description-count" className="muted mt-sm" style={{ fontSize: '0.78rem' }}>{description.length}/2000</p>
         </Field>
       </Section>
 

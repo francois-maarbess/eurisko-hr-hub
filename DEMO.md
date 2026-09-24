@@ -40,6 +40,22 @@ on any ticket — every claim, note, and status change is audit-logged.
 **Finale — close the loop.** As Bob, complete the smoking laptop with a
 resolution note. As Alice, give it 5 stars. Watch the CSAT average move.
 
+## Keyboard-only path (same tour, no mouse)
+
+All three acts work without a mouse. Press `?` anytime for the shortcut list.
+
+- Log in with Tab + Enter; move between tickets with `j`/`k`, open with Enter.
+- `/` opens palette search from anywhere; `c` starts a new request;
+  Ctrl+Enter drafts with AI and submits forms; Esc goes back and closes dialogs.
+- Kanban cards expose Move buttons on focus — Tab to one, Enter to move;
+  completing asks for the resolution note in a trapped dialog (Esc cancels).
+
+## Narrow screens
+
+The tour also works at 390px: navigation collapses to the mobile bar,
+filters stack full-width, and board columns reflow single-column — no
+horizontal scrolling on any act above.
+
 ## Reset
 
 `npm run db:reset` returns to the pristine baseline (3 demo users, 0 requests).

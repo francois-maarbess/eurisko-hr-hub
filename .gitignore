@@ -33,3 +33,4 @@ Thumbs.db
 skills-lock.json
 prisma7.config.ts
 powershell.cmd
+.gstack/
