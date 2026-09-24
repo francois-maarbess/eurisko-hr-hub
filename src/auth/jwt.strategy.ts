@@ -3,6 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import type { PrismaClient } from '@prisma/client';
 import { PRISMA_CLIENT_TOKEN } from '../prisma.service';
+import { assertProductionSecrets } from '../config-check';
 
 export interface JwtPayload {
   sub: string;
@@ -17,6 +18,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     @Inject(PRISMA_CLIENT_TOKEN) private readonly prisma: PrismaClient,
   ) {
+    assertProductionSecrets();
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,

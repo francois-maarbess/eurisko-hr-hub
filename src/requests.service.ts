@@ -654,6 +654,7 @@ export class RequestsService {
     title: string;
     description?: string;
     excludeId?: string;
+    viewer?: Viewer;
   }) {
     // Length 3 keeps short but meaningful words (vpn, HR-adjacent codes)
     // while stopwords kill noise like "for" and "the".
@@ -662,6 +663,18 @@ export class RequestsService {
       .split(/[^a-z0-9]+/)
       .filter((t) => t.length >= 3 && !STOPWORDS.has(t));
     if (tokens.length === 0 || !input.departmentId) return [];
+
+    // Privacy gate: titles are sensitive. Only department staff and system
+    // admins may scan a department's open tickets — anyone else gets [] so
+    // the creation form keeps working without leaking anything.
+    if (input.viewer && input.viewer.platformRole !== 'SYSTEM_ADMIN') {
+      const membership = await this.prisma.departmentMember.findUnique({
+        where: {
+          userId_departmentId: { userId: input.viewer.id, departmentId: input.departmentId },
+        },
+      });
+      if (!membership?.active) return [];
+    }
 
     // No take-window: capping to newest-N could hide the best matches behind
     // recent noise (seeded twins are old by definition). 500 rows of small
@@ -719,15 +732,26 @@ export class RequestsService {
     const note = await this.prisma.staffNote.create({
       data: { requestId: id, authorId: userId, content: text },
     });
-    // Timeline shows a readable snippet — never a raw database ID.
-    const snippet = text.length > 80 ? `${text.slice(0, 80)}…` : text;
+    // Timeline records THAT a note was added — never its contents. Note
+    // bodies stay in the staff-only notes table; the audit trail (visible
+    // to request owners) must not become a side channel.
     await this.audit.append({
       requestId: id,
       actorId: userId,
       action: 'STAFF_NOTE_ADDED',
-      newValue: snippet,
+      newValue: note.id,
     });
     return note;
+  }
+
+  /** Staff-gate shared by timelines: system admins and active department
+   * members may see staff-activity rows; request owners may not. */
+  async canSeeStaffActivity(userId: string, platformRole: string, departmentId: string): Promise<boolean> {
+    if (platformRole === 'SYSTEM_ADMIN') return true;
+    const membership = await this.prisma.departmentMember.findUnique({
+      where: { userId_departmentId: { userId, departmentId } },
+    });
+    return !!membership?.active;
   }
 
   async listStaffNotes(id: string, userId: string) {

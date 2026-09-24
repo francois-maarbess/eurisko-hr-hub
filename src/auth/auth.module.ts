@@ -6,6 +6,7 @@ import { JwtStrategy } from './jwt.strategy';
 import { AuthService } from './auth.service';
 import { MfaService } from './mfa.service';
 import { TokenService } from './token.service';
+import { assertProductionSecrets } from '../config-check';
 
 @Module({
   imports: [
@@ -14,10 +15,13 @@ import { TokenService } from './token.service';
     // so the secret is read AFTER env is loaded — never baked in from
     // whatever happened to exist at import time.
     JwtModule.registerAsync({
-      useFactory: () => ({
-        secret: process.env.JWT_SECRET || 'week3-dev-secret',
-        signOptions: { expiresIn: (process.env['ACCESS_TOKEN_TTL'] || '15m') as any },
-      }),
+      useFactory: () => {
+        assertProductionSecrets();
+        return {
+          secret: process.env.JWT_SECRET || 'week3-dev-secret',
+          signOptions: { expiresIn: (process.env['ACCESS_TOKEN_TTL'] || '15m') as any },
+        };
+      },
     }),
   ],
   controllers: [AuthController],

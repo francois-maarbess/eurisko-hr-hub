@@ -987,17 +987,26 @@ describe('Service Request Flow (E2E)', () => {
 
     const res = await request(app.getHttpServer())
       .post('/requests/check-duplicates')
-      .set('Authorization', `Bearer ${employeeToken}`)
+      .set('Authorization', `Bearer ${agentToken}`)
       .send({ departmentId: dept!.id, title: `VPN access for travel ${stamp}` });
     expect(res.status).toBe(200);
     expect(res.body.map((r: any) => r.id)).toContain(twin.body.id);
 
     const clean = await request(app.getHttpServer())
       .post('/requests/check-duplicates')
-      .set('Authorization', `Bearer ${employeeToken}`)
+      .set('Authorization', `Bearer ${agentToken}`)
       .send({ departmentId: dept!.id, title: 'Zebra juggling championship finals' });
     expect(clean.status).toBe(200);
     expect(clean.body).toEqual([]);
+
+    // Privacy: titles are sensitive. A user outside the department learns
+    // nothing — empty result, not an error, so the form keeps working.
+    const outsider = await request(app.getHttpServer())
+      .post('/requests/check-duplicates')
+      .set('Authorization', `Bearer ${financeToken}`)
+      .send({ departmentId: dept!.id, title: `VPN access for travel ${stamp}` });
+    expect(outsider.status).toBe(200);
+    expect(outsider.body).toEqual([]);
 
     const anon = await request(app.getHttpServer())
       .post('/requests/check-duplicates')
@@ -1298,7 +1307,7 @@ describe('Service Request Flow (E2E)', () => {
     expect(empty.status).toBe(400);
   });
 
-  it('admin-owner reads staff notes on their own ticket; timeline shows a snippet, never a raw ID', async () => {
+  it('admin-owner reads staff notes on their own ticket; owners never see note rows', async () => {
     const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
     const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
     const created = await request(app.getHttpServer())
@@ -1326,7 +1335,7 @@ describe('Service Request Flow (E2E)', () => {
     expect(adminList.status).toBe(200);
     expect(adminList.body.some((n: any) => n.content.includes('Replacement unit'))).toBe(true);
 
-    // Timeline entry carries a readable snippet, not "note <cuid>".
+    // Timeline entry exists for staff but carries no note content.
     const timeline = await request(app.getHttpServer())
       .get(`/requests/${id}/activity`)
       .set('Authorization', `Bearer ${adminToken}`);
@@ -1334,9 +1343,49 @@ describe('Service Request Flow (E2E)', () => {
     const noteEvents = timeline.body.filter((a: any) => a.label === 'Internal note added');
     expect(noteEvents.length).toBeGreaterThanOrEqual(1);
     for (const e of noteEvents) {
-      expect(e.details || '').not.toMatch(/^note [a-z0-9]+$/i);
+      expect(e.details || '').not.toContain('Replacement unit');
     }
-    expect(noteEvents.some((e: any) => (e.details || '').includes('Replacement unit'))).toBe(true);
+
+    // A plain owner (non-staff) gets no staff-note rows at all — the
+    // "private agent note invisible to Alice" demo contract.
+    const aliceTicket = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        departmentId: dept!.id,
+        requestTypeId: rt!.id,
+        title: `Owner Privacy Probe ${Date.now()}`,
+        description: 'Owner must not see staff note rows in timelines',
+        priority: 'STANDARD',
+      });
+    expect(aliceTicket.status).toBe(201);
+    const aliceId = aliceTicket.body.id;
+    const bobNote = await request(app.getHttpServer())
+      .post(`/requests/${aliceId}/notes`)
+      .set('Authorization', `Bearer ${agentToken}`)
+      .send({ content: 'Secret vendor pricing discussed internally here.' });
+    expect(bobNote.status).toBe(201);
+
+    const ownerTimeline = await request(app.getHttpServer())
+      .get(`/requests/${aliceId}/activity`)
+      .set('Authorization', `Bearer ${employeeToken}`);
+    expect(ownerTimeline.status).toBe(200);
+    expect(ownerTimeline.body.filter((a: any) => a.label === 'Internal note added')).toEqual([]);
+    expect(JSON.stringify(ownerTimeline.body)).not.toContain('Secret vendor pricing');
+
+    const ownerAudit = await request(app.getHttpServer())
+      .get(`/requests/${aliceId}/audit`)
+      .set('Authorization', `Bearer ${employeeToken}`);
+    expect(ownerAudit.status).toBe(200);
+    expect(ownerAudit.body.filter((a: any) => a.action === 'STAFF_NOTE_ADDED')).toEqual([]);
+    expect(JSON.stringify(ownerAudit.body)).not.toContain('Secret vendor pricing');
+
+    // Staff still see the row.
+    const staffTimeline = await request(app.getHttpServer())
+      .get(`/requests/${aliceId}/activity`)
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(staffTimeline.status).toBe(200);
+    expect(staffTimeline.body.filter((a: any) => a.label === 'Internal note added').length).toBeGreaterThanOrEqual(1);
   });
 
   it('created tickets carry an SLA deadline; reroute refreshes it', async () => {

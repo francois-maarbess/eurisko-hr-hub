@@ -132,15 +132,20 @@ export class RequestsController {
   @Get(':id/audit')
   async auditTrail(@Param('id') id: string, @CurrentUser() user: any) {
     // findOne enforces the same read gate: existence never leaks to strangers.
-    await this.requestsService.findOne(id, { id: user.id, platformRole: user.platformRole });
-    return this.audit.forRequest(id);
+    const req = await this.requestsService.findOne(id, { id: user.id, platformRole: user.platformRole });
+    const rows = await this.audit.forRequest(id);
+    // Staff-note rows are invisible to non-staff (see STAFF_NOTE_ADDED).
+    const staff = await this.requestsService.canSeeStaffActivity(user.id, user.platformRole, req.departmentId);
+    return staff ? rows : rows.filter((r) => r.action !== 'STAFF_NOTE_ADDED');
   }
 
   @Get(':id/activity')
   async activity(@Param('id') id: string, @CurrentUser() user: any) {
     const viewer = { id: user.id, platformRole: user.platformRole };
-    await this.requestsService.findOne(id, viewer);
-    const rows = await this.audit.forRequest(id);
+    const req = await this.requestsService.findOne(id, viewer);
+    const all = await this.audit.forRequest(id);
+    const staff = await this.requestsService.canSeeStaffActivity(user.id, user.platformRole, req.departmentId);
+    const rows = staff ? all : all.filter((r) => r.action !== 'STAFF_NOTE_ADDED');
     return rows.map((r) => ({
       id: r.id,
       label: activityLabel(r.action, r.oldValue, r.newValue),
@@ -197,12 +202,14 @@ export class RequestsController {
   @HttpCode(HttpStatus.OK)
   checkDuplicates(
     @Body() body: { departmentId?: string; title?: string; description?: string; excludeId?: string },
+    @CurrentUser() user: any,
   ) {
     return this.requestsService.findDuplicates({
       departmentId: body.departmentId,
       title: body.title || '',
       description: body.description,
       excludeId: body.excludeId,
+      viewer: { id: user.id, platformRole: user.platformRole },
     });
   }
 

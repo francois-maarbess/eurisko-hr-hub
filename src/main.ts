@@ -1,4 +1,8 @@
 import 'dotenv/config';
+import { assertProductionSecrets } from './config-check';
+
+// Production refuses predictable secrets; local keeps zero-config fallbacks.
+assertProductionSecrets();
 
 // Safe zero-config fallbacks: allows instant running on any clone without manual .env copying
 if (!process.env['DATABASE_URL']) {
