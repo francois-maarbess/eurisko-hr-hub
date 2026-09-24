@@ -42,6 +42,13 @@ interface QuickTicket {
 
 export default function App() {
   const [token, setToken] = useState<string | null>(null);
+  const [refreshToken, setRefreshToken] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem('hub-refresh-token');
+    } catch {
+      return null;
+    }
+  });
   const [user, setUser] = useState<User | null>(null);
   const [activeView, setActiveView] = useState<AppView>('overview');
   const [focusTicketId, setFocusTicketId] = useState<string | null>(null);
@@ -56,9 +63,17 @@ export default function App() {
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
   const [quickTickets, setQuickTickets] = useState<QuickTicket[]>([]);
 
-  const handleLogin = (accessToken: string, userData: User) => {
+  const handleLogin = (accessToken: string, userData: User, refresh?: string) => {
     setToken(accessToken);
     setUser(userData);
+    if (refresh) {
+      setRefreshToken(refresh);
+      try {
+        sessionStorage.setItem('hub-refresh-token', refresh);
+      } catch {
+        // Private mode: session simply won't survive reloads.
+      }
+    }
     setActiveView('overview');
     setFocusTicketId(null);
     refreshInbox(accessToken);
@@ -71,7 +86,19 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    if (token) {
+      fetch(apiUrl('/auth/logout'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {});
+    }
     setToken(null);
+    setRefreshToken(null);
+    try {
+      sessionStorage.removeItem('hub-refresh-token');
+    } catch {
+      // Nothing stored — nothing to clear.
+    }
     setUser(null);
     setInbox([]);
     setUnread(0);
@@ -82,8 +109,36 @@ export default function App() {
     setActiveView('overview');
   };
 
-  const refreshInbox = async (t: string = token!) => {
-    try {
+  // Silent session renewal: access tokens live 15 minutes; rotate via
+  // the stored refresh token every 10. Any failure signs the user out.
+  useEffect(() => {
+    if (!token || !refreshToken || !user) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const res = await fetch(apiUrl('/auth/refresh'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.accessToken) throw new Error('refresh failed');
+        setToken(data.accessToken);
+        if (data.refreshToken) {
+          setRefreshToken(data.refreshToken);
+          try {
+            sessionStorage.setItem('hub-refresh-token', data.refreshToken);
+          } catch {
+            // Private mode: keep going with the in-memory token.
+          }
+        }
+      } catch {
+        handleLogout();
+      }
+    }, 10 * 60_000);
+    return () => window.clearInterval(timer);
+  }, [token, refreshToken, user]);
+
+  const refreshInbox = async (t: string = token!) => {    try {
       const [listRes, countRes] = await Promise.all([
         fetch(apiUrl('/notifications'), { headers: { Authorization: `Bearer ${t}` } }),
         fetch(apiUrl('/notifications/unread-count'), { headers: { Authorization: `Bearer ${t}` } }),

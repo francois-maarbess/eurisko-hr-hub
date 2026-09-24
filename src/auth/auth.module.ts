@@ -5,6 +5,7 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { AuthService } from './auth.service';
 import { MfaService } from './mfa.service';
+import { TokenService } from './token.service';
 
 @Module({
   imports: [
@@ -15,12 +16,12 @@ import { MfaService } from './mfa.service';
     JwtModule.registerAsync({
       useFactory: () => ({
         secret: process.env.JWT_SECRET || 'week3-dev-secret',
-        signOptions: { expiresIn: '24h' as const },
+        signOptions: { expiresIn: (process.env['ACCESS_TOKEN_TTL'] || '15m') as any },
       }),
     }),
   ],
   controllers: [AuthController],
-  providers: [JwtStrategy, AuthService, MfaService],
+  providers: [JwtStrategy, AuthService, MfaService, TokenService],
   exports: [JwtModule, PassportModule],
 })
 export class AuthModule {}

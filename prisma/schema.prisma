@@ -26,6 +26,7 @@ model User {
   documents             Document[]
   notifications         Notification[]
   staffNotes            StaffNote[]
+  refreshTokens         RefreshToken[]
 }
 
 model Department {
@@ -182,4 +183,18 @@ model Notification {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique // sha256 of the opaque token; plaintext never stored
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }

@@ -12,6 +12,7 @@ import * as bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import { PRISMA_CLIENT_TOKEN } from '../prisma.service';
 import { MfaService } from './mfa.service';
+import { TokenService } from './token.service';
 
 const PLATFORM_ROLES = ['EMPLOYEE', 'SYSTEM_ADMIN'];
 const DEPARTMENT_ROLES = ['AGENT', 'MANAGER'];
@@ -35,14 +36,28 @@ export class AuthService {
   constructor(
     @Inject(PRISMA_CLIENT_TOKEN) private readonly prisma: PrismaClient,
     private readonly jwtService: JwtService,
-    // Optional so unit specs can construct the service without the MFA module.
+    // Optional so unit specs can construct the service without the MFA/token modules.
     private readonly mfa?: MfaService,
+    private readonly tokens?: TokenService,
   ) {}
+
+  private pair(user: { id: string; email: string; displayName: string; platformRole: string }) {
+    if (!this.tokens) {
+      const token = this.jwtService.sign({
+        sub: user.id,
+        email: user.email,
+        name: user.displayName,
+        role: user.platformRole,
+      });
+      return Promise.resolve({ accessToken: token });
+    }
+    return this.tokens.issuePair(user);
+  }
 
   async login(
     email: string,
     password: string,
-  ): Promise<{ accessToken?: string; mfaRequired?: true; mfaToken?: string }> {
+  ): Promise<{ accessToken?: string; refreshToken?: string; mfaRequired?: true; mfaToken?: string }> {
     const normalized = (email || '').trim().toLowerCase();
     const user = await this.prisma.user.findUnique({ where: { email: normalized } });
     if (!user || !user.active) {
@@ -60,7 +75,19 @@ export class AuthService {
     if ((user as any).mfaEnabled && this.mfa) {
       return { mfaRequired: true as const, mfaToken: this.mfa.issueMfaToken(user) };
     }
-    return this.sign(user);
+    return this.pair(user);
+  }
+
+  /** Rotates a refresh token into a fresh pair. */
+  async refresh(refreshToken: string) {
+    if (!this.tokens) throw new UnauthorizedException('Invalid credentials');
+    return this.tokens.refresh(refreshToken);
+  }
+
+  /** Logs out everywhere: revokes every refresh token for the user. */
+  async logout(userId: string) {
+    if (this.tokens) await this.tokens.revokeAll(userId);
+    return { loggedOut: true };
   }
 
   async createUser(input: CreateUserInput) {
@@ -206,16 +233,6 @@ export class AuthService {
       departmentName: m.department.name,
       departmentRole: m.departmentRole,
     }));
-  }
-
-  private sign(user: { id: string; email: string; displayName: string; platformRole: string }) {
-    const token = this.jwtService.sign({
-      sub: user.id,
-      email: user.email,
-      name: user.displayName,
-      role: user.platformRole,
-    });
-    return { accessToken: token };
   }
 
   private safeUser(user: any) {

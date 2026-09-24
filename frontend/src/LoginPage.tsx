@@ -3,7 +3,11 @@ import { Button, ErrorBox } from './components/ui';
 import { apiUrl } from './api';
 
 interface LoginPageProps {
-  onLogin: (token: string, user: { id: string; email: string; name: string; platformRole: string }) => void;
+  onLogin: (
+    token: string,
+    user: { id: string; email: string; name: string; platformRole: string },
+    refreshToken?: string,
+  ) => void;
 }
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
@@ -14,13 +18,13 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [mfaToken, setMfaToken] = useState<string | null>(null);
   const [mfaCode, setMfaCode] = useState('');
 
-  const finishLogin = async (accessToken: string) => {
+  const finishLogin = async (accessToken: string, refreshToken?: string) => {
     // Get user profile
     const meRes = await fetch(apiUrl('/auth/me'), {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     const user = await meRes.json();
-    onLogin(accessToken, user);
+    onLogin(accessToken, user, refreshToken);
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -48,7 +52,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         return;
       }
 
-      await finishLogin(data.accessToken);
+      await finishLogin(data.accessToken, data.refreshToken);
     } catch {
       setError('Cannot reach the server');
     } finally {
@@ -74,7 +78,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         return;
       }
 
-      await finishLogin(data.accessToken);
+      await finishLogin(data.accessToken, data.refreshToken);
     } catch {
       setError('Cannot reach the server');
     } finally {

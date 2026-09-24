@@ -1560,6 +1560,62 @@ describe('Service Request Flow (E2E)', () => {
     expect(plainAgain.body.mfaRequired).toBeUndefined();
   });
 
+  it('refresh rotation: use once, reuse detected, logout revokes', async () => {
+    const email = `refresh-${Date.now()}@acme.com`;
+    await request(app.getHttpServer())
+      .post('/auth/users')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ email, password: 'e2e-password-123' });
+
+    const login = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email, password: 'e2e-password-123' });
+    expect(login.status).toBe(201);
+    expect(login.body.accessToken).toBeTruthy();
+    expect(login.body.refreshToken).toBeTruthy();
+    const r1 = login.body.refreshToken;
+
+    // Rotate: fresh pair, old token dead.
+    const rotated = await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .send({ refreshToken: r1 });
+    expect(rotated.status).toBe(201);
+    expect(rotated.body.accessToken).toBeTruthy();
+    expect(rotated.body.refreshToken).not.toBe(r1);
+    const r2 = rotated.body.refreshToken;
+
+    // Reusing the rotated token trips theft detection: 401.
+    const replay = await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .send({ refreshToken: r1 });
+    expect(replay.status).toBe(401);
+
+    // Theft response revoked the whole family: even the fresh token dies.
+    const afterTheft = await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .send({ refreshToken: r2 });
+    expect(afterTheft.status).toBe(401);
+
+    // Logout revokes everything: login again, logout, refresh fails.
+    const again = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email, password: 'e2e-password-123' });
+    const out = await request(app.getHttpServer())
+      .post('/auth/logout')
+      .set('Authorization', `Bearer ${again.body.accessToken}`);
+    expect(out.status).toBe(201);
+    const dead = await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .send({ refreshToken: again.body.refreshToken });
+    expect(dead.status).toBe(401);
+
+    // Garbage token: 401, no crash.
+    const junk = await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .send({ refreshToken: 'not-a-real-token' });
+    expect(junk.status).toBe(401);
+  });
+
   it('login is rate-limited after a rapid burst', async () => {
     // Earlier tests in this file already spend part of the 20/min budget,
     // so hammer until the throttle trips instead of assuming a fixed count.

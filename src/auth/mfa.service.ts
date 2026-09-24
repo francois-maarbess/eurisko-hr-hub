@@ -6,6 +6,7 @@ import * as OTPAuth from 'otpauth';
 import * as QRCode from 'qrcode';
 import * as bcrypt from 'bcryptjs';
 import { PRISMA_CLIENT_TOKEN } from '../prisma.service';
+import { TokenService } from './token.service';
 
 const BACKUP_CODE_COUNT = 10;
 const MFA_TOKEN_TTL = '5m' as const;
@@ -27,6 +28,8 @@ export class MfaService {
   constructor(
     @Inject(PRISMA_CLIENT_TOKEN) private readonly prisma: PrismaClient,
     private readonly jwtService: JwtService,
+    // Optional so existing constructions keep working; DI always provides it.
+    private readonly tokens?: TokenService,
   ) {}
 
   private totpFor(email: string, base32: string) {
@@ -122,13 +125,16 @@ export class MfaService {
   }
 
   private signFull(user: { id: string; email: string; displayName: string; platformRole: string }) {
-    return {
-      accessToken: this.jwtService.sign({
-        sub: user.id,
-        email: user.email,
-        name: user.displayName,
-        role: user.platformRole,
-      }),
-    };
+    if (!this.tokens) {
+      return {
+        accessToken: this.jwtService.sign({
+          sub: user.id,
+          email: user.email,
+          name: user.displayName,
+          role: user.platformRole,
+        }),
+      };
+    }
+    return this.tokens.issuePair(user);
   }
 }

@@ -115,6 +115,12 @@ class MfaDisableDto {
   password!: string;
 }
 
+class RefreshDto {
+  @IsString()
+  @IsNotEmpty()
+  refreshToken!: string;
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -133,6 +139,18 @@ export class AuthController {
   @Throttle({ default: { limit: 20, ttl: 60000 } })
   async login(@Body() dto: LoginDto) {
     return this.authService.login(dto.email, dto.password);
+  }
+
+  @Post('refresh')
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  async refresh(@Body() dto: RefreshDto) {
+    return this.authService.refresh(dto.refreshToken);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('logout')
+  async logout(@Request() req: any) {
+    return this.authService.logout(req.user.id);
   }
 
   /**
