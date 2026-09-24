@@ -79,7 +79,7 @@ const PRIORITY_COLORS: Record<TicketPriority, { background: string; color: strin
   URGENT: { background: 'var(--danger-bg)', color: 'var(--danger)' },
 };
 
-type View = 'mine' | 'queue' | 'claimed';
+type View = 'mine' | 'queue' | 'claimed' | 'unassigned' | 'mywork';
 
 function getSlaInfo(ticket: TicketState): { label: string; bg: string; color: string; title: string } {
   // Prefer the stored per-ticket deadline (AI-set when Groq configured,
@@ -189,13 +189,23 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
   const [loading, setLoading] = useState(false);
   const [cardErrors, setCardErrors] = useState<CardErrorState>({});
 
-  // Filtering, search & sorting
-  const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [sortOldest, setSortOldest] = useState(false);
-  const [filterUrgentOnly, setFilterUrgentOnly] = useState(false);
-  const [filterHasDocs, setFilterHasDocs] = useState(false);
-  const [filterHasNotes, setFilterHasNotes] = useState(false);
+  // Filtering, search & sorting — persisted per browser so a queue
+  // setup survives reloads (modes like board/overdue intentionally don't).
+  const loadSavedFilters = (): Record<string, any> => {
+    try {
+      return JSON.parse(localStorage.getItem('tsm-filters-v1') || '{}');
+    } catch {
+      return {};
+    }
+  };
+  // Read once (lazy initializer) — the effect below writes back on change.
+  const [savedFilters] = useState<Record<string, any>>(loadSavedFilters);
+  const [query, setQuery] = useState(typeof savedFilters.query === 'string' ? savedFilters.query : '');
+  const [statusFilter, setStatusFilter] = useState<string>(typeof savedFilters.statusFilter === 'string' ? savedFilters.statusFilter : 'ALL');
+  const [sortMode, setSortMode] = useState<'newest' | 'oldest' | 'deadline'>('newest');
+  const [filterUrgentOnly, setFilterUrgentOnly] = useState(!!savedFilters.filterUrgentOnly);
+  const [filterHasDocs, setFilterHasDocs] = useState(!!savedFilters.filterHasDocs);
+  const [filterHasNotes, setFilterHasNotes] = useState(!!savedFilters.filterHasNotes);
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [boardView, setBoardView] = useState(false);
 
@@ -301,6 +311,17 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
   useEffect(() => {
     fetchTickets(view);
   }, [token, view, overdueOnly, focusTicketId]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        'tsm-filters-v1',
+        JSON.stringify({ query, statusFilter, filterUrgentOnly, filterHasDocs, filterHasNotes }),
+      );
+    } catch {
+      // Private mode / quota: filters simply don't persist.
+    }
+  }, [query, statusFilter, filterUrgentOnly, filterHasDocs, filterHasNotes]);
 
   const mutate = async (
     ticket: TicketState,
@@ -719,16 +740,27 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
         (t.requestType?.name && t.requestType.name.toLowerCase().includes(q))
       );
     })
-    .sort((a, b) =>
-      sortOldest
+    .sort((a, b) => {
+      if (sortMode === 'deadline') {
+        const da = a.slaDueAt ? new Date(a.slaDueAt).getTime() : Number.POSITIVE_INFINITY;
+        const db = b.slaDueAt ? new Date(b.slaDueAt).getTime() : Number.POSITIVE_INFINITY;
+        return da - db;
+      }
+      return sortMode === 'oldest'
         ? new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-        : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
+        : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
+  const sortLabel = sortMode === 'deadline' ? 'Deadline first' : sortMode === 'oldest' ? 'Oldest first ↑' : 'Newest first ↓';
+  const cycleSort = () =>
+    setSortMode((s) => (s === 'newest' ? 'oldest' : s === 'oldest' ? 'deadline' : 'newest'));
 
   const tabOptions = initialView === 'mine'
     ? [{ value: 'mine' as View, label: 'My Requests' }]
     : [
         { value: 'queue' as View, label: 'Department Queue' },
+        { value: 'unassigned' as View, label: 'Unassigned' },
+        { value: 'mywork' as View, label: 'My Work' },
         { value: 'claimed' as View, label: 'Claimed by Me' },
       ];
 
@@ -793,11 +825,11 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
               <option value="CANCELLED">Cancelled</option>
             </select>
             <button
-              className={`toolbar-button${sortOldest ? ' active' : ''}`}
-              onClick={() => setSortOldest((s) => !s)}
-              title="Toggle oldest/newest first"
+              className={`toolbar-button${sortMode !== 'newest' ? ' active' : ''}`}
+              onClick={cycleSort}
+              title="Cycle newest, oldest, then earliest deadline first"
             >
-              {sortOldest ? 'Oldest first ↑' : 'Newest first ↓'}
+              {sortLabel}
             </button>
           </div>
 

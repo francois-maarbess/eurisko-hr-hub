@@ -73,29 +73,54 @@ export class RequestsService {
    * - queue: open tickets in MY departments (agents), everything open (admin).
    * - claimed: in-progress or completed tickets claimed by me.
    */
-  async findAll(userId: string, view?: string) {
+  async findAll(userId: string, view?: string, page?: number, pageSize?: number) {
+    // Pagination slices AFTER fetching: queue ordering is a custom
+    // in-memory sort that no DB ORDER BY can express, so slicing before
+    // sorting would break global order. Uniform across all views.
+    const paginate = <T>(rows: T[]): T[] => {
+      if (page == null && pageSize == null) return rows;
+      const size = Math.min(Math.max(1, pageSize || 50), 200);
+      const start = Math.max(0, ((page || 1) - 1) * size);
+      return rows.slice(start, start + size);
+    };
     if (view === 'claimed') {
-      return this.prisma.request.findMany({
+      const rows = await this.prisma.request.findMany({
         where: { claimedById: userId, status: { in: ['IN_PROGRESS', 'COMPLETED'] } },
         include: this.fullInclude,
         orderBy: { createdAt: 'desc' },
       });
+      return paginate(rows);
     }
 
-    if (view === 'queue') {
+    if (view === 'mywork') {
+      const rows = await this.prisma.request.findMany({
+        where: { claimedById: userId, ...this.openWhere() },
+        include: this.fullInclude,
+        orderBy: { createdAt: 'desc' },
+      });
+      return paginate(rows);
+    }
+
+    if (view === 'queue' || view === 'unassigned') {
       const rank = (r: { priority: string; createdAt: Date }) =>
         (PRIORITY_RANK[r.priority] ?? 99) * 1e15 + r.createdAt.getTime();
       // Acceptance 10: URGENT before STANDARD before LOW, then oldest first.
-      const byPriority = (rows: { priority: string; createdAt: Date }[]) =>
-        [...rows].sort((a, b) => rank(a) - rank(b));
+      // Sorted in memory (priority order isn't expressible in a DB ORDER BY),
+      // so pagination slices AFTER sorting to keep global order correct.
+      const paginate = (rows: { priority: string; createdAt: Date }[]) => {
+        const sorted = [...rows].sort((a, b) => rank(a) - rank(b));
+        if (page == null && pageSize == null) return sorted;
+        const size = Math.min(Math.max(1, pageSize || 50), 200);
+        return sorted.slice(Math.max(0, ((page || 1) - 1) * size), Math.max(0, ((page || 1) - 1) * size) + size);
+      };
 
       const user = await this.prisma.user.findUnique({ where: { id: userId } });
       if (user?.platformRole === 'SYSTEM_ADMIN') {
         const all = await this.prisma.request.findMany({
-          where: this.openWhere(),
+          where: { ...this.openWhere(), ...(view === 'unassigned' ? { claimedById: null } : {}) },
           include: this.fullInclude,
         });
-        return byPriority(all);
+        return paginate(all);
       }
       const memberships = await this.prisma.departmentMember.findMany({
         where: { userId, active: true },
@@ -105,17 +130,20 @@ export class RequestsService {
         where: {
           departmentId: { in: memberships.map((m) => m.departmentId) },
           ...this.openWhere(),
+          ...(view === 'unassigned' ? { claimedById: null } : {}),
         },
         include: this.fullInclude,
       });
-      return byPriority(scoped);
+      return paginate(scoped);
     }
 
-    return this.prisma.request.findMany({
-      where: { employeeId: userId },
-      include: this.fullInclude,
-      orderBy: { createdAt: 'desc' },
-    });
+    return paginate(
+      await this.prisma.request.findMany({
+        where: { employeeId: userId },
+        include: this.fullInclude,
+        orderBy: { createdAt: 'desc' },
+      }),
+    );
   }
 
   /**

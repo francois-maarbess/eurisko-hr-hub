@@ -576,6 +576,53 @@ describe('Service Request Flow (E2E)', () => {
     expect(anon.status).toBe(401);
   });
 
+  it('queue views: unassigned, mywork, and pagination', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+    const mk = (title: string) =>
+      request(app.getHttpServer())
+        .post('/requests')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({ departmentId: dept!.id, requestTypeId: rt!.id, title, description: 'queue view probe', priority: 'STANDARD' });
+    const a = await mk(`Unassigned A ${Date.now()}`);
+    const b = await mk(`Unassigned B ${Date.now()}`);
+    // Bob claims B: it leaves unassigned, enters mywork.
+    await request(app.getHttpServer())
+      .patch(`/requests/${b.body.id}/claim`)
+      .set('Authorization', `Bearer ${agentToken}`);
+
+    const unassigned = await request(app.getHttpServer())
+      .get('/requests?view=unassigned')
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(unassigned.status).toBe(200);
+    const uids = unassigned.body.map((r: any) => r.id);
+    expect(uids).toContain(a.body.id);
+    expect(uids).not.toContain(b.body.id);
+
+    const mywork = await request(app.getHttpServer())
+      .get('/requests?view=mywork')
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(mywork.status).toBe(200);
+    expect(mywork.body.map((r: any) => r.id)).toContain(b.body.id);
+    const agent = await prisma.user.findFirst({ where: { email: 'bob@acme.com' } });
+    for (const t of mywork.body) {
+      expect(t.claimedById).toBe(agent!.id);
+      expect(['PENDING', 'IN_PROGRESS']).toContain(t.status);
+    }
+
+    // Pagination: page 1 of size 1 returns one row; far page is empty.
+    const p1 = await request(app.getHttpServer())
+      .get('/requests?view=queue&page=1&pageSize=1')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(p1.status).toBe(200);
+    expect(p1.body).toHaveLength(1);
+    const pFar = await request(app.getHttpServer())
+      .get('/requests?view=queue&page=9999&pageSize=10')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(pFar.status).toBe(200);
+    expect(pFar.body).toEqual([]);
+  });
+
   it('admin controls roles and memberships; employees are forbidden', async () => {
     const email = `ctl-${Date.now()}@acme.com`;
     const created = await request(app.getHttpServer())

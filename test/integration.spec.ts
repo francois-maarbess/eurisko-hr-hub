@@ -5,6 +5,27 @@ describe('Database Integration', () => {
 
   beforeAll(async () => {
     prisma = new PrismaClient();
+    // Self-sufficient: suites share one SQLite file and run in whatever
+    // order the sequencer chooses, so never depend on leftover rows.
+    const existing = await prisma.request.findFirst({ select: { id: true } });
+    if (!existing) {
+      const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+      const user = await prisma.user.findFirst({ where: { email: 'alice@acme.com' } });
+      const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+      if (dept && user && rt) {
+        await prisma.request.create({
+          data: {
+            employeeId: user.id,
+            departmentId: dept.id,
+            requestTypeId: rt.id,
+            title: 'Integration Seed Request',
+            description: 'Ensures relation checks have at least one row',
+            priority: 'STANDARD',
+            status: 'PENDING',
+          },
+        });
+      }
+    }
   });
 
   afterAll(async () => {

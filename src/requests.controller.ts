@@ -82,8 +82,15 @@ export class RequestsController {
   ) {}
 
   @Get()
-  findAll(@CurrentUser() user: any, @Query('view') view?: string) {
-    return this.requestsService.findAll(user.id, view);
+  findAll(
+    @CurrentUser() user: any,
+    @Query('view') view?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    const p = page != null ? Math.max(1, parseInt(page, 10) || 1) : undefined;
+    const ps = pageSize != null ? Math.min(Math.max(1, parseInt(pageSize, 10) || 50), 200) : undefined;
+    return this.requestsService.findAll(user.id, view, p, ps);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
