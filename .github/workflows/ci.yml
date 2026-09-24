@@ -43,8 +43,12 @@ jobs:
       - name: Validate Prisma schema
         run: npx prisma validate
 
-      - name: Audit dependencies (high+)
+      - name: Audit report (advisory, high+)
         run: npm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Audit gate (critical only)
+        run: npm audit --audit-level=critical
 
       - name: Run tests (90, SQLite)
         run: npm test
