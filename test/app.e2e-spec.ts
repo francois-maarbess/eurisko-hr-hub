@@ -1630,8 +1630,7 @@ describe('Service Request Flow (E2E)', () => {
     expect(saw429).toBe(true);
   });
 
-  it('health reports database, migrations, outbox, and AI status', async () => {
-    const res = await request(app.getHttpServer()).get('/health');
+  it('health reports database, migrations, outbox, and AI status', async () => {    const res = await request(app.getHttpServer()).get('/health');
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('ok');
     expect(res.body.database).toBe('connected');
@@ -1642,5 +1641,116 @@ describe('Service Request Flow (E2E)', () => {
     expect(typeof res.body.outbox.pending).toBe('number');
     expect(typeof res.body.outbox.failed).toBe('number');
     expect(['groq', 'local']).toContain(res.body.ai.provider);
+  });
+
+  it('correlation IDs trace a failure end to end', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/no-such-route-xyz')
+      .set('x-request-id', 'probe-123');
+    expect(res.status).toBe(404);
+    expect(res.headers['x-request-id']).toBe('probe-123');
+    expect(res.body.requestId).toBe('probe-123');
+
+    // Generated when the client sends none.
+    const gen = await request(app.getHttpServer()).get('/no-such-route-xyz');
+    expect(gen.headers['x-request-id']).toBeTruthy();
+    expect(gen.body.requestId).toBe(gen.headers['x-request-id']);
+  });
+
+  it('deactivated users lose API access immediately', async () => {
+    const email = `deact-${Date.now()}@acme.com`;
+    const created = await request(app.getHttpServer())
+      .post('/auth/users')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ email, password: 'e2e-password-123' });
+    expect(created.status).toBe(201);
+    const jwt = app.get(JwtService);
+    const token = jwt.sign(
+      { sub: created.body.id, email, name: email, role: 'EMPLOYEE' },
+      { secret: JWT_SECRET },
+    );
+    const before = await request(app.getHttpServer())
+      .get('/requests')
+      .set('Authorization', `Bearer ${token}`);
+    expect(before.status).toBe(200);
+    await request(app.getHttpServer())
+      .patch(`/auth/users/${created.body.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ active: false });
+    const after = await request(app.getHttpServer())
+      .get('/requests')
+      .set('Authorization', `Bearer ${token}`);
+    expect(after.status).toBe(401);
+  });
+
+  it('queue supports claimedBy filter; analytics, audit search, filtered export, AI health', async () => {
+    const agent = await prisma.user.findFirst({ where: { email: 'bob@acme.com' } });
+    const me = await request(app.getHttpServer())
+      .get('/requests?view=queue&claimedBy=me')
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(me.status).toBe(200);
+    for (const t of me.body) expect(t.claimedById).toBe(agent!.id);
+
+    const un = await request(app.getHttpServer())
+      .get('/requests?view=queue&claimedBy=unassigned')
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(un.status).toBe(200);
+    for (const t of un.body) expect(t.claimedById).toBeNull();
+
+    const analytics = await request(app.getHttpServer())
+      .get('/requests/analytics')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(analytics.status).toBe(200);
+    expect(typeof analytics.body.total).toBe('number');
+    expect(analytics.body.aging).toBeTruthy();
+    expect(Array.isArray(analytics.body.workloadByAgent)).toBe(true);
+
+    const forbidden = await request(app.getHttpServer())
+      .get('/requests/analytics')
+      .set('Authorization', `Bearer ${employeeToken}`);
+    expect(forbidden.status).toBe(403);
+
+    const audit = await request(app.getHttpServer())
+      .get('/audit?action=REQUEST_CREATED&limit=5')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(audit.status).toBe(200);
+    expect(Array.isArray(audit.body)).toBe(true);
+
+    const auditForbidden = await request(app.getHttpServer())
+      .get('/audit?limit=5')
+      .set('Authorization', `Bearer ${employeeToken}`);
+    expect(auditForbidden.status).toBe(403);
+
+    const exp = await request(app.getHttpServer())
+      .get('/requests/export?status=PENDING')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(exp.status).toBe(200);
+    expect(exp.headers['content-type']).toContain('text/csv');
+
+    const aiHealth = await request(app.getHttpServer())
+      .get('/ai/health')
+      .set('Authorization', `Bearer ${employeeToken}`);
+    expect(aiHealth.status).toBe(200);
+    expect(['groq', 'local']).toContain(aiHealth.body.provider);
+    expect(typeof aiHealth.body.promptVersion).toBe('string');
+
+    // AI correction lands on the audit trail.
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+    const createdTicket = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ departmentId: dept!.id, requestTypeId: rt!.id, title: `AI correction probe ${Date.now()}`, description: 'correction probe body', priority: 'STANDARD' });
+    expect(createdTicket.status).toBe(201);
+    const correction = await request(app.getHttpServer())
+      .post(`/requests/${createdTicket.body.id}/ai-correction`)
+      .set('Authorization', `Bearer ${agentToken}`)
+      .send({ departmentCode: 'IT', requestTypeCode: 'VPN', note: 'actually vpn' });
+    expect(correction.status).toBe(201);
+    const trail = await request(app.getHttpServer())
+      .get(`/requests/${createdTicket.body.id}/activity`)
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(trail.status).toBe(200);
+    expect(trail.body.some((a: any) => /AI classification corrected/.test(a.label))).toBe(true);
   });
 });

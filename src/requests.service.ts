@@ -72,33 +72,52 @@ export class RequestsService {
    *   tickets unless they have a reason to.
    * - queue: open tickets in MY departments (agents), everything open (admin).
    * - claimed: in-progress or completed tickets claimed by me.
+   * - mywork: open tickets claimed by me. unassigned: open + unclaimed.
+   * Pagination: DB-orderable views use real skip/take; queue uses a custom
+   * in-memory priority sort so the slice happens after sorting to keep
+   * global URGENT-first order correct. claimedBy narrows queue/claimed
+   * ('me' | 'unassigned' | userId); unknown ids return [] rather than leak.
    */
-  async findAll(userId: string, view?: string, page?: number, pageSize?: number) {
+  async findAll(userId: string, view?: string, page?: number, pageSize?: number, claimedBy?: string) {
+    const paged = page != null || pageSize != null;
+    const size = Math.min(Math.max(1, pageSize || 50), 200);
+    const skip = Math.max(0, ((page || 1) - 1) * size);
+    const take = size;
     // Pagination slices AFTER fetching: queue ordering is a custom
     // in-memory sort that no DB ORDER BY can express, so slicing before
     // sorting would break global order. Uniform across all views.
     const paginate = <T>(rows: T[]): T[] => {
-      if (page == null && pageSize == null) return rows;
-      const size = Math.min(Math.max(1, pageSize || 50), 200);
-      const start = Math.max(0, ((page || 1) - 1) * size);
-      return rows.slice(start, start + size);
+      if (!paged) return rows;
+      return rows.slice(skip, skip + size);
+    };
+    const claimedByFilter = (): Record<string, unknown> | null => {
+      if (!claimedBy) return null;
+      if (claimedBy === 'me') return { claimedById: userId };
+      if (claimedBy === 'unassigned' || claimedBy === 'null') return { claimedById: null };
+      // Specific agent id: must look like a cuid to avoid leaking via garbage.
+      if (!/^[a-z0-9]{10,}$/i.test(claimedBy)) return { claimedById: '__none__' };
+      return { claimedById: claimedBy };
     };
     if (view === 'claimed') {
+      const extra = claimedByFilter();
       const rows = await this.prisma.request.findMany({
-        where: { claimedById: userId, status: { in: ['IN_PROGRESS', 'COMPLETED'] } },
+        where: { claimedById: userId, status: { in: ['IN_PROGRESS', 'COMPLETED'] }, ...(extra ?? {}) },
         include: this.fullInclude,
         orderBy: { createdAt: 'desc' },
+        ...(paged ? { skip, take } : {}),
       });
-      return paginate(rows);
+      return rows;
     }
 
     if (view === 'mywork') {
+      const extra = claimedByFilter();
       const rows = await this.prisma.request.findMany({
-        where: { claimedById: userId, ...this.openWhere() },
+        where: { claimedById: userId, ...this.openWhere(), ...(extra ?? {}) },
         include: this.fullInclude,
         orderBy: { createdAt: 'desc' },
+        ...(paged ? { skip, take } : {}),
       });
-      return paginate(rows);
+      return rows;
     }
 
     if (view === 'queue' || view === 'unassigned') {
@@ -109,15 +128,15 @@ export class RequestsService {
       // so pagination slices AFTER sorting to keep global order correct.
       const paginate = (rows: { priority: string; createdAt: Date }[]) => {
         const sorted = [...rows].sort((a, b) => rank(a) - rank(b));
-        if (page == null && pageSize == null) return sorted;
-        const size = Math.min(Math.max(1, pageSize || 50), 200);
-        return sorted.slice(Math.max(0, ((page || 1) - 1) * size), Math.max(0, ((page || 1) - 1) * size) + size);
+        if (!paged) return sorted;
+        return sorted.slice(skip, skip + size);
       };
+      const extra = claimedByFilter();
 
       const user = await this.prisma.user.findUnique({ where: { id: userId } });
       if (user?.platformRole === 'SYSTEM_ADMIN') {
         const all = await this.prisma.request.findMany({
-          where: { ...this.openWhere(), ...(view === 'unassigned' ? { claimedById: null } : {}) },
+          where: { ...this.openWhere(), ...(view === 'unassigned' ? { claimedById: null } : {}), ...(extra ?? {}) },
           include: this.fullInclude,
         });
         return paginate(all);
@@ -131,12 +150,22 @@ export class RequestsService {
           departmentId: { in: memberships.map((m) => m.departmentId) },
           ...this.openWhere(),
           ...(view === 'unassigned' ? { claimedById: null } : {}),
+          ...(extra ?? {}),
         },
         include: this.fullInclude,
       });
       return paginate(scoped);
     }
 
+    if (paged) {
+      return this.prisma.request.findMany({
+        where: { employeeId: userId },
+        include: this.fullInclude,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+      });
+    }
     return paginate(
       await this.prisma.request.findMany({
         where: { employeeId: userId },
@@ -830,9 +859,16 @@ export class RequestsService {
   /**
    * Operations CSV export (admin only): every request as one row.
    * Returned as a string; the controller sets text/csv headers.
+   * Optional filters mirror the queue so exports honor what the admin
+   * is actually looking at — omitted filters mean everything.
    */
-  async exportCsv(): Promise<string> {
+  async exportCsv(filters?: { status?: string; departmentId?: string; priority?: string }): Promise<string> {
+    const where: Record<string, unknown> = {};
+    if (filters?.status) where['status'] = filters.status;
+    if (filters?.departmentId) where['departmentId'] = filters.departmentId;
+    if (filters?.priority) where['priority'] = filters.priority;
     const rows = await this.prisma.request.findMany({
+      where,
       include: {
         department: { select: { name: true } },
         requestType: { select: { name: true } },
@@ -857,5 +893,95 @@ export class RequestsService {
       ),
     ];
     return lines.join('\n');
+  }
+
+  /**
+   * Admin analytics, computed from existing rows — no schema change.
+   * Time-to-claim/complete come from audit timestamps; workload from
+   * claimedById; rates from status/action counts; aging from open rows.
+   */
+  async getAnalytics() {
+    const [total, byStatus, requests, audits] = await Promise.all([
+      this.prisma.request.count(),
+      this.prisma.request.groupBy({ by: ['status'], _count: true }),
+      this.prisma.request.findMany({
+        select: { id: true, status: true, createdAt: true, completedAt: true, claimedById: true },
+      }),
+      this.prisma.auditLog.findMany({
+        where: { action: { in: ['REQUEST_CREATED', 'REQUEST_CLAIMED', 'STATUS_CHANGED', 'REQUEST_REROUTED'] } },
+        select: { requestId: true, action: true, newValue: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+        take: 5000,
+      }),
+    ]);
+    const createdAtByReq = new Map<string, number>();
+    const claimedAtByReq = new Map<string, number>();
+    let reroutes = 0;
+    for (const a of audits) {
+      if (!a.requestId) continue;
+      if (a.action === 'REQUEST_CREATED' && !createdAtByReq.has(a.requestId)) {
+        createdAtByReq.set(a.requestId, new Date(a.createdAt).getTime());
+      } else if (a.action === 'REQUEST_CLAIMED' && !claimedAtByReq.has(a.requestId)) {
+        claimedAtByReq.set(a.requestId, new Date(a.createdAt).getTime());
+      } else if (a.action === 'REQUEST_REROUTED') {
+        reroutes++;
+      }
+    }
+    // Fall back to request.createdAt when the audit row predates logging.
+    for (const r of requests) {
+      if (!createdAtByReq.has(r.id)) createdAtByReq.set(r.id, new Date(r.createdAt).getTime());
+    }
+    const claimGaps: number[] = [];
+    for (const [reqId, claimedAt] of claimedAtByReq) {
+      const created = createdAtByReq.get(reqId);
+      if (created != null && claimedAt >= created) claimGaps.push((claimedAt - created) / 3600_000);
+    }
+    const completeGaps: number[] = [];
+    for (const r of requests) {
+      if (r.status === 'COMPLETED' && r.completedAt) {
+        const created = createdAtByReq.get(r.id);
+        const done = new Date(r.completedAt).getTime();
+        if (created != null && done >= created) completeGaps.push((done - created) / 3600_000);
+      }
+    }
+    const avg = (xs: number[]) => (xs.length === 0 ? null : Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10);
+    const statusMap = Object.fromEntries(byStatus.map((r) => [r.status, r._count]));
+    const now = Date.now();
+    const aging = { under1d: 0, d1to3: 0, d3to7: 0, over7d: 0 };
+    const workload = new Map<string, number>();
+    for (const r of requests) {
+      const isOpen = !TERMINAL_STATUSES.includes(r.status);
+      if (isOpen) {
+        const ageH = (now - new Date(r.createdAt).getTime()) / 3600_000;
+        if (ageH < 24) aging.under1d++;
+        else if (ageH < 72) aging.d1to3++;
+        else if (ageH < 168) aging.d3to7++;
+        else aging.over7d++;
+      }
+      if (r.claimedById) workload.set(r.claimedById, (workload.get(r.claimedById) || 0) + 1);
+    }
+    const claimants = workload.size > 0
+      ? await this.prisma.user.findMany({
+          where: { id: { in: [...workload.keys()] } },
+          select: { id: true, displayName: true, email: true },
+        })
+      : [];
+    const nameOf = new Map(claimants.map((u) => [u.id, u.displayName || u.email]));
+    return {
+      total,
+      byStatus: statusMap,
+      timeToClaimAvgHours: avg(claimGaps),
+      timeToClaimCount: claimGaps.length,
+      timeToCompleteAvgHours: avg(completeGaps),
+      timeToCompleteCount: completeGaps.length,
+      rejectionRate: total === 0 ? 0 : Math.round(((statusMap['REJECTED'] || 0) / total) * 1000) / 10,
+      rerouteRate: total === 0 ? 0 : Math.round((reroutes / total) * 1000) / 10,
+      rerouteCount: reroutes,
+      aging,
+      workloadByAgent: [...workload.entries()]
+        .map(([userId, count]) => ({ userId, name: nameOf.get(userId) || userId, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10),
+    };
   }
 }

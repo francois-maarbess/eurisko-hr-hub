@@ -12,6 +12,11 @@ import { GroqAiProvider } from './groq-ai.provider';
 
 const VALID_PRIORITIES = ['LOW', 'STANDARD', 'URGENT'] as const;
 
+/** Prompt/catalog contract version. Bumped whenever the extractor prompt,
+ * synonyms, or validation rules change. Returned in every draft + health
+ * response and asserted in evals so instructors see reproducibility. */
+export const PROMPT_VERSION = 'v1.3-local-rules';
+
 export interface ValidatedDraft {
   departmentId: string;
   requestTypeId: string;
@@ -23,6 +28,9 @@ export interface ValidatedDraft {
   /** True for distress/safety signals. Advisory: forces URGENT + a discreet
    * UI note. A human still reviews every word before anything is created. */
   sensitive: boolean;
+  promptVersion: string;
+  /** Why this classification won — matched keywords + plain rationale. */
+  trace?: { matchedKeywords: string[]; rationale: string };
 }
 
 type CatalogRow = {
@@ -40,7 +48,7 @@ type CatalogRow = {
 export function validateCandidate(
   raw: RawDraft,
   catalog: CatalogRow[],
-): Omit<ValidatedDraft, 'confidence' | 'provider' | 'sensitive'> {
+): Omit<ValidatedDraft, 'confidence' | 'provider' | 'sensitive' | 'promptVersion' | 'trace'> {
   const departmentCode = (raw.departmentCode || '').trim().toUpperCase();
   const requestTypeCode = (raw.requestTypeCode || '').trim().toUpperCase();
 
@@ -150,6 +158,8 @@ export class AiIntakeService {
       confidence: result.confidence,
       provider: used.name,
       sensitive: result.sensitive === true,
+      promptVersion: PROMPT_VERSION,
+      ...(result.trace ? { trace: result.trace } : {}),
     };
   }
 
@@ -180,12 +190,13 @@ export class AiIntakeService {
     this.lastErrorMessage = message.slice(0, 200);
   }
 
-  /** Surfaced on /health: which provider is live and when it last failed. */
+  /** Surfaced on /health + GET /ai/health: which provider is live and when it last failed. */
   providerStatus() {
     const configured = !!process.env['GROQ_API_KEY'];
     return {
       provider: configured ? 'groq' : 'local',
       model: configured ? process.env['GROQ_MODEL'] || 'openai/gpt-oss-20b' : 'offline-rules',
+      promptVersion: PROMPT_VERSION,
       lastErrorAt: this.lastErrorAt,
       lastErrorMessage: this.lastErrorMessage,
     };

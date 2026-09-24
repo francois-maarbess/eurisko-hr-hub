@@ -126,6 +126,18 @@ const cases: Case[] = [
       assert(/workplace requests/.test(msg), `unexpected message: ${msg}`);
     },
   },
+  {
+    name: 'every draft carries prompt version + why-trace',
+    run: async () => {
+      const svc = new AiIntakeService(stubPrisma, new LocalAiProvider(), undefined as any);
+      const out = await svc.draft('my laptop screen is cracked, need replacement asap');
+      assert(typeof (out as any).promptVersion === 'string' && (out as any).promptVersion.length > 0, JSON.stringify(out));
+      const trace = (out as any).trace;
+      assert(trace && Array.isArray(trace.matchedKeywords) && typeof trace.rationale === 'string', JSON.stringify(out));
+      const status = svc.providerStatus();
+      assert((status as any).promptVersion === (out as any).promptVersion, JSON.stringify(status));
+    },
+  },
 ];
 
 function assert(cond: boolean, detail: string) {

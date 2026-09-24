@@ -85,7 +85,7 @@ export class LocalAiProvider implements AiProvider {
   async extractDraft(text: string, catalog: CatalogDepartment[]): Promise<ProviderDraft> {
     const tokens = new Set(words(text));
 
-    let best: { deptCode: string; typeCode: string; score: number } | null = null;
+    let best: { deptCode: string; typeCode: string; score: number; matched: string[] } | null = null;
     let runnerUpScore = 0;
 
     for (const dept of catalog) {
@@ -101,11 +101,12 @@ export class LocalAiProvider implements AiProvider {
           ],
           TYPE_SYNONYMS[type.code] || [],
         );
-        let score = 0;
-        for (const t of tokens) if (keys.has(t)) score++;
+        const matched: string[] = [];
+        for (const t of tokens) if (keys.has(t)) matched.push(t);
+        const score = matched.length;
         if (!best || score > best.score) {
           runnerUpScore = best ? best.score : 0;
-          best = { deptCode: dept.code, typeCode: type.code, score };
+          best = { deptCode: dept.code, typeCode: type.code, score, matched };
         } else if (score > runnerUpScore) {
           runnerUpScore = score;
         }
@@ -135,6 +136,10 @@ export class LocalAiProvider implements AiProvider {
         },
         confidence: 'low',
         sensitive: false,
+        trace: {
+          matchedKeywords: [],
+          rationale: 'No catalog overlap and no workplace vocabulary — off-topic, nothing to classify.',
+        },
       };
     }
 
@@ -149,12 +154,17 @@ export class LocalAiProvider implements AiProvider {
 
     const picked = best.score > 0
       ? best
-      : { deptCode: fallbackDept.code, typeCode: fallbackType.code, score: 0 };
+      : { deptCode: fallbackDept.code, typeCode: fallbackType.code, score: 0, matched: [] as string[] };
 
     const high = picked.score >= 3 && picked.score - runnerUpScore >= 2;
     const pickedTypeName =
       catalog.flatMap((d) => d.types).find((t) => t.code === picked.typeCode)?.name || picked.typeCode;
     const firstClause = text.split(/[.?!;\n]/)[0].trim().slice(0, 90) || text.trim().slice(0, 90);
+    const matchedKeywords = [...new Set(picked.matched)].slice(0, 12);
+    const rationale =
+      picked.score === 0
+        ? `No catalog keywords matched — defaulted to ${picked.deptCode}/${picked.typeCode}; human must confirm.`
+        : `Matched ${picked.score} keyword${picked.score === 1 ? '' : 's'} (${matchedKeywords.join(', ')}) for ${picked.deptCode}/${picked.typeCode}, runner-up had ${runnerUpScore}; ${urgent || sensitive ? 'urgency words forced URGENT' : 'no urgency words, STANDARD'}.`;
 
     return {
       draft: {
@@ -166,6 +176,7 @@ export class LocalAiProvider implements AiProvider {
       },
       confidence: high ? 'high' : 'low',
       sensitive,
+      trace: { matchedKeywords, rationale },
     };
   }
 }

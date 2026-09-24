@@ -18,6 +18,7 @@ import { RerouteDto } from './dto/reroute.dto';
 import { ReassignDto, TakeoverDto } from './dto/assignment.dto';
 import { FeedbackDto } from './dto/feedback.dto';
 import { StaffNoteDto } from './dto/staff-note.dto';
+import { AiCorrectionDto } from './dto/ai-correction.dto';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { Roles, RolesGuard } from './auth/roles.guard';
 import { CurrentUser } from './auth/current-user.decorator';
@@ -42,6 +43,8 @@ function activityLabel(action: string, oldValue?: string | null, newValue?: stri
       return 'Internal note added';
     case 'FEEDBACK_SUBMITTED':
       return `Rated ${newValue || ''}`.trim();
+    case 'AI_CORRECTION':
+      return `AI classification corrected${newValue && newValue !== 'flagged' ? `: ${newValue}` : ''}`;
     case 'MEMBER_ADDED':
       return 'Team member added';
     case 'MEMBER_REMOVED':
@@ -87,10 +90,11 @@ export class RequestsController {
     @Query('view') view?: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
+    @Query('claimedBy') claimedBy?: string,
   ) {
     const p = page != null ? Math.max(1, parseInt(page, 10) || 1) : undefined;
     const ps = pageSize != null ? Math.min(Math.max(1, parseInt(pageSize, 10) || 50), 200) : undefined;
-    return this.requestsService.findAll(user.id, view, p, ps);
+    return this.requestsService.findAll(user.id, view, p, ps, claimedBy);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -102,11 +106,22 @@ export class RequestsController {
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SYSTEM_ADMIN')
+  @Get('analytics')
+  analytics() {
+    return this.requestsService.getAnalytics();
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SYSTEM_ADMIN')
   @Get('export')
   @Header('Content-Type', 'text/csv')
   @Header('Content-Disposition', 'attachment; filename="requests-export.csv"')
-  exportCsv() {
-    return this.requestsService.exportCsv();
+  exportCsv(
+    @Query('status') status?: string,
+    @Query('departmentId') departmentId?: string,
+    @Query('priority') priority?: string,
+  ) {
+    return this.requestsService.exportCsv({ status, departmentId, priority });
   }
 
   @Get('breach')
@@ -150,6 +165,27 @@ export class RequestsController {
   @HttpCode(HttpStatus.CREATED)
   feedback(@Param('id') id: string, @Body() dto: FeedbackDto, @CurrentUser() user: any) {
     return this.requestsService.submitFeedback(id, dto, user.id);
+  }
+
+  @Post(':id/ai-correction')
+  @HttpCode(HttpStatus.CREATED)
+  async aiCorrection(@Param('id') id: string, @Body() dto: AiCorrectionDto, @CurrentUser() user: any) {
+    // Same read gate as notes/activity: only someone who can see the ticket
+    // can correct its AI classification. Stored on the audit trail so evals
+    // and instructors see what the model got wrong.
+    await this.requestsService.findOne(id, { id: user.id, platformRole: user.platformRole });
+    await this.audit.append({
+      requestId: id,
+      actorId: user.id,
+      action: 'AI_CORRECTION',
+      newValue: [dto.departmentCode, dto.requestTypeCode].filter(Boolean).join('/') || 'flagged',
+      metadata: JSON.stringify({
+        departmentCode: dto.departmentCode || null,
+        requestTypeCode: dto.requestTypeCode || null,
+        note: (dto.note || '').slice(0, 500),
+      }),
+    });
+    return { corrected: true };
   }
 
   @Get(':id')

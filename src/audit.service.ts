@@ -58,4 +58,66 @@ export class AuditService {
       actorName: names.get(r.actorId) || 'System',
     }));
   }
+
+  /**
+   * Global audit search (admin only via controller guard). All filters
+   * optional; capped at 200 rows newest-first so the UI stays fast.
+   */
+  async search(filters: { actor?: string; action?: string; requestId?: string; from?: string; to?: string; limit?: number }) {
+    const where: Record<string, unknown> = {};
+    if (filters.requestId) where['requestId'] = filters.requestId;
+    if (filters.action) where['action'] = filters.action;
+    if (filters.from || filters.to) {
+      const createdAt: Record<string, Date> = {};
+      if (filters.from) {
+        const d = new Date(filters.from);
+        if (!Number.isNaN(d.getTime())) createdAt['gte'] = d;
+      }
+      if (filters.to) {
+        const d = new Date(filters.to);
+        if (!Number.isNaN(d.getTime())) createdAt['lte'] = d;
+      }
+      if (Object.keys(createdAt).length > 0) where['createdAt'] = createdAt;
+    }
+    // Actor matches display name or email (contains, case-insensitive).
+    let actorIds: string[] | undefined;
+    if (filters.actor) {
+      const users = await this.prisma.user.findMany({
+        where: {
+          OR: [
+            { displayName: { contains: filters.actor } },
+            { email: { contains: filters.actor } },
+          ],
+        },
+        select: { id: true },
+        take: 50,
+      });
+      actorIds = users.map((u) => u.id);
+      if (actorIds.length === 0) return [];
+      where['actorId'] = { in: actorIds };
+    }
+    const limit = Math.min(Math.max(1, filters.limit || 100), 200);
+    const rows = await this.prisma.auditLog.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+    const ids = [...new Set(rows.map((r) => r.actorId))];
+    const users = ids.length > 0
+      ? await this.prisma.user.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, displayName: true, email: true },
+        })
+      : [];
+    const names = new Map(users.map((u) => [u.id, u.displayName || u.email]));
+    return rows.map((r) => ({
+      id: r.id,
+      requestId: r.requestId,
+      action: r.action,
+      oldValue: r.oldValue,
+      newValue: r.newValue,
+      createdAt: r.createdAt,
+      actorName: names.get(r.actorId) || 'System',
+    }));
+  }
 }

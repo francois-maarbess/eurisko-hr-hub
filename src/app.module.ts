@@ -1,5 +1,5 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module';
 import { PrismaModule } from './prisma.module';
@@ -13,8 +13,10 @@ import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
 import { DepartmentsController } from './departments.controller';
 import { AuditService } from './audit.service';
+import { AuditController } from './audit.controller';
 import { HealthController } from './health.controller';
 import { RequestLoggerMiddleware } from './request-logger.middleware';
+import { HttpExceptionFilter } from './http-exception.filter';
 
 @Module({
   imports: [
@@ -38,6 +40,7 @@ import { RequestLoggerMiddleware } from './request-logger.middleware';
     NotificationsController,
     DepartmentsController,
     HealthController,
+    AuditController,
   ],
   providers: [
     RequestsService,
@@ -45,6 +48,10 @@ import { RequestLoggerMiddleware } from './request-logger.middleware';
     NotificationsService,
     DocumentsService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Registered here (not only in main.ts) so e2e, tests, and any
+    // Nest bootstrap get identical error shape { statusCode, message,
+    // requestId, timestamp }. main.ts keeps its explicit registration.
+    { provide: APP_FILTER, useClass: HttpExceptionFilter },
   ],
 })
 export class AppModule implements NestModule {

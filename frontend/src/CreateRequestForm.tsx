@@ -4,29 +4,75 @@ import { apiUrl } from './api';
 
 interface CreateRequestFormProps {
   token: string;
-  onCreated: () => void;
+  onCreated: (id?: string) => void;
   catalogVersion?: number;
 }
 
 interface Department { id: string; code: string; name: string; }
 interface RequestType { id: string; code: string; name: string; departmentId: string; }
 
+export function toRef(id: string): string {
+  const tail = (id || '').replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase();
+  return `REQ-${(tail || '000000').padStart(6, '0')}`;
+}
+
+const DRAFT_KEY = 'new-request-draft-v1';
+
+function loadDraft(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
 export default function CreateRequestForm({ token, onCreated, catalogVersion }: CreateRequestFormProps) {
+  const [draft] = useState<Record<string, string>>(loadDraft);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [requestTypes, setRequestTypes] = useState<RequestType[]>([]);
-  const [selectedDept, setSelectedDept] = useState('');
-  const [selectedType, setSelectedType] = useState('');
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [priority, setPriority] = useState<'LOW' | 'STANDARD' | 'URGENT'>('STANDARD');
+  const [selectedDept, setSelectedDept] = useState(draft.selectedDept || '');
+  const [selectedType, setSelectedType] = useState(draft.selectedType || '');
+  const [title, setTitle] = useState(draft.title || '');
+  const [description, setDescription] = useState(draft.description || '');
+  const [priority, setPriority] = useState<'LOW' | 'STANDARD' | 'URGENT'>(
+    draft.priority === 'LOW' || draft.priority === 'URGENT' ? draft.priority : 'STANDARD',
+  );
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [aiText, setAiText] = useState('');
+  const [aiText, setAiText] = useState(draft.aiText || '');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiNote, setAiNote] = useState('');
+  const [aiTrace, setAiTrace] = useState<{
+    provider: string;
+    promptVersion: string;
+    confidence: string;
+    matched: string[];
+    rationale: string;
+  } | null>(null);
   const [dupLoading, setDupLoading] = useState(false);
   const [duplicates, setDuplicates] = useState<{ id: string; title: string; status: string }[] | null>(null);
   const [dupConfirmedFor, setDupConfirmedFor] = useState<string | null>(null);
+
+  // Draft persistence: survives reloads, cleared on submit. Private-mode
+  // failures are ignored — the form simply starts empty.
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        DRAFT_KEY,
+        JSON.stringify({ selectedDept, selectedType, title, description, priority, aiText }),
+      );
+    } catch {
+      // Ignore quota/private-mode errors.
+    }
+  }, [selectedDept, selectedType, title, description, priority, aiText]);
+
+  const clearDraft = () => {
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      // Nothing to clear.
+    }
+  };
 
   const loadCatalog = () => {
     const headers = { Authorization: `Bearer ${token}` };
@@ -50,10 +96,12 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
   const handleAiDraft = async () => {
     if (!aiText.trim()) {
       setAiNote('Describe your issue in a few words first.');
+      setAiTrace(null);
       return;
     }
     setAiLoading(true);
     setAiNote('');
+    setAiTrace(null);
     try {
       const res = await fetch(apiUrl('/requests/ai-draft'), {
         method: 'POST',
@@ -84,6 +132,13 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
         note += ' This looks personal and urgent — it will be handled discreetly.';
       }
       setAiNote(note);
+      setAiTrace({
+        provider: data.provider || 'local',
+        promptVersion: data.promptVersion || '',
+        confidence: data.confidence || '',
+        matched: Array.isArray(data?.trace?.matchedKeywords) ? data.trace.matchedKeywords : [],
+        rationale: typeof data?.trace?.rationale === 'string' ? data.trace.rationale : '',
+      });
     } catch {
       setAiNote('Cannot reach the server');
     } finally {
@@ -163,19 +218,22 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
         }),
       });
 
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json();
-        setError(data.message || 'Failed to create request');
+        setError((data as any).message || 'Failed to create request');
         return;
       }
 
+      const createdId = (data as any)?.id as string | undefined;
       setTitle('');
       setDescription('');
       setSelectedDept('');
       setSelectedType('');
       setDuplicates(null);
       setDupConfirmedFor(null);
-      onCreated();
+      setAiText('');
+      clearDraft();
+      onCreated(createdId);
     } catch {
       setError('Cannot reach the server');
     } finally {
@@ -219,6 +277,20 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
           </span>
         </div>
         {aiNote && <p className="muted mt-sm">{aiNote}</p>}
+        {aiTrace && (
+          <details className="muted mt-sm" style={{ fontSize: '0.8rem' }}>
+            <summary style={{ cursor: 'pointer', fontWeight: 700 }}>
+              Why this classification? ({aiTrace.provider}
+              {aiTrace.promptVersion ? ` · ${aiTrace.promptVersion}` : ''})
+            </summary>
+            <div style={{ marginTop: '0.35rem' }}>
+              {aiTrace.matched.length > 0 && (
+                <div>Matched: {aiTrace.matched.join(', ')}</div>
+              )}
+              {aiTrace.rationale && <div>{aiTrace.rationale}</div>}
+            </div>
+          </details>
+        )}
       </div>
       </Section>
 

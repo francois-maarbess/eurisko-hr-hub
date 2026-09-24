@@ -1,15 +1,29 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import LoginPage from './LoginPage';
 import CreateRequestForm from './CreateRequestForm';
 import TicketStatusManager from './TicketStatusManager';
-import AdminPanel from './AdminPanel';
-import MfaSettings from './MfaSettings';
 import ErrorBoundary from './ErrorBoundary';
-import Dashboard from './Dashboard';
 import AppShell, { type AppView } from './AppShell';
 import { Button } from './components/ui';
 import QuickSwitcher, { type QuickSwitcherItem } from './components/QuickSwitcher';
 import { apiUrl } from './api';
+
+// Lazy-load heavy/below-fold views so first paint stays fast on instructor
+// laptops. recharts (Dashboard) and the admin console split out of the
+// initial bundle; Suspense falls back to a skeleton.
+const Dashboard = React.lazy(() => import('./Dashboard'));
+const AdminPanel = React.lazy(() => import('./AdminPanel'));
+const MfaSettings = React.lazy(() => import('./MfaSettings'));
+
+function ViewFallback() {
+  return (
+    <div className="card" aria-label="Loading view" role="status">
+      <div className="skeleton-line" style={{ width: '30%' }} />
+      <div className="skeleton-line" style={{ width: '60%', marginTop: '0.5rem' }} />
+      <div className="skeleton-line" style={{ width: '45%', marginTop: '0.5rem' }} />
+    </div>
+  );
+}
 
 interface User {
   id: string;
@@ -414,7 +428,9 @@ export default function App() {
           </ErrorBoundary>
         ) : activeView === 'overview' ? (
           <ErrorBoundary section="dashboard">
-            <Dashboard token={token} userName={user.name} isStaff={isStaff} />
+            <Suspense fallback={<ViewFallback />}>
+              <Dashboard token={token} userName={user.name} isStaff={isStaff} />
+            </Suspense>
           </ErrorBoundary>
         ) : activeView === 'my' ? (
           <ErrorBoundary section="request queue">
@@ -442,22 +458,29 @@ export default function App() {
           <CreateRequestForm
             token={token}
             catalogVersion={catalogVersion}
-            onCreated={() => {
+            onCreated={(id) => {
               setRefreshKey((k) => k + 1);
               if (token) refreshInbox(token);
-              setActiveView('my');
+              // Open the new ticket so the employee sees its reference
+              // number, tracker, and what-happens-next immediately.
+              if (id) openTicket(id);
+              else setActiveView('my');
             }}
           />
         ) : activeView === 'admin' && isAdmin ? (
           <ErrorBoundary section="administration panel">
-            <AdminPanel
-              token={token}
-              onCatalogChange={() => setCatalogVersion((v) => v + 1)}
-            />
+            <Suspense fallback={<ViewFallback />}>
+              <AdminPanel
+                token={token}
+                onCatalogChange={() => setCatalogVersion((v) => v + 1)}
+              />
+            </Suspense>
           </ErrorBoundary>
         ) : (
           <ErrorBoundary section="security settings">
-            <MfaSettings token={token} />
+            <Suspense fallback={<ViewFallback />}>
+              <MfaSettings token={token} />
+            </Suspense>
           </ErrorBoundary>
         )}
       </AppShell>

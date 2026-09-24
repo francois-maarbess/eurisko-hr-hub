@@ -1,7 +1,40 @@
 import React, { useEffect, useState } from 'react';
 import { Badge, Button, EmptyState, ErrorBox, Field, Tabs, formatEnum } from './components/ui';
 import { apiUrl } from './api';
+import { toRef } from './CreateRequestForm';
 import KanbanBoard, { type BoardStatus, type BoardTicket } from './KanbanBoard';
+
+function Tracker({ status }: { status: TicketStatus }) {
+  const steps = ['Submitted', 'Assigned', 'In Progress', 'Resolved'] as const;
+  const activeIdx =
+    status === 'PENDING' ? 0 : status === 'IN_PROGRESS' ? 2 : status === 'COMPLETED' ? 3 : 1;
+  const failed = status === 'REJECTED' || status === 'CANCELLED';
+  return (
+    <div aria-label="Request progress" style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', margin: '0.6rem 0' }}>
+      {steps.map((label, i) => {
+        const done = failed ? i <= 1 : i <= activeIdx;
+        const current = !failed && i === activeIdx;
+        return (
+          <span
+            key={label}
+            aria-current={current ? 'step' : undefined}
+            style={{
+              fontSize: '0.75rem',
+              fontWeight: 800,
+              padding: '0.25rem 0.6rem',
+              borderRadius: '999px',
+              border: '1px solid var(--border)',
+              background: current ? 'var(--navy)' : done ? 'var(--blue-pale)' : '#fff',
+              color: current ? '#fff' : done ? 'var(--blue-dark)' : 'var(--muted)',
+            }}
+          >
+            {i + 1}. {failed && i === 1 ? (status === 'REJECTED' ? 'Reviewed' : 'Closed') : label}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
 
 type TicketStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'REJECTED';
 type TicketPriority = 'LOW' | 'STANDARD' | 'URGENT';
@@ -219,6 +252,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
   const [docsOpen, setDocsOpen] = useState<Record<string, boolean>>({});
   const [docsCache, setDocsCache] = useState<Record<string, DocMeta[]>>({});
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
 
   // Activity timeline state
   const [activityOpen, setActivityOpen] = useState<Record<string, boolean>>({});
@@ -245,6 +279,13 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
   // Notifications & toast
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Debounced search: input stays instant, heavy filter/highlight runs 300ms
+  // after typing stops so large queues don't re-filter per keystroke.
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => clearTimeout(t);
+  }, [query]);
 
   const authHeaders = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
   const isAdmin = platformRole === 'SYSTEM_ADMIN';
@@ -534,25 +575,49 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
 
   const handleUpload = async (ticket: TicketState, file: File) => {
     setUploadingDoc(ticket.id);
+    setUploadProgress((p) => ({ ...p, [ticket.id]: 0 }));
     try {
       const form = new FormData();
       form.append('file', file);
-      const res = await fetch(apiUrl(`/requests/${ticket.id}/documents`), {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: form,
+      // XHR for real upload progress; fetch can't report it.
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', apiUrl(`/requests/${ticket.id}/documents`));
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            setUploadProgress((p) => ({ ...p, [ticket.id]: Math.round((e.loaded / e.total) * 100) }));
+          }
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else {
+            let msg = 'Upload failed.';
+            try {
+              msg = JSON.parse(xhr.responseText)?.message || msg;
+            } catch {
+              // Keep default.
+            }
+            reject(new Error(msg));
+          }
+        };
+        xhr.onerror = () => reject(new Error('Upload failed.'));
+        xhr.send(form);
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setCardErrors((current) => ({ ...current, [ticket.id]: data?.message || 'Upload failed.' }));
-        return;
-      }
       await loadDocs(ticket.id);
       showToast('Attachment uploaded.');
-    } catch {
-      setCardErrors((current) => ({ ...current, [ticket.id]: 'Upload failed.' }));
+    } catch (err) {
+      setCardErrors((current) => ({
+        ...current,
+        [ticket.id]: err instanceof Error ? err.message : 'Upload failed.',
+      }));
     } finally {
       setUploadingDoc(null);
+      setUploadProgress((p) => {
+        const next = { ...p };
+        delete next[ticket.id];
+        return next;
+      });
     }
   };
 
@@ -704,8 +769,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
   };
 
   // Rating handlers
-  const submitRating = async (ticket: TicketState) => {
-    if (ratingStars < 1 || ratingStars > 5) {
+  const submitRating = async (ticket: TicketState) => {    if (ratingStars < 1 || ratingStars > 5) {
       setCardErrors((current) => ({ ...current, [ticket.id]: 'Please pick 1 to 5 stars.' }));
       return;
     }
@@ -731,7 +795,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
       if (filterUrgentOnly && t.priority !== 'URGENT') return false;
       if (filterHasDocs && (t._count?.documents ?? (docsCache[t.id]?.length || 0)) === 0) return false;
       if (filterHasNotes && (t._count?.staffNotes ?? (notesCache[t.id]?.length || 0)) === 0) return false;
-      const q = query.trim().toLowerCase();
+      const q = debouncedQuery.trim().toLowerCase();
       if (!q) return true;
       return (
         t.title.toLowerCase().includes(q) ||
@@ -969,10 +1033,10 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                         fontWeight: 800, fontSize: '1.05rem', color: 'var(--navy)', textAlign: 'left',
                       }}
                     >
-                      {highlightMatch(ticket.title, query)}
+                      {highlightMatch(ticket.title, debouncedQuery)}
                     </button>
                   ) : (
-                    highlightMatch(ticket.title, query)
+                    highlightMatch(ticket.title, debouncedQuery)
                   )}
                 </div>
                 {ticket.owner && <div className="muted" style={{ fontSize: '0.85rem' }}>Requested by {ticket.owner.displayName}</div>}
@@ -998,8 +1062,28 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
             </div>
 
             <p style={{ margin: '0.75rem 0', lineHeight: 1.5, color: '#334155' }}>
-              {highlightMatch(ticket.description, query)}
+              {highlightMatch(ticket.description, debouncedQuery)}
             </p>
+
+            {focusTicketId && (
+              <>
+                <div className="muted" style={{ fontSize: '0.8rem' }}>
+                  Reference <strong style={{ color: 'var(--navy)' }}>{toRef(ticket.id)}</strong>
+                  {' · '}Full ID <span style={{ fontFamily: 'monospace' }}>{ticket.id}</span>
+                </div>
+                <Tracker status={ticket.status} />
+                {isOwner && ticket.status === 'PENDING' && (
+                  <div className="note-info" role="status">
+                    Submitted — your department queue has it. You’ll be notified when an agent claims it, and you can cancel while it’s pending.
+                  </div>
+                )}
+                {isOwner && ticket.status === 'IN_PROGRESS' && (
+                  <div className="note-info" role="status">
+                    Assigned{ ticket.claimant ? ` to ${ticket.claimant.displayName}` : ''} and being worked on. You’ll be notified on resolution.
+                  </div>
+                )}
+              </>
+            )}
 
             {ticket.claimant && (
               <p className="muted" style={{ fontSize: '0.85rem', margin: '0.25rem 0' }}>
@@ -1142,7 +1226,9 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                     )}
                     {canManageDocs && !isTerminalCard && (
                       <label style={{ fontSize: '0.85rem', color: 'var(--blue)', cursor: 'pointer', fontWeight: 700, marginTop: '0.3rem' }}>
-                        {uploadingDoc === ticket.id ? 'Uploading…' : '+ Attach PDF / PNG / JPEG (max 5MB)'}
+                        {uploadingDoc === ticket.id
+                          ? `Uploading… ${uploadProgress[ticket.id] ?? 0}%`
+                          : '+ Attach PDF / PNG / JPEG (max 5MB)'}
                         <input
                           type="file"
                           accept=".pdf,.png,.jpg,.jpeg"
@@ -1154,6 +1240,18 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                             if (f) void handleUpload(ticket, f);
                           }}
                         />
+                        {uploadingDoc === ticket.id && (
+                          <span
+                            role="progressbar"
+                            aria-valuenow={uploadProgress[ticket.id] ?? 0}
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            aria-label="Upload progress"
+                            style={{ display: 'block', height: '6px', borderRadius: '999px', background: '#e2e8f0', marginTop: '0.4rem', overflow: 'hidden' }}
+                          >
+                            <span style={{ display: 'block', height: '100%', width: `${uploadProgress[ticket.id] ?? 0}%`, background: 'var(--blue)' }} />
+                          </span>
+                        )}
                       </label>
                     )}
                   </div>

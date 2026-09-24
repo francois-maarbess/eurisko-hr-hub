@@ -34,6 +34,9 @@ export interface ProviderDraft {
   /** True when the text signals distress or a safety concern. Advisory only:
    * forces URGENT priority and a discreet UI note; a human still confirms. */
   sensitive: boolean;
+  /** Explainability: which catalog words matched and why this won. Shown in
+   * the UI as "why this classification" so instructors see the reasoning. */
+  trace?: { matchedKeywords: string[]; rationale: string };
 }
 
 export interface AiProvider {

@@ -1,9 +1,9 @@
 /* Internal Operations Service Hub — design tokens + shared primitives.
    Calm operations cockpit: neutral canvas, ink/navy structure, one blue
    action accent, amber/red reserved for warnings and overdue work.
-   Light theme only. */
-
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700;9..40,800&family=IBM+Plex+Mono:wght@400;500&display=swap');
+   Light theme only.
+   Fonts load via <link> in index.html (preconnect + display=swap); the
+   system stack below keeps offline/instructor machines instant. */
 
 :root {
   --navy: #0f172a;          /* ink: navigation, headings */

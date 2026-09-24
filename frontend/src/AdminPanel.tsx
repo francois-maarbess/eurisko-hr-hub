@@ -51,7 +51,27 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
     csatCount: number;
   } | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState('');
+  const [exportDept, setExportDept] = useState('');
+  const [exportPriority, setExportPriority] = useState('');
   const [showCountsInfo, setShowCountsInfo] = useState(false);
+  const [analytics, setAnalytics] = useState<{
+    total: number;
+    timeToClaimAvgHours: number | null;
+    timeToCompleteAvgHours: number | null;
+    rejectionRate: number;
+    rerouteRate: number;
+    rerouteCount: number;
+    aging: { under1d: number; d1to3: number; d3to7: number; over7d: number };
+    workloadByAgent: { userId: string; name: string; count: number }[];
+  } | null>(null);
+  const [userQuery, setUserQuery] = useState('');
+  const [auditActor, setAuditActor] = useState('');
+  const [auditAction, setAuditAction] = useState('');
+  const [auditRows, setAuditRows] = useState<{
+    id: string; requestId: string | null; action: string; actorName: string; createdAt: string;
+  }[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
   const [sysHealth, setSysHealth] = useState<{
     status: string;
     database: string;
@@ -64,7 +84,12 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
   const exportCsv = async () => {
     setExporting(true);
     try {
-      const res = await fetch(apiUrl('/requests/export'), {
+      const params = new URLSearchParams();
+      if (exportStatus) params.set('status', exportStatus);
+      if (exportDept) params.set('departmentId', exportDept);
+      if (exportPriority) params.set('priority', exportPriority);
+      const qs = params.toString() ? `?${params.toString()}` : '';
+      const res = await fetch(apiUrl(`/requests/export${qs}`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
@@ -82,6 +107,35 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
       setMessage('Export failed.');
     } finally {
       setExporting(false);
+    }
+  };
+
+  const loadAnalytics = async () => {
+    try {
+      const res = await fetch(apiUrl('/requests/analytics'), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setAnalytics(await res.json());
+    } catch {
+      // Overview still renders from /requests/report.
+    }
+  };
+
+  const searchAudit = async () => {
+    setAuditLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (auditActor.trim()) params.set('actor', auditActor.trim());
+      if (auditAction) params.set('action', auditAction);
+      params.set('limit', '100');
+      const res = await fetch(apiUrl(`/audit?${params.toString()}`), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setAuditRows(await res.json());
+    } catch {
+      // Keep previous rows.
+    } finally {
+      setAuditLoading(false);
     }
   };
   const [newDeptCode, setNewDeptCode] = useState('');
@@ -117,6 +171,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
         if (h && typeof h.status === 'string') setSysHealth(h);
       })
       .catch(() => {});
+    void loadAnalytics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -355,6 +410,41 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
             <span className="badge" style={{ background: '#fef3c7', color: '#92400e' }}>
               ★ CSAT {report.csatAverage != null ? report.csatAverage.toFixed(2) : '—'} ({report.csatCount} ratings)
             </span>
+            <select
+              className="select admin-mini-select"
+              aria-label="Export filter: status"
+              value={exportStatus}
+              onChange={(e) => setExportStatus(e.target.value)}
+            >
+              <option value="">All statuses</option>
+              <option value="PENDING">Pending</option>
+              <option value="IN_PROGRESS">In progress</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="REJECTED">Rejected</option>
+              <option value="CANCELLED">Cancelled</option>
+            </select>
+            <select
+              className="select admin-mini-select"
+              aria-label="Export filter: department"
+              value={exportDept}
+              onChange={(e) => setExportDept(e.target.value)}
+            >
+              <option value="">All departments</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>{d.code}</option>
+              ))}
+            </select>
+            <select
+              className="select admin-mini-select"
+              aria-label="Export filter: priority"
+              value={exportPriority}
+              onChange={(e) => setExportPriority(e.target.value)}
+            >
+              <option value="">All priorities</option>
+              <option value="URGENT">Urgent</option>
+              <option value="STANDARD">Standard</option>
+              <option value="LOW">Low</option>
+            </select>
             <Button variant="ghost" small onClick={exportCsv} disabled={exporting}>
               {exporting ? 'Exporting…' : 'Export to CSV'}
             </Button>
@@ -438,6 +528,84 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
             })}
           </div>
           </div>
+        </Section>
+      )}
+
+      {adminTab === 'overview' && analytics && (
+        <Section
+          title="Performance analytics"
+          sub="Computed from audit timestamps — no extra data entry. Averages in hours."
+        >
+          <div className="row mb-md" style={{ gap: '0.5rem', flexWrap: 'wrap' }}>
+            <span className="badge" style={{ background: 'var(--blue-pale)', color: 'var(--blue-dark)' }}>
+              Avg claim {analytics.timeToClaimAvgHours != null ? `${analytics.timeToClaimAvgHours}h` : '—'}
+            </span>
+            <span className="badge" style={{ background: 'var(--blue-pale)', color: 'var(--blue-dark)' }}>
+              Avg resolve {analytics.timeToCompleteAvgHours != null ? `${analytics.timeToCompleteAvgHours}h` : '—'}
+            </span>
+            <span className="badge" style={{ background: '#f1f5f9', color: 'var(--muted)' }}>
+              Rejected {analytics.rejectionRate}% · Rerouted {analytics.rerouteRate}% ({analytics.rerouteCount})
+            </span>
+            <span className="badge" style={{ background: '#f1f5f9', color: 'var(--muted)' }}>
+              Aging &lt;1d {analytics.aging.under1d} · 1–3d {analytics.aging.d1to3} · 3–7d {analytics.aging.d3to7} · &gt;7d {analytics.aging.over7d}
+            </span>
+          </div>
+          {analytics.workloadByAgent.length > 0 && (
+            <div className="admin-overview-list">
+              {analytics.workloadByAgent.map((w) => (
+                <div key={w.userId} className="row" style={{ justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                  <strong>{w.name}</strong>
+                  <span className="muted">{w.count} ticket{w.count === 1 ? '' : 's'} handled</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+      )}
+
+      {adminTab === 'overview' && (
+        <Section
+          title="Audit search"
+          sub="Cross-ticket compliance view. Per-ticket history stays on each ticket's Activity Timeline."
+        >
+          <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap' }}>
+            <input
+              className="input"
+              style={{ flex: '2 1 180px' }}
+              aria-label="Search audit by actor name or email"
+              placeholder="Actor name or email"
+              value={auditActor}
+              onChange={(e) => setAuditActor(e.target.value)}
+            />
+            <select
+              className="select"
+              style={{ flex: '1 1 160px' }}
+              aria-label="Filter audit by action"
+              value={auditAction}
+              onChange={(e) => setAuditAction(e.target.value)}
+            >
+              <option value="">All actions</option>
+              <option value="REQUEST_CREATED">Created</option>
+              <option value="REQUEST_CLAIMED">Claimed</option>
+              <option value="STATUS_CHANGED">Status changed</option>
+              <option value="REQUEST_REROUTED">Rerouted</option>
+              <option value="AI_CORRECTION">AI correction</option>
+              <option value="FEEDBACK_SUBMITTED">Rated</option>
+            </select>
+            <Button variant="ghost" small onClick={searchAudit} disabled={auditLoading}>
+              {auditLoading ? 'Searching…' : 'Search audit'}
+            </Button>
+          </div>
+          {auditRows.length > 0 && (
+            <div className="admin-overview-list" style={{ marginTop: '0.6rem' }}>
+              {auditRows.slice(0, 20).map((r) => (
+                <div key={r.id} className="row" style={{ justifyContent: 'space-between', fontSize: '0.82rem' }}>
+                  <span><strong>{r.action}</strong> by {r.actorName}</span>
+                  <span className="muted">{new Date(r.createdAt).toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </Section>
       )}
 
@@ -551,7 +719,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
           </select>
         </Field>
         <Field label="Initial password *">
-          <input className="input" type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min 8 characters" required minLength={8} />
+          <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min 8 characters" required minLength={8} autoComplete="new-password" />
         </Field>
         <Button type="submit" disabled={busy} block>
           {busy ? 'Creating...' : 'Create User'}
@@ -564,8 +732,24 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
           title={`Manage users & memberships (${users.length})`}
           sub="Change platform roles, add or remove department memberships, deactivate accounts."
         >
+      <div className="row mb-md">
+        <input
+          className="input"
+          style={{ flex: '1 1 220px' }}
+          aria-label="Search users by name or email"
+          placeholder="Search users by name or email…"
+          value={userQuery}
+          onChange={(e) => setUserQuery(e.target.value)}
+        />
+      </div>
       <div className="admin-grid">
-        {users.map((u) => {
+        {users
+          .filter((u) => {
+            const q = userQuery.trim().toLowerCase();
+            if (!q) return true;
+            return u.displayName.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+          })
+          .map((u) => {
           const draft = memberDrafts[u.id] || { deptId: '', role: 'AGENT' };
           return (
             <div className="admin-row" key={u.id} style={{ opacity: u.active ? 1 : 0.6 }}>

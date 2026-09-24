@@ -33,8 +33,20 @@ jobs:
       - name: Typecheck backend
         run: npx tsc --noEmit
 
-      - name: Run tests (74, SQLite)
+      - name: Validate Prisma schema
+        run: npx prisma validate
+
+      - name: Audit dependencies (high+)
+        run: npm audit --audit-level=high
+
+      - name: Run tests (90, SQLite)
         run: npm test
+
+      - name: AI evals (9, offline)
+        run: npm run eval:ai
+
+      - name: Build backend
+        run: npm run build
 
       - name: Build frontend
         run: npm run build

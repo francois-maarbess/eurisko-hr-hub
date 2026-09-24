@@ -56,10 +56,12 @@ export function Tabs<T extends string>({
   onChange: (v: T) => void;
 }) {
   return (
-    <div className="tabs">
+    <div className="tabs" role="tablist" aria-label="Views">
       {options.map((o) => (
         <button
           key={o.value}
+          role="tab"
+          aria-selected={o.value === value}
           className={o.value === value ? 'tab tab-active' : 'tab'}
           onClick={() => onChange(o.value)}
         >
@@ -140,17 +142,56 @@ export function Alert({ tone, children }: { tone: 'info' | 'warn' | 'danger' | '
 }
 
 export function Modal({ title, sub, onClose, children }: { title: string; sub?: string; onClose: () => void; children: React.ReactNode }) {
+  const panelRef = React.useRef<HTMLDivElement>(null);
+  const prevFocus = React.useRef<Element | null>(null);
   React.useEffect(() => {
+    prevFocus.current = document.activeElement;
+    // Focus the panel on open so screen readers land inside the dialog.
+    panelRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      // Focus trap: keep Tab cycling inside the dialog.
+      if (e.key === 'Tab' && panelRef.current) {
+        const focusables = panelRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        );
+        const items = [...focusables].filter((el) => !el.hasAttribute('disabled'));
+        if (items.length === 0) {
+          e.preventDefault();
+          return;
+        }
+        const first = items[0];
+        const last = items[items.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      // Restore focus to whatever opened the dialog.
+      (prevFocus.current as HTMLElement | null)?.focus?.();
+    };
   }, [onClose]);
   return (
     <>
       <div className="modal-backdrop" onClick={onClose} />
-      <div className="card glass-panel modal-panel" role="dialog" aria-modal="true" aria-label={title}>
+      <div
+        ref={panelRef}
+        tabIndex={-1}
+        className="card glass-panel modal-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
         <h3 className="card-title">{title}</h3>
         {sub && <p className="card-sub">{sub}</p>}
         {children}

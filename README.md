@@ -6,13 +6,13 @@
 
 An internal service hub for submitting, routing, tracking, and resolving employee requests.
 
-**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 80 automated tests.
+**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 90 automated tests.
 
 ## Demo (2 minutes)
 
 Full click-by-click script: [`DEMO.md`](./DEMO.md) — reset, seed the storyline, and tour employee → agent → admin.
 
-> Visual assets (`docs/demo.gif`, `docs/screenshot-queue.png`, `docs/screenshot-admin.png`) are recorded separately and dropped into `docs/` — the demo script needs nothing but the repo itself.
+> Visual assets (`docs/demo.gif`, `docs/screenshot-queue.png`, `docs/screenshot-admin.png`) are optional — record them separately and drop them into `docs/`. The demo script needs nothing but the repo itself; missing assets never break the app.
 
 ## Quick Start
 
@@ -75,14 +75,14 @@ cd frontend && npm run dev
 ## Running Tests
 
 ```bash
-npm test      # 80 tests (all deterministic, SQLite)
-npm run eval:ai  # 8 AI eval cases (offline, no key, no DB)
+npm test      # 90 tests (all deterministic, SQLite)
+npm run eval:ai  # 9 AI eval cases (offline, no key, no DB)
 ```
 
-80 tests covering:
+90 tests covering:
 - **Unit**: Status transitions (10) + AI extractor/validation/fallback/sensitive/off-topic (10) + SLA fallback (1) + password accounts (6) + purge & duplicate scoring (3)
 - **Integration**: Prisma ↔ SQLite database lifecycle (3)
-- **E2E (47)**: Full HTTP flow with auth, scoped views, create, claim, complete, documents lifecycle, notifications, duplicates, report, manager memberships, owner-cancel/admin-claim rules, validation, regression + AI draft endpoint + catalog + admin user lifecycle + SLA deadlines + breach center + rate limiting + TOTP two-factor
+- **E2E (57)**: Full HTTP flow with auth, scoped views, create, claim, takeover, complete, documents lifecycle, notifications, duplicates, report + analytics, manager memberships, owner-cancel/admin-claim rules, validation, regression + AI draft/correction/health endpoints + catalog + admin user lifecycle + audit search + filtered export + SLA deadlines + breach center + rate limiting + TOTP two-factor + logout revocation + deactivation + correlation IDs + queue pagination/claimedBy filters
 
 ## AI-Assisted Intake (Week 4)
 
