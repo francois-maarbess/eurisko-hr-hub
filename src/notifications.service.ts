@@ -63,7 +63,7 @@ export class NotificationsService implements OnModuleInit {
    * requests (unless they did it themselves); department staff hear about
    * new and cancelled requests in their departments.
    */
-  async fanout(input: { requestId: string; eventType: string; actorId: string }): Promise<void> {
+  async fanout(input: { requestId: string; eventType: string; actorId: string; newClaimantId?: string }): Promise<void> {
     try {
       const req = await this.prisma.request.findUnique({
         where: { id: input.requestId },
@@ -114,6 +114,13 @@ export class NotificationsService implements OnModuleInit {
             rows.push({ userId: id, type: input.eventType, title: `Request moved into ${req.department.name}`, body: short });
           }
           break;
+        case 'request.reassigned': {
+          if (input.newClaimantId && input.newClaimantId !== input.actorId) {
+            rows.push({ userId: input.newClaimantId, type: input.eventType, title: 'Assigned to you', body: `“${short}” is now yours to work.` });
+          }
+          toEmployee('Your request changed hands', `“${short}” is being handled by someone new.`);
+          break;
+        }
         default:
           return;
       }

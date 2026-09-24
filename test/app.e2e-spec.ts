@@ -134,6 +134,73 @@ describe('Service Request Flow (E2E)', () => {
     expect(res.body.status).toBe('IN_PROGRESS');
   });
 
+  it('takeover and reassign move ownership explicitly with audit', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+    const created = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        departmentId: dept!.id,
+        requestTypeId: rt!.id,
+        title: `Takeover Probe ${Date.now()}`,
+        description: 'Ownership must move only through explicit actions',
+        priority: 'STANDARD',
+      });
+    const id = created.body.id;
+
+    // Bob (agent, not manager) claims first.
+    const claimed = await request(app.getHttpServer())
+      .patch(`/requests/${id}/claim`)
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(claimed.status).toBe(200);
+
+    // Owner cannot take over.
+    const ownerTry = await request(app.getHttpServer())
+      .patch(`/requests/${id}/takeover`)
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({});
+    expect([403, 409]).toContain(ownerTry.status);
+
+    // Unclaimed-ticket takeover is rejected; PENDING has its own claim flow.
+    // (Covered implicitly: this ticket is claimed, so we test the manager path.)
+
+    // Admin (IT manager in seed) takes over from Bob.
+    const taken = await request(app.getHttpServer())
+      .patch(`/requests/${id}/takeover`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ reason: 'Bob is out today' });
+    expect(taken.status).toBe(200);
+    expect(taken.body.claimedById).toBeTruthy();
+    const adminId = (await prisma.user.findFirst({ where: { email: 'admin@acme.com' } }))!.id;
+    expect(taken.body.claimedById).toBe(adminId);
+
+    // Non-manager agent cannot take over from admin.
+    const agentTry = await request(app.getHttpServer())
+      .patch(`/requests/${id}/takeover`)
+      .set('Authorization', `Bearer ${agentToken}`)
+      .send({});
+    expect(agentTry.status).toBe(403);
+
+    // Admin reassigns back to Bob with an audit trail.
+    const agent = await prisma.user.findFirst({ where: { email: 'bob@acme.com' } });
+    const reassigned = await request(app.getHttpServer())
+      .patch(`/requests/${id}/reassign`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ userId: agent!.id, reason: 'Bob is back' });
+    expect(reassigned.status).toBe(200);
+    expect(reassigned.body.claimedById).toBe(agent!.id);
+
+    const audits = await prisma.auditLog.findMany({
+      where: { requestId: id, action: { in: ['REQUEST_TAKEOVER', 'REQUEST_REASSIGNED'] } },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(audits.length).toBe(2);
+    expect(audits[0].action).toBe('REQUEST_TAKEOVER');
+    expect(audits[0].metadata).toContain('Bob is out today');
+    expect(audits[1].action).toBe('REQUEST_REASSIGNED');
+  });
+
   it('employee (non-member) cannot claim a request — authorization denied', async () => {
     const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
     const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });

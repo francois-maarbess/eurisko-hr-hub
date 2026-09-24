@@ -15,6 +15,7 @@ import { RequestsService } from './requests.service';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { RerouteDto } from './dto/reroute.dto';
+import { ReassignDto, TakeoverDto } from './dto/assignment.dto';
 import { FeedbackDto } from './dto/feedback.dto';
 import { StaffNoteDto } from './dto/staff-note.dto';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
@@ -187,5 +188,17 @@ export class RequestsController {
   @HttpCode(HttpStatus.OK)
   reroute(@Param('id') id: string, @Body() dto: RerouteDto, @CurrentUser() user: any) {
     return this.requestsService.reroute(id, dto, user.id);
+  }
+
+  @Patch(':id/takeover')
+  @HttpCode(HttpStatus.OK)
+  takeover(@Param('id') id: string, @Body() dto: TakeoverDto, @CurrentUser() user: any) {
+    return this.requestsService.takeover(id, user.id, dto.reason);
+  }
+
+  @Patch(':id/reassign')
+  @HttpCode(HttpStatus.OK)
+  reassign(@Param('id') id: string, @Body() dto: ReassignDto, @CurrentUser() user: any) {
+    return this.requestsService.reassign(id, dto.userId, user.id, dto.reason);
   }
 }

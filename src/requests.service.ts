@@ -274,6 +274,107 @@ export class RequestsService {
     return claimed;
   }
 
+  /**
+   * Explicit ownership changes — nothing silent. Takeover moves a claimed
+   * ticket to yourself; reassign moves it to a chosen agent. Both require
+   * manager-or-admin authority and write prev/new owner audit events.
+   */
+  private async requireManager(userId: string, platformRole: string, departmentId: string) {
+    if (platformRole === 'SYSTEM_ADMIN') return;
+    if (!(await this.isManagerOf(userId, departmentId))) {
+      throw new ForbiddenException('Only department managers can change ownership.');
+    }
+  }
+
+  async takeover(id: string, userId: string, reason?: string) {
+    const viewer = await this.viewerOf(userId);
+    const request = await this.findOne(id, viewer);
+    if (request.status !== 'IN_PROGRESS') {
+      throw new BadRequestException('Only in-progress tickets can be taken over.');
+    }
+    if (request.employeeId === userId) {
+      throw new ConflictException('You cannot take over your own request.');
+    }
+    if (!request.claimedById) {
+      throw new BadRequestException('This ticket is unclaimed — claim it normally.');
+    }
+    if (request.claimedById === userId) {
+      throw new ConflictException('This ticket is already yours.');
+    }
+    await this.requireManager(userId, viewer.platformRole, request.departmentId);
+    const prev = await this.prisma.user.findUnique({ where: { id: request.claimedById } });
+    const me = await this.prisma.user.findUnique({ where: { id: userId } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.request.update({ where: { id }, data: { claimedById: userId } });
+      await tx.auditLog.create({
+        data: {
+          requestId: id,
+          actorId: userId,
+          action: 'REQUEST_TAKEOVER',
+          oldValue: prev?.displayName || prev?.email || 'previous agent',
+          newValue: me?.displayName || me?.email || 'new agent',
+          metadata: reason?.trim() ? JSON.stringify({ reason: reason.trim() }) : null,
+        },
+      });
+    });
+    await this.notifications.emit({
+      requestId: id,
+      eventType: 'request.reassigned',
+      payload: { claimedById: userId, prevClaimedById: request.claimedById },
+      idempotencyKey: `req-${id}-takeover-${userId}`,
+    });
+    await this.notifications.fanout({ requestId: id, eventType: 'request.reassigned', actorId: userId, newClaimantId: userId });
+    return this.findOne(id, viewer);
+  }
+
+  async reassign(id: string, targetUserId: string, userId: string, reason?: string) {
+    const viewer = await this.viewerOf(userId);
+    const request = await this.findOne(id, viewer);
+    if (request.status !== 'IN_PROGRESS') {
+      throw new BadRequestException('Only in-progress tickets can be reassigned.');
+    }
+    if (targetUserId === request.employeeId) {
+      throw new BadRequestException('A ticket cannot be assigned to its requester.');
+    }
+    await this.requireManager(userId, viewer.platformRole, request.departmentId);
+    const target = await this.prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!target || !target.active) {
+      throw new BadRequestException('Target user not found or deactivated.');
+    }
+    if (viewer.platformRole !== 'SYSTEM_ADMIN') {
+      const tm = await this.prisma.departmentMember.findUnique({
+        where: { userId_departmentId: { userId: targetUserId, departmentId: request.departmentId } },
+      });
+      if (!tm?.active) {
+        throw new BadRequestException('Target user is not an active member of this department.');
+      }
+    }
+    const prev = request.claimedById
+      ? await this.prisma.user.findUnique({ where: { id: request.claimedById } })
+      : null;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.request.update({ where: { id }, data: { claimedById: targetUserId } });
+      await tx.auditLog.create({
+        data: {
+          requestId: id,
+          actorId: userId,
+          action: 'REQUEST_REASSIGNED',
+          oldValue: prev?.displayName || prev?.email || 'unassigned',
+          newValue: target.displayName || target.email,
+          metadata: reason?.trim() ? JSON.stringify({ reason: reason.trim() }) : null,
+        },
+      });
+    });
+    await this.notifications.emit({
+      requestId: id,
+      eventType: 'request.reassigned',
+      payload: { claimedById: targetUserId, prevClaimedById: request.claimedById },
+      idempotencyKey: `req-${id}-reassign-${targetUserId}`,
+    });
+    await this.notifications.fanout({ requestId: id, eventType: 'request.reassigned', actorId: userId, newClaimantId: targetUserId });
+    return this.findOne(id, viewer);
+  }
+
   async updateStatus(id: string, dto: UpdateStatusDto, userId: string) {
     const viewer = await this.viewerOf(userId);
     const request = await this.findOne(id, viewer);

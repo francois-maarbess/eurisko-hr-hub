@@ -203,6 +203,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
   const [resolutionInputs, setResolutionInputs] = useState<Record<string, string>>({});
   const [rejectionInputs, setRejectionInputs] = useState<Record<string, string>>({});
   const [showReject, setShowReject] = useState<Record<string, boolean>>({});
+  const [showTakeover, setShowTakeover] = useState<Record<string, boolean>>({});
 
   // Attachments state
   const [docsOpen, setDocsOpen] = useState<Record<string, boolean>>({});
@@ -394,6 +395,19 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
       { status: 'COMPLETED', resolutionNote: typedNote || ticket.resolutionNote },
     );
   };
+
+  const handleTakeover = (ticket: TicketState) =>
+    mutate(
+      ticket,
+      () =>
+        fetch(apiUrl(`/requests/${ticket.id}/takeover`), {
+          method: 'PATCH',
+          headers: authHeaders,
+          body: JSON.stringify({}),
+        }),
+      'Taken over — the ticket is now yours.',
+      { claimedById: userId },
+    );
 
   const handleReject = async (ticket: TicketState) => {    const reason = (rejectionInputs[ticket.id] ?? '').trim();
     if (!reason) {
@@ -885,6 +899,12 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
         const canReroute = (isManager || isAdmin) && !isTerminalCard;
         const canRate = isOwner && ticket.status === 'COMPLETED' && ticket.rating == null;
         const canRejectPending = (inMyDept || isAdmin) && !isOwner && ticket.status === 'PENDING';
+        const canTakeover =
+          (isManager || isAdmin) &&
+          !isOwner &&
+          ticket.status === 'IN_PROGRESS' &&
+          !!ticket.claimedById &&
+          ticket.claimedById !== userId;
         const canManageDocs = inMyDept || isAdmin;
         const canDownloadDocs = canManageDocs || (isOwner && isTerminalCard);
         const canReadNotes = (inMyDept || isAdmin) && (!isOwner || isAdmin);
@@ -1311,6 +1331,24 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
               {canClaim && (
                 <Button variant="primary" small onClick={() => handleClaim(ticket)} disabled={loading}>
                   {loading ? '...' : 'Claim'}
+                </Button>
+              )}
+              {canTakeover && !showTakeover[ticket.id] && (
+                <Button variant="ghost" small onClick={() => setShowTakeover((c) => ({ ...c, [ticket.id]: true }))} disabled={loading}>
+                  Take over
+                </Button>
+              )}
+              {canTakeover && showTakeover[ticket.id] && (
+                <Button
+                  variant="primary"
+                  small
+                  onClick={() => {
+                    handleTakeover(ticket);
+                    setShowTakeover((c) => ({ ...c, [ticket.id]: false }));
+                  }}
+                  disabled={loading}
+                >
+                  {loading ? '...' : 'Confirm takeover'}
                 </Button>
               )}
               {canCancel && (

@@ -12,11 +12,7 @@ An internal service hub for submitting, routing, tracking, and resolving employe
 
 Full click-by-click script: [`DEMO.md`](./DEMO.md) — reset, seed the storyline, and tour employee → agent → admin.
 
-![Demo walkthrough](./docs/demo.gif)
-
-| Employee view | Admin overview |
-|---|---|
-| ![Employee queue](./docs/screenshot-queue.png) | ![Admin dashboard](./docs/screenshot-admin.png) |
+> Visual assets (`docs/demo.gif`, `docs/screenshot-queue.png`, `docs/screenshot-admin.png`) are recorded separately and dropped into `docs/` — the demo script needs nothing but the repo itself.
 
 ## Quick Start
 
