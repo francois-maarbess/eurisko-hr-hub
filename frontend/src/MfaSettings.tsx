@@ -18,18 +18,21 @@ export default function MfaSettings({ token }: { token: string }) {
 
   const headers = { Authorization: `Bearer ${token}` };
 
-  const refresh = async () => {
+  const refresh = React.useCallback(async () => {
     try {
-      const res = await fetch(apiUrl('/auth/mfa/status'), { headers });
+      const res = await fetch(apiUrl('/auth/mfa/status'), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (res.ok) setEnabled((await res.json()).enabled);
     } catch {
       // Settings card is best-effort; the queue below is unaffected.
     }
-  };
+  }, [token]);
 
   useEffect(() => {
-    refresh();
-  }, [token]);
+    // Status fetch runs in a promise callback, never the effect body.
+    void Promise.resolve().then(() => refresh());
+  }, [refresh]);
 
   const startSetup = async () => {
     setBusy(true);

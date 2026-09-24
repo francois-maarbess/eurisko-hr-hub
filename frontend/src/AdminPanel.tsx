@@ -176,14 +176,18 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
   };
 
   useEffect(() => {
-    load();
+    // Data loads run in a promise callback (external-system sync), never
+    // directly in the effect body.
+    void Promise.resolve().then(() => {
+      load();
+      void loadAnalytics();
+    });
     fetch(apiUrl('/health'))
       .then((r) => r.json())
       .then((h) => {
         if (h && typeof h.status === 'string') setSysHealth(h);
       })
       .catch(() => {});
-    void loadAnalytics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 

@@ -22,23 +22,23 @@ Open `http://localhost:5173`.
 ## The tour
 
 **Act 1 — The employee (30s).** Log in as `alice@acme.com` / `Password123!`.
-You see "Laptop smoking on my desk" with a live ⏱ SLA countdown (~50 min)
-and an "Open …m" age badge. Click **✨ Draft with AI**, type
+You see "Laptop smoking on my desk" with a live SLA countdown (~50 min)
+and an "Open …m" age badge. Click **Draft with AI**, type
 `my screen is cracked need it asap`, draft, submit — no API key needed.
 
 **Act 2 — The agent (45s).** Sign out, log in as `bob@acme.com` / `Password123!`.
-Open the **Queue** tab, claim the smoking laptop. Open **▸ Internal Staff
+Open the **Queue** tab, claim the smoking laptop. Open **Internal Staff
 Notes** on "VPN drops every hour" — private agent note invisible to Alice.
 Add one yourself with Ctrl+Enter.
 
 **Act 3 — The admin (45s).** Sign out, log in as `admin@acme.com` / `Password123!`.
 Open the **Administration** panel: live per-department active/total bars,
-CSAT ★ 5.00 (1 rating), status breakdown. Click the ⓘ button for what
-active/total mean. Hit **📥 Export to CSV**. Open **▸ Activity Timeline**
+CSAT 5.00 (1 rating), status breakdown. Click the info (i) button for what
+active/total mean. Hit **Export to CSV**. Open **Activity Timeline**
 on any ticket — every claim, note, and status change is audit-logged.
 
 **Finale — close the loop.** As Bob, complete the smoking laptop with a
-resolution note. As Alice, give it ★★★★★. Watch the CSAT average move.
+resolution note. As Alice, give it 5 stars. Watch the CSAT average move.
 
 ## Reset
 

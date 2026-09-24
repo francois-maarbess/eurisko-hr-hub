@@ -69,7 +69,7 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
     }
   };
 
-  const loadCatalog = () => {
+  const loadCatalog = React.useCallback(() => {
     const headers = { Authorization: `Bearer ${token}` };
     Promise.all([
       fetch(apiUrl('/catalog/departments'), { headers }).then((r) => r.json()),
@@ -80,11 +80,11 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
         if (Array.isArray(types)) setRequestTypes(types);
       })
       .catch(() => {});
-  };
+  }, [token]);
 
   useEffect(() => {
     loadCatalog();
-  }, [token, catalogVersion]);
+  }, [loadCatalog, catalogVersion]);
 
   const filteredTypes = requestTypes.filter((t) => t.departmentId === selectedDept);
 

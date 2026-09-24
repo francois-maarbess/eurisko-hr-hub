@@ -50,7 +50,7 @@ jobs:
       - name: Audit gate (critical only)
         run: npm audit --audit-level=critical
 
-      - name: Run tests (90, SQLite)
+      - name: Run tests (96, SQLite)
         run: npm test
 
       - name: Run frontend tests (vitest)

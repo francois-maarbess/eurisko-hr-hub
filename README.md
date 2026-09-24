@@ -6,7 +6,7 @@
 
 An internal service hub for submitting, routing, tracking, and resolving employee requests.
 
-**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 90 backend tests + 10 frontend tests, 9 AI evals (`npm run test:count`).
+**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 96 backend tests + 10 frontend tests, 9 AI evals (`npm run test:count`).
 
 ## Demo (2 minutes)
 
@@ -79,26 +79,26 @@ cd frontend && npm run dev
    - `alice@acme.com` — Employee (submits requests, rates completed requests, cancels pending requests)
    - `bob@acme.com` — IT Agent (claims and resolves tickets in the IT queue)
    *(Admins can create additional agents and employees anytime directly in the UI via the Administration Panel)*
-3. Create a request (or draft one with ✨ AI — **no API key needed**), manage it as admin/agent, resolve it
-4. Optional: enable **two-factor authentication** — scroll to the 🔐 card, scan the QR with any authenticator app, verify the code. Next sign-in asks for password + code (backup codes cover a lost phone).
+3. Create a request (or draft one with AI — **no API key needed**), manage it as admin/agent, resolve it
+4. Optional: enable **two-factor authentication** — open Security settings, scan the QR with any authenticator app, verify the code. Next sign-in asks for password + code (backup codes cover a lost phone).
 
 ## Running Tests
 
 ```bash
-npm test      # 90 backend tests (all deterministic, SQLite)
+npm test      # 96 backend tests (all deterministic, SQLite)
 npm run eval:ai  # 9 AI eval cases (offline, no key, no DB)
 cd frontend && npm test  # 10 frontend unit tests (vitest)
 npm run test:count      # verify README counts match reality
 ```
 
-90 tests covering:
-- **Unit**: Status transitions (10) + AI extractor/validation/fallback/sensitive/off-topic (10) + SLA fallback (1) + password accounts (6) + purge & duplicate scoring (3)
+96 tests covering:
+- **Unit**: Status transitions (10) + AI extractor/validation/fallback/sensitive/off-topic (10) + SLA fallback (1) + password accounts (6) + purge & duplicate scoring (3) + production secret guard (4)
 - **Integration**: Prisma ↔ SQLite database lifecycle (3)
-- **E2E (57)**: Full HTTP flow with auth, scoped views, create, claim, takeover, complete, documents lifecycle, notifications, duplicates, report + analytics, manager memberships, owner-cancel/admin-claim rules, validation, regression + AI draft/correction/health endpoints + catalog + admin user lifecycle + audit search + filtered export + SLA deadlines + breach center + rate limiting + TOTP two-factor + logout revocation + deactivation + correlation IDs + queue pagination/claimedBy filters
+- **E2E (59)**: Full HTTP flow with auth, scoped views, create, claim, takeover, complete, concurrent-completion race, documents lifecycle, notifications, overdue inbox dedupe, duplicates (scoped), report + analytics, manager memberships, owner-cancel/admin-claim rules, validation, regression + AI draft/correction/health endpoints + catalog + admin user lifecycle + audit search + filtered export + SLA deadlines + breach center + rate limiting + TOTP two-factor + logout revocation + deactivation + correlation IDs + queue pagination/claimedBy filters + timeline privacy
 
 ## AI-Assisted Intake (Week 4)
 
-Type rough words in the **✨ Draft with AI** box and the backend returns a
+Type rough words in the **Draft with AI** box and the backend returns a
 structured draft candidate (department, type, title, description, priority,
 confidence). You review it, then Submit creates the request through the
 normal validated flow — the AI never creates anything.
@@ -167,8 +167,10 @@ normal validated flow — the AI never creates anything.
 - Only the owner can cancel, and only while `PENDING` (others get 403).
 - Reading a ticket requires ownership, department membership, or admin
   role (strangers get 403, existence never confirmed).
-- System admins operate every department (claim/resolve) without needing
-  membership; department managers run their own members and catalog.
+- System admins operate every department (claim, takeover, reassign) without
+  needing membership; department managers run their own members and catalog.
+  Completion still requires the claiming agent (or an admin via explicit
+  takeover) — no one resolves another agent's claimed work silently.
 
 ## Project Structure
 
@@ -196,7 +198,7 @@ normal validated flow — the AI never creates anything.
 │   └── src/
 │       ├── App.tsx
 │       ├── LoginPage.tsx          # Email + password login
-│       ├── CreateRequestForm.tsx  # Catalog pickers + ✨ AI draft box
+│       ├── CreateRequestForm.tsx  # Catalog pickers + AI draft box
 │       ├── TicketStatusManager.tsx
 │       └── AdminPanel.tsx         # Admin-only user management
 └── docs/

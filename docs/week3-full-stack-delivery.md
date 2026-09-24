@@ -10,12 +10,12 @@ A narrow, end-to-end **Service Request** flow: an employee creates an IT support
 |-------|-----------|
 | Frontend | React 19 + Vite (TypeScript) |
 | Backend | NestJS 11 (TypeScript) |
-| Database | Prisma 7 + SQLite |
-| Auth | JWT (passport-jwt) |
+| Database | Prisma 6 + SQLite |
+| Auth | Email + password (bcryptjs), JWT (passport-jwt), TOTP two-factor (see ADR-002) |
 
 ## The Flow
 
-1. **Login** — User enters email → receives JWT token
+1. **Login** — User enters email + password (TOTP code if enrolled) → receives JWT access + refresh tokens
 2. **Create Request** — Employee selects department + request type, fills title/description/priority → `POST /requests`
 3. **Claim** — IT agent claims the request → `PATCH /requests/:id/claim`
 4. **Resolve** — Agent adds resolution note → `PATCH /requests/:id/status` with `COMPLETED`
@@ -24,8 +24,8 @@ A narrow, end-to-end **Service Request** flow: an employee creates an IT support
 
 ### `POST /auth/login`
 ```json
-Request:  { "email": "alice@acme.com" }
-Response: { "accessToken": "eyJ..." }
+Request:  { "email": "alice@acme.com", "password": "Password123!" }
+Response: { "accessToken": "eyJ...", "refreshToken": "..." }
 ```
 
 ### `POST /requests` (requires JWT)

@@ -64,6 +64,16 @@ export default function App() {
     }
   });
   const [user, setUser] = useState<User | null>(null);
+  // True while we attempt a one-shot session restore on mount (there is a
+  // stored refresh token but no access token yet). Shows a splash instead
+  // of flashing the login form.
+  const [restoring, setRestoring] = useState<boolean>(() => {
+    try {
+      return !!sessionStorage.getItem('hub-refresh-token');
+    } catch {
+      return false;
+    }
+  });
   const [activeView, setActiveView] = useState<AppView>('overview');
   const [focusTicketId, setFocusTicketId] = useState<string | null>(null);
   const [returnView, setReturnView] = useState<AppView>('my');
@@ -80,6 +90,7 @@ export default function App() {
   const handleLogin = (accessToken: string, userData: User, refresh?: string) => {
     setToken(accessToken);
     setUser(userData);
+    setRestoring(false);
     if (refresh) {
       setRefreshToken(refresh);
       try {
@@ -118,10 +129,85 @@ export default function App() {
     setUnread(0);
     setInboxOpen(false);
     setQuickSwitcherOpen(false);
+    setQuickTickets([]);
     setFocusTicketId(null);
     setMemberships([]);
     setActiveView('overview');
   };
+
+  // One-shot session restore on mount: a stored refresh token means the
+  // user signed in before reloading. Exchange it once; any failure drops
+  // to the login form. Self-contained (setters + apiUrl only) on purpose.
+  useEffect(() => {
+    // No stored session and no token: nothing to restore.
+    if (token || !refreshToken) {
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl('/auth/refresh'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.accessToken) throw new Error('restore failed');
+        const meRes = await fetch(apiUrl('/auth/me'), {
+          headers: { Authorization: `Bearer ${data.accessToken}` },
+        });
+        if (!meRes.ok) throw new Error('restore failed');
+        const me = await meRes.json();
+        if (cancelled) return;
+        setToken(data.accessToken);
+        setUser({ id: me.id, email: me.email, name: me.name, platformRole: me.platformRole });
+        if (data.refreshToken) {
+          setRefreshToken(data.refreshToken);
+          try {
+            sessionStorage.setItem('hub-refresh-token', data.refreshToken);
+          } catch {
+            // Private mode: keep going with the in-memory token.
+          }
+        }
+        setActiveView('overview');
+        const [listRes, countRes] = await Promise.all([
+          fetch(apiUrl('/notifications'), { headers: { Authorization: `Bearer ${data.accessToken}` } }),
+          fetch(apiUrl('/notifications/unread-count'), { headers: { Authorization: `Bearer ${data.accessToken}` } }),
+        ]);
+        if (cancelled) return;
+        if (listRes.ok) setInbox(await listRes.json());
+        if (countRes.ok) setUnread((await countRes.json()).count || 0);
+        const memRes = await fetch(apiUrl('/auth/memberships'), {
+          headers: { Authorization: `Bearer ${data.accessToken}` },
+        });
+        if (cancelled) return;
+        const mem = await memRes.json().catch(() => []);
+        if (Array.isArray(mem)) setMemberships(mem);
+      } catch {
+        if (!cancelled) {
+          try {
+            sessionStorage.removeItem('hub-refresh-token');
+          } catch {
+            // Nothing stored — nothing to clear.
+          }
+          setRefreshToken(null);
+        }
+      } finally {
+        if (!cancelled) setRestoring(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, refreshToken]);
+
+  // Ref mirror so the renewal interval always calls the latest logout
+  // without re-creating the timer every render (exhaustive-deps clean).
+  // Assigned in an effect: ref writes don't belong in render.
+  const logoutRef = React.useRef(handleLogout);
+  useEffect(() => {
+    logoutRef.current = handleLogout;
+  });
 
   // Silent session renewal: access tokens live 15 minutes; rotate via
   // the stored refresh token every 10. Any failure signs the user out.
@@ -146,7 +232,7 @@ export default function App() {
           }
         }
       } catch {
-        handleLogout();
+        logoutRef.current();
       }
     }, 10 * 60_000);
     return () => window.clearInterval(timer);
@@ -214,7 +300,6 @@ export default function App() {
 
   useEffect(() => {
     if (!token) {
-      setQuickTickets([]);
       return;
     }
     const queueAvailable = user?.platformRole === 'SYSTEM_ADMIN' || memberships.length > 0;
@@ -225,7 +310,7 @@ export default function App() {
         const response = await fetch(apiUrl(source.url), { headers: { Authorization: `Bearer ${token}` } });
         if (!response.ok) return [] as QuickTicket[];
         const data = await response.json();
-        return Array.isArray(data) ? data.slice(0, 12).map((ticket) => ({ ...ticket, view: source.view })) : [];
+        return Array.isArray(data) ? data.slice(0, 30).map((ticket) => ({ ...ticket, view: source.view })) : [];
       }),
     )
       .then((groups) => {
@@ -251,6 +336,9 @@ export default function App() {
       if (e.key === '?') {
         e.preventDefault();
         setShortcutsOpen((o) => !o);
+      } else if (e.key === '/') {
+        e.preventDefault();
+        setQuickSwitcherOpen(true);
       } else if (e.key === 'c' && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         setFocusTicketId(null);
@@ -270,6 +358,20 @@ export default function App() {
   }, [token, focusTicketId, returnView]);
 
   if (!token || !user) {
+    if (restoring) {
+      return (
+        <div className="login-wrap">
+          <div className="card login-card" role="status" aria-label="Restoring session">
+            <div className="brand auth-brand">
+              <span className="brand-mark">H</span>
+              Internal Operations Hub
+            </div>
+            <p className="card-sub">Restoring your session…</p>
+            <div className="skeleton-line" style={{ width: '70%' }} />
+          </div>
+        </div>
+      );
+    }
     return <LoginPage onLogin={handleLogin} />;
   }
 
@@ -322,6 +424,8 @@ export default function App() {
             <h3 className="card-title">Keyboard shortcuts</h3>
             <div style={{ display: 'grid', gap: '0.45rem', fontSize: '0.88rem', marginTop: '0.5rem' }}>
               <div className="row" style={{ justifyContent: 'space-between' }}><span>Create a new request</span><kbd>C</kbd></div>
+              <div className="row" style={{ justifyContent: 'space-between' }}><span>Next / previous ticket</span><span><kbd>J</kbd> <kbd>K</kbd></span></div>
+              <div className="row" style={{ justifyContent: 'space-between' }}><span>Search pages and requests</span><kbd>/</kbd></div>
               <div className="row" style={{ justifyContent: 'space-between' }}><span>Draft with AI / submit form</span><kbd>Ctrl + Enter</kbd></div>
               <div className="row" style={{ justifyContent: 'space-between' }}><span>Back to list / close dialogs</span><kbd>Esc</kbd></div>
               <div className="row" style={{ justifyContent: 'space-between' }}><span>This help</span><kbd>?</kbd></div>

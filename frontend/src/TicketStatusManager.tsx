@@ -279,6 +279,14 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
   // Notifications & toast
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Keyboard selection (j/k + Enter) over the visible list. Latest list is
+  // mirrored into a ref so the single global listener never goes stale.
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const idxRef = React.useRef(0);
+  const listRef = React.useRef<{ ids: string[]; open?: (id: string) => void; detail: boolean }>({
+    ids: [],
+    detail: false,
+  });
   // Debounced search: input stays instant, heavy filter/highlight runs 300ms
   // after typing stops so large queues don't re-filter per keystroke.
   const [debouncedQuery, setDebouncedQuery] = useState(query);
@@ -306,27 +314,30 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
     return `${Math.floor(hours / 24)}d`;
   };
 
-  const fetchTickets = async (v: View) => {
-    setListLoading(true);
-    try {
-      // Focus mode shows one ticket (detail view); overdue mode pulls the
-      // server-side breach list; otherwise the current tab.
-      const url = focusTicketId
-        ? apiUrl(`/requests/${focusTicketId}`)
-        : overdueOnly
-          ? apiUrl('/requests/breach')
-          : apiUrl(`/requests?view=${v}`);
-      const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.message || 'Failed to load requests.');
-      setTickets(focusTicketId ? [data as TicketState] : (data as TicketState[]));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unable to load requests.';
-      setCardErrors((current) => ({ ...current, global: message }));
-    } finally {
-      setListLoading(false);
-    }
-  };
+  const fetchTickets = React.useCallback(
+    async (v: View) => {
+      setListLoading(true);
+      try {
+        // Focus mode shows one ticket (detail view); overdue mode pulls the
+        // server-side breach list; otherwise the current tab.
+        const url = focusTicketId
+          ? apiUrl(`/requests/${focusTicketId}`)
+          : overdueOnly
+            ? apiUrl('/requests/breach')
+            : apiUrl(`/requests?view=${v}`);
+        const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data?.message || 'Failed to load requests.');
+        setTickets(focusTicketId ? [data as TicketState] : (data as TicketState[]));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unable to load requests.';
+        setCardErrors((current) => ({ ...current, global: message }));
+      } finally {
+        setListLoading(false);
+      }
+    },
+    [token, focusTicketId, overdueOnly],
+  );
 
   const TicketSkeletons = () => (
     <div style={{ display: 'grid', gap: '1rem' }} aria-label="Loading requests">
@@ -351,7 +362,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
 
   useEffect(() => {
     fetchTickets(view);
-  }, [token, view, overdueOnly, focusTicketId]);
+  }, [fetchTickets, view]);
 
   useEffect(() => {
     try {
@@ -819,6 +830,48 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
   const cycleSort = () =>
     setSortMode((s) => (s === 'newest' ? 'oldest' : s === 'oldest' ? 'deadline' : 'newest'));
 
+  // Render-clamped selection (no effect needed — clamping is pure).
+  const sel = Math.min(selectedIdx, Math.max(visibleTickets.length - 1, 0));
+
+  // Mirror the latest list into the ref (plain assignment, no setState).
+  useEffect(() => {
+    listRef.current = { ids: visibleTickets.map((t) => t.id), open: onOpenTicket, detail: !!focusTicketId };
+  }, [visibleTickets, onOpenTicket, focusTicketId]);
+
+  // j/k moves selection, Enter opens. Typing and detail view are ignored.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const { ids, open, detail } = listRef.current;
+      if (detail || ids.length === 0 || !open) return;
+      if (e.key === 'j' || e.key === 'J') {
+        e.preventDefault();
+        setSelectedIdx((i) => {
+          const n = Math.min(i + 1, ids.length - 1);
+          idxRef.current = n;
+          return n;
+        });
+      } else if (e.key === 'k' || e.key === 'K') {
+        e.preventDefault();
+        setSelectedIdx((i) => {
+          const n = Math.max(i - 1, 0);
+          idxRef.current = n;
+          return n;
+        });
+      } else if (e.key === 'Enter') {
+        const id = ids[Math.min(idxRef.current, ids.length - 1)];
+        if (id) {
+          e.preventDefault();
+          open(id);
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const tabOptions = initialView === 'mine'
     ? [{ value: 'mine' as View, label: 'My Requests' }]
     : [
@@ -984,7 +1037,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
           onOpenTicket={(id) => onOpenTicket && onOpenTicket(id)}
         />
       ) : (
-      visibleTickets.map((ticket) => {
+      visibleTickets.map((ticket, i) => {
         const isOwner = ticket.employeeId === userId;
         const inMyDept = memberDeptIds.has(ticket.departmentId);
         const isTerminalCard = ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(ticket.status);
@@ -1015,6 +1068,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
             style={{
               ...(ticket.priority === 'URGENT' && !isTerminalCard ? { borderLeft: '4px solid var(--danger)' } : {}),
               ...(isTerminalCard ? { opacity: 0.85 } : {}),
+              ...(i === sel && !focusTicketId ? { outline: '2px solid var(--blue)', outlineOffset: '2px' } : {}),
             }}
           >
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>

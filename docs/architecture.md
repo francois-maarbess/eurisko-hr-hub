@@ -37,7 +37,7 @@ flowchart TD
     Scheduler --> DB
 ```
 
-1. API validates the SSO token and loads the user and active memberships.
+1. API validates the credential and loads the user and active memberships. (Academy implementation: email + password with TOTP per ADR-002; SSO token validation stays the production target.)
 2. For creation, API validates the request type and derives the owning department.
 3. API writes the request and audit entry transactionally.
 4. A durable event triggers notifications after commit.

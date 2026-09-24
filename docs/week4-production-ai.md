@@ -44,7 +44,7 @@ free text → POST /requests/ai-draft (JWT) → catalog load (DB-owned context)
 - **Sensitive flag:** distress/safety signals (harassment, crying, unsafe…)
   mark the draft `sensitive: true`, force URGENT, and show a discreet UI
   note. Advisory only — a human still reviews every word.
-- **Frontend:** "✨ Draft with AI" box above the existing form fills every
+- **Frontend:** "Draft with AI" box above the existing form fills every
   field from the candidate. Submit path unchanged.
 
 ## How to run

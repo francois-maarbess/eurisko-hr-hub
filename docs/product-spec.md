@@ -6,7 +6,9 @@ The Internal Operations Service Hub gives employees one reliable place to reques
 
 ### Known facts and constraints
 
-- The system is internal-only and uses company SSO.
+- The system is internal-only and uses company SSO. (Academy implementation
+  carve-out: password accounts + TOTP two-factor per ADR-002; SSO stays
+  deferred, not deleted.)
 - Employees should not need to know which department owns a request type; routing derives ownership from the catalog.
 - A request belongs to exactly one department and one request type at a time.
 - Department membership is independent from platform role.
