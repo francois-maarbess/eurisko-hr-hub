@@ -6,6 +6,7 @@ import { join } from 'path';
 import request from 'supertest';
 import * as OTPAuth from 'otpauth';
 import { AppModule } from '../src/app.module';
+import { NotificationsService } from '../src/notifications.service';
 
 const JWT_SECRET = 'e2e-test-secret';
 
@@ -149,6 +150,72 @@ describe('Service Request Flow (E2E)', () => {
       .set('Authorization', `Bearer ${agentToken}`);
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('IN_PROGRESS');
+  });
+
+  it('concurrent completions: exactly one wins, the other gets 409', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+    const created = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        departmentId: dept!.id,
+        requestTypeId: rt!.id,
+        title: `Race Probe ${Date.now()}`,
+        description: 'Two simultaneous completions must not both succeed',
+        priority: 'STANDARD',
+      });
+    const id = created.body.id;
+    const claimed = await request(app.getHttpServer())
+      .patch(`/requests/${id}/claim`)
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(claimed.status).toBe(200);
+
+    const attempt = () =>
+      request(app.getHttpServer())
+        .patch(`/requests/${id}/status`)
+        .set('Authorization', `Bearer ${agentToken}`)
+        .send({ status: 'COMPLETED', resolutionNote: 'Resolved in the race window.' });
+    const [a, b] = await Promise.all([attempt(), attempt()]);
+    const statuses = [a.status, b.status].sort();
+    expect(statuses).toEqual([200, 409]);
+  });
+
+  it('overdue sweeps fan out inbox rows only once per day', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
+    const created = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        departmentId: dept!.id,
+        requestTypeId: rt!.id,
+        title: `Overdue Spam Probe ${Date.now()}`,
+        description: 'Sweep must notify once, not every minute',
+        priority: 'STANDARD',
+      });
+    const id = created.body.id;
+    const claimed = await request(app.getHttpServer())
+      .patch(`/requests/${id}/claim`)
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(claimed.status).toBe(200);
+    // Force the breach without waiting out the real SLA.
+    await prisma.request.update({
+      where: { id },
+      data: { slaDueAt: new Date(Date.now() - 3600_000) },
+    });
+    const bob = (await prisma.user.findFirst({ where: { email: 'bob@acme.com' } }))!;
+    const svc = app.get(NotificationsService);
+    await svc.overdueScan();
+    const first = await prisma.notification.count({
+      where: { userId: bob.id, type: 'request.overdue', requestId: id },
+    });
+    expect(first).toBeGreaterThanOrEqual(1);
+    await svc.overdueScan();
+    const second = await prisma.notification.count({
+      where: { userId: bob.id, type: 'request.overdue', requestId: id },
+    });
+    expect(second).toBe(first);
   });
 
   it('takeover and reassign move ownership explicitly with audit', async () => {

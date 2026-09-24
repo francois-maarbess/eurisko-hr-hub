@@ -55,18 +55,23 @@ export class NotificationsService implements OnModuleInit {
         select: { id: true, claimedById: true },
       });
       for (const t of breached) {
-        await this.emit({
+        // New breach days create one event AND one inbox batch; every later
+        // minute finds the existing event and sends nothing. Without this
+        // gate each overdue ticket would spam inboxes 1,440 times a day.
+        const created = await this.emit({
           requestId: t.id,
           eventType: 'request.overdue',
           payload: { claimedById: t.claimedById, day },
           idempotencyKey: `req-${t.id}-overdue-${day}`,
         });
-        await this.fanout({
-          requestId: t.id,
-          eventType: 'request.overdue',
-          actorId: 'system',
-          newClaimantId: t.claimedById || undefined,
-        });
+        if (created) {
+          await this.fanout({
+            requestId: t.id,
+            eventType: 'request.overdue',
+            actorId: 'system',
+            newClaimantId: t.claimedById || undefined,
+          });
+        }
       }
     } catch (e) {
       this.logger.error(`Overdue scan failed: ${(e as Error).message}`);
@@ -78,12 +83,14 @@ export class NotificationsService implements OnModuleInit {
     eventType: string;
     payload?: Record<string, unknown>;
     idempotencyKey: string;
-  }): Promise<void> {
+  }): Promise<boolean> {
     try {
-      await this.prisma.notificationEvent.upsert({
+      const existing = await this.prisma.notificationEvent.findUnique({
         where: { idempotencyKey: input.idempotencyKey },
-        update: {},
-        create: {
+      });
+      if (existing) return false;
+      await this.prisma.notificationEvent.create({
+        data: {
           requestId: input.requestId,
           eventType: input.eventType,
           payload: JSON.stringify(input.payload || {}),
@@ -91,8 +98,12 @@ export class NotificationsService implements OnModuleInit {
           idempotencyKey: input.idempotencyKey,
         },
       });
+      return true;
     } catch (e) {
+      // Lost a concurrent race (unique key) or a real DB error. Either way
+      // the event exists or will be retried — the fanout must not double-send.
       this.logger.error(`Outbox emit failed (${input.eventType}): ${(e as Error).message}`);
+      return false;
     }
   }
 

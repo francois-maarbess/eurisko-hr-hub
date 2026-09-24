@@ -42,7 +42,7 @@ Store a storage key, not a public URL. A soft-deleted database row may remain fo
 * Only an active department member or system administrator can operate a department request.
 * A request can be completed only when a non-empty resolution note exists or at least one non-deleted document exists.
 * A rejection must include a reason.
-* A claimed request must have a claimant who is an active member of the owning department.
+* A claimed request must have a claimant who is an active member of the owning department. Exception: a system administrator may claim, take over, or reassign any request (cross-department operation is their documented role); the target of a reassignment must still be an existing active user.
 * Audit rows cannot be updated or deleted by the application role.
 * Document purge is idempotent and must not restore a deleted object.
 

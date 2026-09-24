@@ -56,27 +56,32 @@ export class TokenService {
   async refresh(refreshToken: string) {
     // Opportunistic janitor: expired rows can never be used again.
     await this.prisma.refreshToken.deleteMany({ where: { expiresAt: { lt: new Date() } } }).catch(() => {});
-    const row = await this.prisma.refreshToken.findUnique({
-      where: { tokenHash: this.hash(refreshToken || '') },
-      include: { user: true },
-    });
-    if (!row) throw new UnauthorizedException('Invalid credentials');
-    if (row.revokedAt && row.expiresAt.getTime() > Date.now()) {
-      // Rotated token reused: possible theft — kill every session.
-      await this.prisma.refreshToken.updateMany({
-        where: { userId: row.userId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
-      throw new UnauthorizedException('Invalid credentials');
-    }
-    if (row.revokedAt || row.expiresAt.getTime() <= Date.now() || !row.user.active) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-    // Rotate: revoke the presented token, issue a fresh pair atomically.
-    await this.prisma.refreshToken.update({
-      where: { id: row.id },
+    const hashed = this.hash(refreshToken || '');
+    // Atomic claim: exactly one concurrent refresh can win a live row.
+    // The loser falls through to the reuse/invalid path below.
+    const claimed = await this.prisma.refreshToken.updateMany({
+      where: { tokenHash: hashed, revokedAt: null, expiresAt: { gt: new Date() } },
       data: { revokedAt: new Date() },
     });
+    if (claimed.count === 0) {
+      const row = await this.prisma.refreshToken.findUnique({
+        where: { tokenHash: hashed },
+        include: { user: true },
+      });
+      if (row?.revokedAt && row.expiresAt.getTime() > Date.now()) {
+        // Rotated token reused: possible theft — kill every session.
+        await this.prisma.refreshToken.updateMany({
+          where: { userId: row.userId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      }
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    const row = await this.prisma.refreshToken.findUnique({
+      where: { tokenHash: hashed },
+      include: { user: true },
+    });
+    if (!row || !row.user.active) throw new UnauthorizedException('Invalid credentials');
     return this.issuePair(row.user as unknown as TokenUser);
   }
 

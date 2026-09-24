@@ -500,7 +500,16 @@ export class RequestsService {
     if (dto.status === 'COMPLETED') updateData.completedAt = new Date();
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.request.update({ where: { id }, data: updateData });
+      // Conditional write: the row must still be in the state we validated
+      // against. A concurrent transition wins the race; the loser gets 409
+      // instead of writing contradictory history.
+      const won = await tx.request.updateMany({
+        where: { id, status: request.status },
+        data: updateData,
+      });
+      if (won.count === 0) {
+        throw new ConflictException('This ticket changed while you were working on it — refresh and retry.');
+      }
       await tx.auditLog.create({
         data: {
           requestId: id,
