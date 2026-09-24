@@ -1,11 +1,8 @@
-import { Injectable, ExecutionContext } from '@nestjs/common';
+import { Injectable, ExecutionContext, SetMetadata } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
 export const ROLES_KEY = 'roles';
-export const Roles = (...roles: string[]) => {
-  const { SetMetadata } = require('@nestjs/common');
-  return SetMetadata(ROLES_KEY, roles);
-};
+export const Roles = (...roles: string[]) => SetMetadata(ROLES_KEY, roles);
 
 @Injectable()
 export class RolesGuard {

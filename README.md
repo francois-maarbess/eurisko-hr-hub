@@ -6,7 +6,7 @@
 
 An internal service hub for submitting, routing, tracking, and resolving employee requests.
 
-**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 90 automated tests.
+**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 90 backend tests + 10 frontend tests, 9 AI evals (`npm run test:count`).
 
 ## Demo (2 minutes)
 
@@ -37,6 +37,16 @@ Need a pristine demo database any time (tests and experiments pollute
 ```bash
 npm run db:reset
 ```
+
+> Something weird? Run the doctor, then reset:
+>
+> ```bash
+> npm run db:doctor   # read-only health check: file, users, catalog
+> npm run db:reset    # back to 3 users (alice, bob, admin), 0 requests
+> ```
+>
+> Port busy? Backend honors `PORT`, frontend auto-picks the next free port
+> and prints it — just open the URL Vite shows.
 
 > The real `.env` is gitignored and never committed — only `.env.example`
 > is in the repo. Optional: set `GROQ_API_KEY` in `.env` (free key from
@@ -75,8 +85,10 @@ cd frontend && npm run dev
 ## Running Tests
 
 ```bash
-npm test      # 90 tests (all deterministic, SQLite)
+npm test      # 90 backend tests (all deterministic, SQLite)
 npm run eval:ai  # 9 AI eval cases (offline, no key, no DB)
+cd frontend && npm test  # 10 frontend unit tests (vitest)
+npm run test:count      # verify README counts match reality
 ```
 
 90 tests covering:

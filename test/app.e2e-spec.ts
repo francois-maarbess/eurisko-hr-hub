@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
+import { join } from 'path';
 import request from 'supertest';
 import * as OTPAuth from 'otpauth';
 import { AppModule } from '../src/app.module';
@@ -17,7 +18,7 @@ describe('Service Request Flow (E2E)', () => {
   let financeToken: string;
 
   beforeAll(async () => {
-    const dbPath = require('path').resolve(__dirname, '..', 'prisma', 'dev.db');
+    const dbPath = join(__dirname, '..', 'prisma', 'dev.db');
     process.env.DATABASE_URL = `file:${dbPath}`;
     process.env.JWT_SECRET = JWT_SECRET;
 
@@ -39,7 +40,13 @@ describe('Service Request Flow (E2E)', () => {
     const emp = await prisma.user.findFirst({ where: { email: 'alice@acme.com' } });
     const agent = await prisma.user.findFirst({ where: { email: 'bob@acme.com' } });
     const admin = await prisma.user.findFirst({ where: { email: 'admin@acme.com' } });
-    const finance = await prisma.user.findFirst({ where: { email: 'carol@acme.com' } });
+    // The seed holds exactly 3 users; tests needing a stranger (non-IT
+    // outsider) self-provision one here and remove it in afterAll.
+    const finance = await prisma.user.upsert({
+      where: { email: 'e2e-stranger@acme.com' },
+      update: { displayName: 'E2E Stranger', platformRole: 'EMPLOYEE', active: true },
+      create: { email: 'e2e-stranger@acme.com', displayName: 'E2E Stranger', platformRole: 'EMPLOYEE', active: true },
+    });
     expect(emp && agent && admin && finance).toBeTruthy();
 
     // Sign tokens using the same JWT secret
@@ -63,6 +70,16 @@ describe('Service Request Flow (E2E)', () => {
   }, 30000);
 
   afterAll(async () => {
+    // Remove the self-provisioned stranger so the DB keeps exactly 3 users.
+    try {
+      const s = await prisma?.user.findFirst({ where: { email: 'e2e-stranger@acme.com' } });
+      if (s) {
+        await prisma.departmentMember.deleteMany({ where: { userId: s.id } }).catch(() => {});
+        await prisma.user.delete({ where: { id: s.id } }).catch(() => {});
+      }
+    } catch {
+      // Best-effort cleanup; never fail the suite on teardown.
+    }
     await app?.close();
     await prisma?.$disconnect();
   });
@@ -1016,7 +1033,7 @@ describe('Service Request Flow (E2E)', () => {
 
   it('department managers manage their own members; agents and outsiders cannot', async () => {
     const it = await prisma.department.findFirst({ where: { code: 'IT' } });
-    const target = await prisma.user.findFirst({ where: { email: 'carol@acme.com' } });
+    const target = await prisma.user.findFirst({ where: { email: 'alice@acme.com' } });
 
     const added = await request(app.getHttpServer())
       .post(`/departments/${it!.id}/members`)
@@ -1641,6 +1658,7 @@ describe('Service Request Flow (E2E)', () => {
     expect(typeof res.body.outbox.pending).toBe('number');
     expect(typeof res.body.outbox.failed).toBe('number');
     expect(['groq', 'local']).toContain(res.body.ai.provider);
+    expect(res.body.retention).toBeTruthy();
   });
 
   it('correlation IDs trace a failure end to end', async () => {

@@ -11,11 +11,6 @@ interface CreateRequestFormProps {
 interface Department { id: string; code: string; name: string; }
 interface RequestType { id: string; code: string; name: string; departmentId: string; }
 
-export function toRef(id: string): string {
-  const tail = (id || '').replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase();
-  return `REQ-${(tail || '000000').padStart(6, '0')}`;
-}
-
 const DRAFT_KEY = 'new-request-draft-v1';
 
 function loadDraft(): Record<string, string> {

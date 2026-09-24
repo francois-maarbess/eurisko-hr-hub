@@ -1,4 +1,4 @@
-import { IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class FeedbackDto {
   @IsInt()

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { DndContext, useDraggable, useDroppable, type DragEndEvent } from '@dnd-kit/core';
-import { Badge, Button, Modal, formatEnum } from './components/ui';
+import { Badge, Button, Modal } from './components/ui';
+import { formatEnum } from './format';
 
 export type BoardStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
 
@@ -40,6 +41,8 @@ const PRIORITY_COLORS: Record<string, { background: string; color: string }> = {
 function DraggableCard({ ticket, onOpen, quiet }: { ticket: BoardTicket; onOpen: (id: string) => void; quiet?: boolean }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: ticket.id });
   const pc = PRIORITY_COLORS[ticket.priority] || PRIORITY_COLORS.STANDARD;
+  // Wall-clock read for the overdue badge; purely presentational.
+  // eslint-disable-next-line react-hooks/purity
   const overdue = ticket.status !== 'COMPLETED' && ticket.slaDueAt != null && new Date(ticket.slaDueAt).getTime() < Date.now();
   return (
     <div

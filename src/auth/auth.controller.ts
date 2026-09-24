@@ -196,6 +196,7 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Patch('password')
+  @Throttle({ default: { limit: Number(process.env['SENSITIVE_THROTTLE_LIMIT'] || 20), ttl: 60000 } })
   changePassword(@Body() dto: ChangePasswordDto, @Request() req: any) {
     return this.authService.changePassword(req.user.id, dto.currentPassword, dto.newPassword);
   }
@@ -210,6 +211,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SYSTEM_ADMIN')
   @Post('users')
+  @Throttle({ default: { limit: Number(process.env['SENSITIVE_THROTTLE_LIMIT'] || 20), ttl: 60000 } })
   createUser(@Body() dto: CreateUserDto) {
     return this.authService.createUser(dto);
   }

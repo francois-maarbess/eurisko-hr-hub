@@ -6,7 +6,6 @@ import {
   Logger,
   NotFoundException,
   OnModuleInit,
-  ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { createHash, randomUUID } from 'crypto';
@@ -15,6 +14,12 @@ import { AuditService } from './audit.service';
 import { NotificationsService } from './notifications.service';
 
 const MAX_BYTES = 5 * 1024 * 1024;
+/** Per-user quota across live payloads (env-overridable). Keeps one careless
+ * uploader from bloating the SQLite file instructors carry around. */
+function quotaBytes(): number {
+  const n = Number(process.env['UPLOAD_QUOTA_BYTES'] || 50 * 1024 * 1024);
+  return Number.isFinite(n) && n > 0 ? n : 50 * 1024 * 1024;
+}
 const ALLOWED_MIME = new Set(['application/pdf', 'image/png', 'image/jpeg', 'image/jpg']);
 const ALLOWED_EXT = new Set(['.pdf', '.png', '.jpg', '.jpeg']);
 
@@ -43,16 +48,36 @@ export class DocumentsService implements OnModuleInit {
     private readonly notifications: NotificationsService,
   ) {}
 
+  private lastSweepAt: string | null = null;
+  private lastSweepDropped = 0;
+
   onModuleInit() {
+    // Purge once at boot (a restart must not skip retention) then daily.
+    // Same in-process pattern as the notification outbox sweep.
+    void this.purgeExpired()
+      .then((dropped) => {
+        this.lastSweepAt = new Date().toISOString();
+        this.lastSweepDropped = dropped;
+        if (dropped > 0) this.logger.log(`Retention boot purge: dropped ${dropped} expired document payload(s).`);
+      })
+      .catch((e) => this.logger.error(`Retention boot purge failed: ${(e as Error).message}`));
     // Daily retention sweep in-process (same pattern as the notification
     // outbox sweep). Self-healing; a failed run retries next interval.
     const timer = setInterval(() => {
-      this.purgeExpired().catch((e) =>
-        this.logger.error(`Retention sweep failed: ${(e as Error).message}`),
-      );
+      this.purgeExpired()
+        .then((dropped) => {
+          this.lastSweepAt = new Date().toISOString();
+          this.lastSweepDropped = dropped;
+        })
+        .catch((e) => this.logger.error(`Retention sweep failed: ${(e as Error).message}`));
     }, 24 * 60 * 60 * 1000);
     const maybeUnref = (timer as unknown as { unref?: () => void }).unref;
     if (typeof maybeUnref === 'function') maybeUnref.call(timer);
+  }
+
+  /** Surfaced on /health so staleness is visible without a metrics stack. */
+  sweepStatus() {
+    return { lastSweepAt: this.lastSweepAt, lastSweepDropped: this.lastSweepDropped };
   }
 
   private ext(name: string): string {
@@ -63,6 +88,15 @@ export class DocumentsService implements OnModuleInit {
   private checkMagic(mime: string, buffer: Buffer): boolean {
     const signatures = MAGIC_BYTES[mime] || [];
     return signatures.some((sig) => sig.every((byte, i) => buffer[i] === byte));
+  }
+
+  /**
+   * Malware-scan seam (week-5: ClamAV/S3). Default allows — magic bytes +
+   * size + type allowlist are the localhost controls. Override this method
+   * (or the injected scanner later) without touching upload().
+   */
+  protected async scanBuffer(_buffer: Buffer): Promise<{ clean: boolean; reason?: string }> {
+    return { clean: true };
   }
 
   private async canManage(userId: string, platformRole: string, departmentId: string): Promise<boolean> {
@@ -93,6 +127,17 @@ export class DocumentsService implements OnModuleInit {
     }
     if (!this.checkMagic(file.mimetype, file.buffer)) {
       throw new BadRequestException('File content does not match its declared type.');
+    }
+    const scan = await this.scanBuffer(file.buffer);
+    if (!scan.clean) {
+      throw new BadRequestException(scan.reason || 'File rejected by content scan.');
+    }
+    const used = await this.prisma.document.aggregate({
+      where: { uploadedBy: user.id, deletedAt: null },
+      _sum: { byteSize: true },
+    });
+    if ((used._sum.byteSize || 0) + file.size > quotaBytes()) {
+      throw new BadRequestException('Upload quota exceeded (50MB of live attachments per user). Delete old files first.');
     }
 
     const checksum = createHash('sha256').update(file.buffer).digest('hex');
@@ -127,7 +172,8 @@ export class DocumentsService implements OnModuleInit {
     });
     await this.notifications.fanout({ requestId, eventType: 'document.uploaded', actorId: user.id });
 
-    const { data, ...meta } = doc;
+    const meta = { ...doc };
+    delete (meta as Record<string, unknown>)['data'];
     return meta;
   }
 

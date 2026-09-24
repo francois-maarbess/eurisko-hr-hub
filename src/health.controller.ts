@@ -5,7 +5,8 @@ import { join } from 'path';
 import { PrismaClient } from '@prisma/client';
 import { PRISMA_CLIENT_TOKEN } from './prisma.service';
 import { AiIntakeService } from './ai/ai-intake.service';
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+import { DocumentsService } from './documents.service';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { version } = require('../package.json');
 
 /**
@@ -20,6 +21,7 @@ export class HealthController {
   constructor(
     @Inject(PRISMA_CLIENT_TOKEN) private readonly prisma: PrismaClient,
     @Optional() private readonly ai?: AiIntakeService,
+    @Optional() private readonly documents?: DocumentsService,
   ) {}
 
   @Get()
@@ -47,6 +49,7 @@ export class HealthController {
       database: 'connected',
       migrations,
       outbox,
+      retention: this.documents?.sweepStatus() || { lastSweepAt: null, lastSweepDropped: 0 },
       ai: this.ai?.providerStatus() || { provider: 'local', model: 'offline-rules', lastErrorAt: null, lastErrorMessage: null },
       ...base,
     };

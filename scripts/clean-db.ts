@@ -16,22 +16,22 @@ async function clean() {
   await prisma.notificationEvent.deleteMany();
   await prisma.request.deleteMany();
 
-  // 2. Remove any users other than alice, bob, carol, and admin
+  // 2. Remove any users other than alice, bob, and admin (exactly 3 accounts)
   await prisma.departmentMember.deleteMany({
     where: {
       user: {
-        email: { notIn: ['alice@acme.com', 'bob@acme.com', 'carol@acme.com', 'admin@acme.com'] },
+        email: { notIn: ['alice@acme.com', 'bob@acme.com', 'admin@acme.com'] },
       },
     },
   });
   await prisma.user.deleteMany({
     where: {
-      email: { notIn: ['alice@acme.com', 'bob@acme.com', 'carol@acme.com', 'admin@acme.com'] },
+      email: { notIn: ['alice@acme.com', 'bob@acme.com', 'admin@acme.com'] },
     },
   });
 
   // 3. Ensure alice, bob, and admin exist and have proper roles and password
-  const alice = await prisma.user.upsert({
+  await prisma.user.upsert({
     where: { email: 'alice@acme.com' },
     update: { displayName: 'Alice Employee', platformRole: 'EMPLOYEE', passwordHash: hash, active: true },
     create: { email: 'alice@acme.com', displayName: 'Alice Employee', platformRole: 'EMPLOYEE', passwordHash: hash, active: true },
@@ -41,12 +41,6 @@ async function clean() {
     where: { email: 'bob@acme.com' },
     update: { displayName: 'Bob Agent', platformRole: 'EMPLOYEE', passwordHash: hash, active: true },
     create: { email: 'bob@acme.com', displayName: 'Bob Agent', platformRole: 'EMPLOYEE', passwordHash: hash, active: true },
-  });
-
-  await prisma.user.upsert({
-    where: { email: 'carol@acme.com' },
-    update: { displayName: 'Carol Agent', platformRole: 'EMPLOYEE', passwordHash: hash, active: true },
-    create: { email: 'carol@acme.com', displayName: 'Carol Agent', platformRole: 'EMPLOYEE', passwordHash: hash, active: true },
   });
 
   const admin = await prisma.user.upsert({

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Button } from './components/ui';
+import { en } from './strings/en';
 
 export type AppView = 'overview' | 'my' | 'queue' | 'new' | 'admin' | 'security';
 
@@ -11,20 +12,20 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'my', label: 'My Requests' },
-  { id: 'queue', label: 'Department Queue', staffOnly: true },
-  { id: 'admin', label: 'Administration', adminOnly: true },
-  { id: 'security', label: 'Security' },
+  { id: 'overview', label: en.nav.overview },
+  { id: 'my', label: en.nav.myRequests },
+  { id: 'queue', label: en.nav.queue, staffOnly: true },
+  { id: 'admin', label: en.nav.administration, adminOnly: true },
+  { id: 'security', label: en.nav.security },
 ];
 
 const VIEW_TITLES: Record<AppView, { title: string; sub: string }> = {
-  overview: { title: 'Overview', sub: 'What needs attention, and how the operation is doing.' },
-  my: { title: 'My Requests', sub: 'Everything you submitted, and where each request stands.' },
-  queue: { title: 'Department Queue', sub: 'Open work in your departments, oldest and most urgent first.' },
-  new: { title: 'New Request', sub: 'Describe the issue once — it routes to the right department.' },
-  admin: { title: 'Administration', sub: 'People, catalog, and platform reporting.' },
-  security: { title: 'Security', sub: 'Sign-in protection for your account.' },
+  overview: { title: en.views.overviewTitle, sub: en.views.overviewSub },
+  my: { title: en.views.myTitle, sub: en.views.mySub },
+  queue: { title: en.views.queueTitle, sub: en.views.queueSub },
+  new: { title: en.views.newTitle, sub: en.views.newSub },
+  admin: { title: en.views.adminTitle, sub: en.views.adminSub },
+  security: { title: en.views.securityTitle, sub: en.views.securitySub },
 };
 
 interface AppShellProps {
@@ -90,10 +91,10 @@ export default function AppShell({
           <div className="sidebar-user-name">{userName}</div>
           <div className="sidebar-user-role">{platformRole}</div>
           <button onClick={onSignOut} className="sidebar-signout">
-            Sign Out
+            {en.common.signOut}
           </button>
           <button onClick={onShortcuts} className="sidebar-signout" title="Keyboard shortcuts (?)">
-            Shortcuts <kbd>?</kbd>
+            {en.common.shortcuts} <kbd>?</kbd>
           </button>
         </div>      </aside>
 
@@ -107,7 +108,7 @@ export default function AppShell({
             <div className="shell-header-actions">
               <button className="shell-search-button" onClick={onQuickSwitcher} aria-label="Open quick switcher">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 5 5" /></svg>
-                <span>Search</span>
+                <span>{en.common.search}</span>
                 <kbd>⌘K</kbd>
               </button>
               {topRight}

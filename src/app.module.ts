@@ -22,6 +22,10 @@ import { HttpExceptionFilter } from './http-exception.filter';
   imports: [
     // All limits env-overridable (see .env.example); code values are
     // local-dev defaults. forRoot runs after dotenv/config loads in main.
+    // Storage seam (week-5): the default in-memory store is correct for a
+    // single instance. To share limits across replicas, set
+    // THROTTLE_STORE=redis + REDIS_URL and pass a Redis ThrottlerStorage
+    // here — the per-route @Throttle() limits above stay unchanged.
     ThrottlerModule.forRoot([
       {
         name: 'default',

@@ -90,15 +90,7 @@ export function EmptyState({ message }: { message: string }) {
   );
 }
 
-/** IN_PROGRESS -> In Progress, EMP_LETTER -> Emp Letter. Never show raw enum/code text to users. */
-export function formatEnum(value: string): string {
-  return value
-    .toLowerCase()
-    .split('_')
-    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
-    .join(' ');
-}
-
+/** Section header with numbered badge. */
 export function SectionHeader({ n, title, sub }: { n: string; title: string; sub: string }) {
   return (
     <div className="section-header">

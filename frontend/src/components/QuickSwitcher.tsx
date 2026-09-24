@@ -24,9 +24,10 @@ export default function QuickSwitcher({ items, onClose }: { items: QuickSwitcher
     inputRef.current?.focus();
   }, []);
 
-  useEffect(() => {
+  const handleQueryChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setQuery(event.target.value);
     setActiveIndex(0);
-  }, [query]);
+  };
 
   const choose = (item: QuickSwitcherItem | undefined) => {
     if (!item) return;
@@ -59,7 +60,7 @@ export default function QuickSwitcher({ items, onClose }: { items: QuickSwitcher
           <input
             ref={inputRef}
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={handleQueryChange}
             onKeyDown={handleKeyDown}
             placeholder="Search pages and requests..."
             aria-label="Search pages and requests"

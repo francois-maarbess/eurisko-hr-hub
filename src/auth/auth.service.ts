@@ -107,7 +107,7 @@ export class AuthService {
       throw new ConflictException('A user with this email already exists.');
     }
 
-    let departmentRole = input.departmentRole || 'AGENT';
+    const departmentRole = input.departmentRole || 'AGENT';
     if (!DEPARTMENT_ROLES.includes(departmentRole)) {
       throw new BadRequestException('Invalid department role.');
     }

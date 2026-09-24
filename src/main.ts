@@ -18,6 +18,15 @@ import { HttpExceptionFilter } from './http-exception.filter';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Trust proxy: 1 hop by default so rate limiting sees the real client IP
+  // behind Render/Nginx. Set TRUST_PROXY=0 to disable (direct exposure).
+  const trustProxy = process.env['TRUST_PROXY'] || '1';
+  app.getHttpAdapter().getInstance().set('trust proxy', trustProxy);
+
+  if ((process.env['THROTTLE_STORE'] || 'memory') !== 'memory' && !process.env['REDIS_URL']) {
+    console.warn('[throttle] THROTTLE_STORE is set but REDIS_URL is missing — falling back to in-memory limits.');
+  }
+
   // Production CORS: allow-list via CORS_ORIGINS (comma-separated).
   // Empty = reflect request origin (local dev convenience only).
   const corsOrigins = (process.env['CORS_ORIGINS'] || '')
@@ -58,6 +67,6 @@ async function bootstrap() {
   const swaggerDoc = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api-docs', app, swaggerDoc);
 
-  await app.listen(3000);
+  await app.listen(Number(process.env['PORT'] || 3000));
 }
 bootstrap();

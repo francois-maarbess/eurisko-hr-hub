@@ -98,6 +98,9 @@ export default function Dashboard({ token, userName, isStaff }: { token: string;
     );
   }
 
+  // Wall-clock read for SLA display. Recomputed on each render so the
+  // countdowns stay correct as data changes; not memoizable state.
+  // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
   const isOrg = report !== null;
   const isTeam = !isOrg && isStaff;
@@ -191,20 +194,37 @@ export default function Dashboard({ token, userName, isStaff }: { token: string;
 
       <div className="dashboard-charts">
         <div>
-          <div className="muted dashboard-chart-title">
+          <div className="muted dashboard-chart-title" id="chart-volume-title">
             {isOrg ? 'ORG TICKETS · LAST 7 DAYS' : isTeam ? 'TEAM TICKETS · LAST 7 DAYS' : 'MY TICKETS · LAST 7 DAYS'}
           </div>
-          <ResponsiveContainer width="100%" height={150}>
-            <BarChart data={volume} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-              <Tooltip />
-              <Bar dataKey="tickets" fill={BLUE} radius={[5, 5, 0, 0]} maxBarSize={28} />
-            </BarChart>
-          </ResponsiveContainer>
+          <div role="img" aria-labelledby="chart-volume-title chart-volume-desc">
+            <span id="chart-volume-desc" className="muted" style={{ fontSize: '0.8rem' }}>
+              {volume.reduce((n, v) => n + v.tickets, 0)} tickets in the last 7 days
+              {volume.some((v) => v.tickets > 0) ? `, peaking at ${Math.max(...volume.map((v) => v.tickets))} in a day` : ''}.
+            </span>
+            <ResponsiveContainer width="100%" height={150}>
+              <BarChart data={volume} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                <Tooltip />
+                <Bar dataKey="tickets" fill={BLUE} radius={[5, 5, 0, 0]} maxBarSize={28} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <details className="muted" style={{ fontSize: '0.8rem', marginTop: '0.3rem' }}>
+            <summary style={{ cursor: 'pointer' }}>View as table</summary>
+            <table>
+              <caption>Tickets per day, last 7 days</caption>
+              <tbody>
+                {volume.map((v) => (
+                  <tr key={v.name}><th scope="row">{v.name}</th><td>{v.tickets}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </details>
         </div>
         <div>
-          <div className="muted dashboard-chart-title">
+          <div className="muted dashboard-chart-title" id="chart-sla-title">
             {isOrg ? 'ORG OPEN · ON TRACK VS OVERDUE' : isTeam ? 'TEAM OPEN · ON TRACK VS OVERDUE' : 'MY OPEN · ON TRACK VS OVERDUE'}
           </div>
           {openCount === 0 ? (
@@ -216,15 +236,20 @@ export default function Dashboard({ token, userName, isStaff }: { token: string;
               <span className="muted">There are no open requests in this view.</span>
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={150}>
-              <PieChart>
-                <Pie data={donut} dataKey="value" nameKey="name" innerRadius={42} outerRadius={65} paddingAngle={3}>
-                  <Cell fill={GREEN} />
-                  <Cell fill={RED} />
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+            <div role="img" aria-labelledby="chart-sla-title chart-sla-desc">
+              <span id="chart-sla-desc" className="muted" style={{ fontSize: '0.8rem' }}>
+                {onTrack} on track, {overdueCount} overdue out of {openCount} open.
+              </span>
+              <ResponsiveContainer width="100%" height={150}>
+                <PieChart>
+                  <Pie data={donut} dataKey="value" nameKey="name" innerRadius={42} outerRadius={65} paddingAngle={3}>
+                    <Cell fill={GREEN} />
+                    <Cell fill={RED} />
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
           )}
         </div>
       </div>

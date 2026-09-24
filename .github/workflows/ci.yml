@@ -33,6 +33,13 @@ jobs:
       - name: Typecheck backend
         run: npx tsc --noEmit
 
+      - name: Lint backend
+        run: npm run lint
+
+      - name: Lint frontend
+        run: npm run lint
+        working-directory: frontend
+
       - name: Validate Prisma schema
         run: npx prisma validate
 
@@ -41,6 +48,13 @@ jobs:
 
       - name: Run tests (90, SQLite)
         run: npm test
+
+      - name: Run frontend tests (vitest)
+        run: npm test
+        working-directory: frontend
+
+      - name: Verify README test counts
+        run: npm run test:count -- --check
 
       - name: AI evals (9, offline)
         run: npm run eval:ai

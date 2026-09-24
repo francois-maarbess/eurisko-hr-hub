@@ -42,5 +42,5 @@ resolution note. As Alice, give it ★★★★★. Watch the CSAT average move.
 
 ## Reset
 
-`npm run db:reset` returns to the pristine baseline (4 demo users, 0 requests).
+`npm run db:reset` returns to the pristine baseline (3 demo users, 0 requests).
 Re-run `npx tsx scripts/demo-scenario.ts` to rebuild the storyline.

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Badge, Button, EmptyState, ErrorBox, Field, Tabs, formatEnum } from './components/ui';
+import { Badge, Button, EmptyState, ErrorBox, Field, Tabs } from './components/ui';
+import { formatEnum, toRef } from './format';
 import { apiUrl } from './api';
-import { toRef } from './CreateRequestForm';
 import KanbanBoard, { type BoardStatus, type BoardTicket } from './KanbanBoard';
 
 function Tracker({ status }: { status: TicketStatus }) {

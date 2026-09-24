@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Button, ErrorBox, Field, Section, Tabs, formatEnum } from './components/ui';
+import { Button, Field, Section, Tabs } from './components/ui';
+import { formatDateTime, formatEnum } from './format';
 import { apiUrl } from './api';
 
 interface AdminPanelProps {
@@ -147,6 +148,17 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
+  const loadReport = async () => {
+    try {
+      const res = await fetch(apiUrl('/requests/report'), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setReport(await res.json());
+    } catch {
+      // Reporting is informational; the panel stays usable without it.
+    }
+  };
+
   const load = async () => {
     try {
       const [uRes, dRes, tRes] = await Promise.all([
@@ -265,17 +277,6 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
       await load();
     } catch {
       setMessage('Cannot reach the server');
-    }
-  };
-
-  const loadReport = async () => {
-    try {
-      const res = await fetch(apiUrl('/requests/report'), {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) setReport(await res.json());
-    } catch {
-      // Reporting is informational; the panel stays usable without it.
     }
   };
 
@@ -601,7 +602,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
               {auditRows.slice(0, 20).map((r) => (
                 <div key={r.id} className="row" style={{ justifyContent: 'space-between', fontSize: '0.82rem' }}>
                   <span><strong>{r.action}</strong> by {r.actorName}</span>
-                  <span className="muted">{new Date(r.createdAt).toLocaleString()}</span>
+                  <span className="muted">{formatDateTime(r.createdAt)}</span>
                 </div>
               ))}
             </div>
