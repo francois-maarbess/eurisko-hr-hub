@@ -6,7 +6,7 @@
 
 An internal service hub for submitting, routing, tracking, and resolving employee requests.
 
-**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 132 backend tests + 10 frontend tests, 9 offline AI evals (`npm run test:count`).
+**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 137 backend tests + 10 frontend tests, 13 offline AI evals (`npm run test:count`).
 
 ## Live App
 
@@ -120,7 +120,7 @@ rules.
 
 ```bash
 npm test      # 132 backend tests (all deterministic, SQLite)
-npm run eval:ai  # 9 AI eval cases (offline, no key, no DB)
+npm run eval:ai  # 13 AI eval cases (offline, no key, no DB)
 cd frontend && npm test  # 10 frontend unit tests (vitest)
 npm run test:count      # verify README counts match reality
 ```
@@ -242,7 +242,7 @@ completes the ticket, and existing completion evidence rules still apply.
 │   ├── requests.service.ts
 │   └── main.ts
 ├── scripts/
-│   └── eval-ai.ts         # 9 AI eval cases (`npm run eval:ai`)
+ │   └── eval-ai.ts         # 13 AI eval cases (`npm run eval:ai`)
 ├── prisma/
 │   ├── schema.prisma      # Database schema
 │   ├── seed.ts            # Seed data

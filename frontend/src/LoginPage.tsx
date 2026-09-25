@@ -11,9 +11,10 @@ interface LoginPageProps {
   themeMode?: string;
   isDark?: boolean;
   onToggleTheme?: () => void;
+  notice?: string | null;
 }
 
-export default function LoginPage({ onLogin, themeMode, isDark, onToggleTheme }: LoginPageProps) {
+export default function LoginPage({ onLogin, themeMode, isDark, onToggleTheme, notice }: LoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -109,6 +110,11 @@ export default function LoginPage({ onLogin, themeMode, isDark, onToggleTheme }:
           )}
         </div>
         <p className="card-sub">Operations cockpit — submit, track, and resolve requests in one calm place.</p>
+        {notice && (
+          <div className="note-info" role="status" style={{ marginBottom: '0.75rem' }}>
+            {notice}
+          </div>
+        )}
 
         {mfaToken ? (
           <form onSubmit={handleMfaChallenge}>

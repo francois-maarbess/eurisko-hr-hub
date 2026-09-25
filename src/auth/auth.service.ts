@@ -169,6 +169,9 @@ export class AuthService {
       where: { id: userId },
       data: { passwordHash: await bcrypt.hash(newPassword, 10) },
     });
+    // A new password must kill stolen sessions: every refresh token dies,
+    // including the caller's — the client bounces to login afterwards.
+    if (this.tokens) await this.tokens.revokeAll(userId);
     return { changed: true };
   }
 

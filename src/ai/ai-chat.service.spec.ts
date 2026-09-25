@@ -2,6 +2,10 @@ import { ForbiddenException } from '@nestjs/common';
 import { AiChatService } from './ai-chat.service';
 
 function harness() {
+  const notificationModel = {
+    count: jest.fn(async () => 0),
+    findMany: jest.fn(async () => []),
+  };
   const prisma: any = {
     chatSession: {
       create: jest.fn(async ({ data }) => ({ id: 'session-1', userId: data.userId, pendingConfirmation: null })),
@@ -13,6 +17,7 @@ function harness() {
     departmentMember: { findMany: jest.fn(async () => []) },
     department: { findMany: jest.fn(async () => []) },
     request: { findMany: jest.fn(async () => []), count: jest.fn(async () => 0) },
+    notification: notificationModel,
   };
   const requests: any = {
     findAll: jest.fn(async () => [
@@ -22,6 +27,7 @@ function harness() {
     create: jest.fn(async () => ({ id: 'c'.repeat(25) })),
     findOne: jest.fn(),
     findDuplicates: jest.fn(async () => []),
+    updateStatus: jest.fn(async () => ({ id: 't1', status: 'CANCELLED' })),
   };
   const audit = { append: jest.fn(async () => undefined) } as any;
   const ai = {
@@ -334,8 +340,7 @@ describe('AI operations assistant safety', () => {
     }
   });
 
-  it('bounds history payload no matter how long the chat gets', async () => {
-    const { service, prisma } = harness();
+  it('bounds history payload no matter how long the chat gets', async () => {    const { service, prisma } = harness();
     prisma.department.findMany.mockResolvedValue([]);
     const longHistory = Array.from({ length: 40 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: 'x'.repeat(5000) }));
     prisma.chatMessage.findMany.mockImplementation(async (args: any) => longHistory.slice(-(args?.take || 12)));
@@ -355,5 +360,43 @@ describe('AI operations assistant safety', () => {
     } finally {
       (global as any).fetch = realFetch;
     }
+  });
+
+  it('proposes cancellation for the owner’s own pending request', async () => {
+    const { service, requests } = harness();
+    requests.findOne.mockResolvedValue({ id: 't1', status: 'PENDING', employeeId: 'alice', title: 'T', department: { name: 'IT' }, requestType: { name: 'L' }, claimant: null });
+    const result = await (service as any).proposeCancel({ id: 'alice', platformRole: 'EMPLOYEE' }, 'session-1', { requestId: 't1' });
+    expect(result.requiresConfirmation).toBe(true);
+  });
+
+  it('refuses cancellation for other people’s or non-pending requests', async () => {
+    const { service, requests } = harness();
+    requests.findOne.mockResolvedValue({ id: 't9', status: 'PENDING', employeeId: 'bob' });
+    await expect((service as any).proposeCancel({ id: 'alice', platformRole: 'EMPLOYEE' }, 'session-1', { requestId: 't9' })).rejects.toThrow(/only the person/i);
+    requests.findOne.mockResolvedValue({ id: 't9', status: 'COMPLETED', employeeId: 'alice' });
+    await expect((service as any).proposeCancel({ id: 'alice', platformRole: 'EMPLOYEE' }, 'session-1', { requestId: 't9' })).rejects.toThrow(/pending/i);
+  });
+
+  it('lists only the caller’s claimed open work', async () => {
+    const { service, requests } = harness();
+    requests.findAll.mockResolvedValue([
+      { id: 'a', status: 'IN_PROGRESS', title: 'Mine now', claimedById: 'alice', department: { name: 'IT' }, requestType: { name: 'VPN' }, claimant: null },
+      { id: 'b', status: 'IN_PROGRESS', title: 'Teammate’s', claimedById: 'bob', department: { name: 'IT' }, requestType: { name: 'VPN' }, claimant: null },
+      { id: 'c', status: 'COMPLETED', title: 'Done', claimedById: 'alice', department: { name: 'IT' }, requestType: { name: 'VPN' }, claimant: null },
+    ]);
+    const result = await (service as any).myWork('alice');
+    expect(result.open).toBe(1);
+    expect(result.tickets[0].title).toBe('Mine now');
+  });
+
+  it('summarizes the inbox with unread count and short references', async () => {
+    const { service, prisma } = harness();
+    prisma.notification.count.mockResolvedValue(2);
+    prisma.notification.findMany.mockResolvedValue([
+      { title: 'Claimed', body: 'Bob claimed your request', requestId: 'c'.repeat(25), createdAt: new Date() },
+    ]);
+    const result = await (service as any).notificationsSummary('alice');
+    expect(result.unread).toBe(2);
+    expect(result.latest[0].reference).toMatch(/^REQ-/);
   });
 });

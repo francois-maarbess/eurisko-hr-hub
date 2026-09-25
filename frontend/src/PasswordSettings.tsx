@@ -1,20 +1,20 @@
 import React, { useState } from 'react';
-import { Alert, Button, ErrorBox, Field } from './components/ui';
+import { Button, ErrorBox, Field } from './components/ui';
 import { apiUrl } from './api';
 
 /**
  * Self-service password change for any signed-in account.
  * Uses PATCH /auth/password ({ currentPassword, newPassword }).
- * Backend enforces: correct current password, min 8 chars, must differ.
+ * Backend enforces: correct current password, min 8 chars, must differ —
+ * then revokes every session, so success bounces to login by design.
  */
-export default function PasswordSettings({ token }: { token: string }) {
+export default function PasswordSettings({ token, onPasswordChanged }: { token: string; onPasswordChanged: () => void }) {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNext, setShowNext] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const trimmedNext = next;
@@ -31,7 +31,6 @@ export default function PasswordSettings({ token }: { token: string }) {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setSuccess(false);
     if (!valid) return;
     setBusy(true);
     try {
@@ -42,10 +41,9 @@ export default function PasswordSettings({ token }: { token: string }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.message || 'Could not change password.');
-      setCurrent('');
-      setNext('');
-      setConfirm('');
-      setSuccess(true);
+      // Sessions are revoked server-side: hand off to the app shell, which
+      // clears local session state and lands on login with a notice.
+      onPasswordChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not change password.');
     } finally {
@@ -56,15 +54,10 @@ export default function PasswordSettings({ token }: { token: string }) {
   return (
     <div className="card">
       <h3 className="card-title">Change password</h3>
-      <p className="card-sub">Any account can change its own password. You stay signed in on this device.</p>
+      <p className="card-sub">Changing your password signs you out everywhere for safety — you sign back in with the new one.</p>
       {error && (
         <div style={{ marginBottom: '0.75rem' }}>
           <ErrorBox message={error} />
-        </div>
-      )}
-      {success && (
-        <div style={{ marginBottom: '0.75rem' }}>
-          <Alert tone="success">Password changed — use it next time you sign in.</Alert>
         </div>
       )}
       <form onSubmit={submit}>

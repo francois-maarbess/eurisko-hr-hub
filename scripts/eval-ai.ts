@@ -6,6 +6,7 @@
  *   npm run eval:ai
  */
 import { AiIntakeService, validateCandidate } from '../src/ai/ai-intake.service';
+import { classifyIntent } from '../src/ai/ai-chat.service';
 import { LocalAiProvider } from '../src/ai/local-ai.provider';
 import { CatalogDepartment } from '../src/ai/ai.provider';
 
@@ -136,6 +137,52 @@ const cases: Case[] = [
       assert(trace && Array.isArray(trace.matchedKeywords) && typeof trace.rationale === 'string', JSON.stringify(out));
       const status = svc.providerStatus();
       assert((status as any).promptVersion === (out as any).promptVersion, JSON.stringify(status));
+    },
+  },
+  {
+    name: 'chat routing: small talk stays chit-chat, never a ticket',
+    run: async () => {
+      assert(classifyIntent('IM SO HUNGRY') === 'chit-chat', 'hungry');
+      assert(classifyIntent('thanks!') === 'chit-chat', 'thanks');
+      assert(classifyIntent('hey') === 'chit-chat', 'hey');
+    },
+  },
+  {
+    name: 'chat routing: explicit asks route to act',
+    run: async () => {
+      assert(classifyIntent('draft a request to HR for an employment letter') === 'act', 'draft hr');
+      assert(classifyIntent('tell her about my broken laptop instead') === 'act', 'pronoun follow-up');
+      assert(classifyIntent('change my password') === 'act', 'password');
+      assert(classifyIntent('what is overdue right now?') === 'act', 'overdue');
+      assert(classifyIntent('claim that ticket for me') === 'act', 'claim');
+    },
+  },
+  {
+    name: 'chat routing: distress routes to sensitive fast-path',
+    run: async () => {
+      assert(classifyIntent('NVM UHH MY COLLEAGUE IS MAKING ME FEEL UNCOMFY') === 'sensitive', 'uncomfy');
+      assert(classifyIntent('my manager is harassing me, i need help') === 'sensitive', 'harassment');
+      assert(classifyIntent('tell her about my workspace wellbeing issue') === 'sensitive', 'wellbeing follow-up');
+    },
+  },
+  {
+    name: 'chat routing: unknown department stays honest via resolve errors',
+    run: async () => {
+      const svc = new AiIntakeService(stubPrisma, new LocalAiProvider(), undefined as any);
+      let routed: string | null = null;
+      let msg: string;
+      try {
+        const out = await svc.draft('send that to the food department bruh');
+        routed = `${(out as any).departmentId}/${(out as any).requestTypeId}`;
+        msg = (out as any).needsClarification ? 'clarification' : 'no-clarification';
+      } catch (e: any) {
+        msg = e.message || '';
+      }
+      // Never a forced ticket into a department that does not exist: the
+      // fake catalog here has no FOOD department, so success must carry
+      // clarification, and failure must say so in plain words.
+      if (routed) assert(/clarification/i.test(msg), `forced ticket without clarification: ${routed}`);
+      else assert(/workplace requests|clarif|FOOD|food/i.test(msg), `unexpected message: ${msg}`);
     },
   },
 ];

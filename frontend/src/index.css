@@ -1139,6 +1139,64 @@ kbd {
   filter: brightness(1.05);
 }
 
+/* ---------- dark sweep: semantic inversions + leftover surfaces ----------
+   Rules that read as dark surfaces in light mode flip to near-white in
+   dark mode (via --navy), and several one-off light fills never got a
+   dark variant. Both produce white-on-white or glaring boxes. */
+
+[data-theme='dark'] .chatbot-launcher,
+[data-theme='dark'] .chatbot-message-user {
+  background: #0f172a;
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+[data-theme='dark'] .chatbot-confirmation {
+  color: var(--warning);
+}
+
+[data-theme='dark'] .dashboard-stat-neutral {
+  background: var(--surface-2);
+}
+
+[data-theme='dark'] .dashboard-stat-green {
+  background: var(--success-bg);
+}
+
+[data-theme='dark'] .dashboard-stat-yellow {
+  background: var(--warning-bg);
+}
+
+[data-theme='dark'] .dashboard-stat-skeleton {
+  background: var(--surface-2);
+}
+
+[data-theme='dark'] .notification-item,
+[data-theme='dark'] .queue-view-control,
+[data-theme='dark'] .macro-task-editor,
+[data-theme='dark'] .macro-proposal,
+[data-theme='dark'] .admin-loading-skeleton {
+  background: var(--card);
+  border-color: var(--border);
+}
+
+[data-theme='dark'] .btn-danger-outline {
+  background: var(--card);
+  border-color: var(--danger);
+}
+
+[data-theme='dark'] .btn-success {
+  background: #166534;
+}
+
+[data-theme='dark'] .btn-danger {
+  background: #991b1b;
+}
+
+[data-theme='dark'] .btn-primary:hover:not(:disabled) {
+  background: var(--blue);
+}
+
 /* ---------- de-density + polish primitives ---------- */
 
 .ticket-desc {

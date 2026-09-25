@@ -130,4 +130,16 @@ describe('AuthService (password accounts)', () => {
       BadRequestException,
     );
   });
+
+  it('changePassword revokes every session so stolen tokens die with the old password', async () => {
+    const hash = await bcrypt.hash('old-password-123', 4);
+    const svc = new AuthService(
+      stubPrisma(baseUser({ passwordHash: hash })),
+      stubJwt,
+      undefined,
+      { revokeAll: jest.fn(async () => ({ revoked: true })) } as any,
+    );
+    await svc.changePassword('u-1', 'old-password-123', 'brand-new-password-1');
+    expect((svc as any).tokens.revokeAll).toHaveBeenCalledWith('u-1');
+  });
 });
