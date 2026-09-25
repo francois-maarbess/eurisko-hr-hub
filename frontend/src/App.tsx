@@ -4,7 +4,7 @@ import CreateRequestForm from './CreateRequestForm';
 import TicketStatusManager from './TicketStatusManager';
 import ErrorBoundary from './ErrorBoundary';
 import AppShell, { type AppView } from './AppShell';
-import { Button } from './components/ui';
+import { Button, Modal } from './components/ui';
 import QuickSwitcher, { type QuickSwitcherItem } from './components/QuickSwitcher';
 import { apiUrl } from './api';
 
@@ -52,6 +52,61 @@ interface QuickTicket {
   status: string;
   view: AppView;
   claimant?: { displayName: string } | null;
+}
+
+function BotMark() {
+  return (
+    <svg className="chatbot-bot-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+      <path d="M10 12.5h12a4 4 0 0 1 4 4v6a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4v-6a4 4 0 0 1 4-4Z" />
+      <path d="M16 12.5V8m0-3V3m0 2h3" />
+      <circle cx="12" cy="20" r="1.3" />
+      <circle cx="20" cy="20" r="1.3" />
+    </svg>
+  );
+}
+
+function ChatbotShell() {
+  const [open, setOpen] = useState(false);
+  const [input, setInput] = useState('');
+  const [messages, setMessages] = useState(() => [
+    { role: 'assistant', text: 'Hello. I am the Operations Assistant preview.' },
+    { role: 'assistant', text: 'I can explain queue views and where to find your work.' },
+    { role: 'assistant', text: 'I can point you to New Request, Notifications, or Security.' },
+    { role: 'assistant', text: 'A full assistant arrives in a later milestone.' },
+  ]);
+
+  const send = (event: React.FormEvent) => {
+    event.preventDefault();
+    const text = input.trim();
+    if (!text) return;
+    setMessages((current) => [...current, { role: 'user', text }, { role: 'assistant', text: 'Full assistant arrives in a later milestone.' }]);
+    setInput('');
+  };
+
+  return (
+    <>
+      <button className="chatbot-launcher" onClick={() => setOpen(true)} aria-label="Open Operations Assistant" title="Operations Assistant">
+        <BotMark />
+      </button>
+      {open && (
+        <Modal className="chatbot-modal" title="Operations Assistant" sub="Preview shell · replies are scripted locally" onClose={() => setOpen(false)}>
+          <div className="chatbot-content">
+            <div className="chatbot-messages" aria-live="polite">
+              {messages.map((message, index) => (
+                <div key={`${message.role}-${index}`} className={`chatbot-message chatbot-message-${message.role}`}>
+                  {message.text}
+                </div>
+              ))}
+            </div>
+            <form className="chatbot-form" onSubmit={send}>
+              <input className="input" value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask a question" aria-label="Message Operations Assistant" />
+              <Button type="submit" small>Send</Button>
+            </form>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
 }
 
 export default function App() {
@@ -588,6 +643,7 @@ export default function App() {
           </ErrorBoundary>
         )}
       </AppShell>
+      {activeView === 'overview' && !focusTicketId && <ChatbotShell />}
     </>
   );
 }

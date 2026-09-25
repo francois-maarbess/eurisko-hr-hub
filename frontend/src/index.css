@@ -519,13 +519,39 @@ a:focus-visible {
 .macro-progress-item { display: flex; justify-content: space-between; align-items: baseline; gap: 0.7rem; padding: 0.55rem 0; border-top: 1px solid var(--border); }
 .macro-parent-link { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin: 0.65rem 0; padding: 0.65rem 0.75rem; border: 1px solid var(--border); border-radius: 10px; background: #f8fafc; }
 .ai-playbook-actions { align-items: center; flex-wrap: wrap; }
-.claim-draft-btn {
-  background: linear-gradient(135deg, var(--blue), var(--blue-dark));
-  box-shadow: 0 3px 10px rgb(37 99 235 / 22%);
+.ai-draft-button { align-items: center; }
+.ai-spark-icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+.chatbot-launcher {
+  position: fixed;
+  right: 1.35rem;
+  bottom: 1.35rem;
+  z-index: 30;
+  width: 52px;
+  height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: var(--navy);
+  border: 1px solid rgb(255 255 255 / 30%);
+  border-radius: 999px;
+  box-shadow: 0 10px 24px rgb(15 23 42 / 24%);
+  cursor: pointer;
+  transition: transform .15s ease, box-shadow .15s ease;
 }
-.claim-draft-btn:hover:not(:disabled) {
-  box-shadow: 0 5px 14px rgb(37 99 235 / 30%);
-  transform: translateY(-1px);
+.chatbot-launcher:hover { transform: translateY(-2px); box-shadow: 0 13px 28px rgb(15 23 42 / 30%); }
+.chatbot-bot-mark { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.chatbot-modal { width: min(420px, calc(100vw - 2rem)); }
+.chatbot-content { display: grid; gap: .85rem; }
+.chatbot-messages { display: grid; gap: .55rem; max-height: 300px; overflow-y: auto; padding: .2rem; }
+.chatbot-message { max-width: 88%; border-radius: 12px; padding: .6rem .7rem; font-size: .84rem; line-height: 1.4; }
+.chatbot-message-assistant { color: var(--ink-soft); background: var(--blue-pale); border: 1px solid var(--blue-border); }
+.chatbot-message-user { justify-self: end; color: #fff; background: var(--navy); }
+.chatbot-form { display: flex; gap: .5rem; align-items: center; }
+@media (max-width: 520px) {
+  .chatbot-launcher { right: 1rem; bottom: 1rem; }
+  .chatbot-form { align-items: stretch; }
+  .chatbot-form .input { min-width: 0; }
 }
 @media (max-width: 520px) {
   .macro-proposal-heading, .macro-progress-item, .macro-parent-link { flex-direction: column; align-items: flex-start; }

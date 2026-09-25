@@ -292,7 +292,20 @@ export class AiIntakeService {
     requestType: string;
   }) {
     if (!process.env['GROQ_API_KEY']) {
-      throw new ServiceUnavailableException('AI resolution drafting is unavailable. Add a resolution note manually.');
+      return {
+        resolutionNote: [
+          `[Confirm] Review the reported ${input.requestType.toLowerCase()} issue: ${input.title.trim()}.`,
+          `[Confirm] Reproduce the issue using only the information provided: ${input.description.trim().slice(0, 360)}.`,
+          `[Confirm] Record the verified action taken, the observed result, and any remaining follow-up before completing the request.`,
+        ].join('\n'),
+        assumptions: [
+          `[Confirm] The ${input.department} team owns this ${input.requestType.toLowerCase()} request.`,
+          '[Confirm] The reported issue and outcome have been independently verified before completion.',
+        ],
+        provider: 'local-template',
+        confidence: 'low' as const,
+        promptVersion: PROMPT_VERSION,
+      };
     }
     try {
       return {

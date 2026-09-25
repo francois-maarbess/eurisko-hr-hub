@@ -36,6 +36,16 @@ function Tracker({ status }: { status: TicketStatus }) {
   );
 }
 
+function AiSparkIcon() {
+  return (
+    <svg className="ai-spark-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <circle cx="15" cy="8" r="2.2" />
+      <circle cx="7" cy="17" r="1.3" />
+      <path d="M13 10 8 15M17 4v3M20 7h-3M4 13v2M6 15H4" />
+    </svg>
+  );
+}
+
 type TicketStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'REJECTED';
 type TicketPriority = 'LOW' | 'STANDARD' | 'URGENT';
 
@@ -961,10 +971,10 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
   // is everything you ever claimed, including completed ones.
   const tabCaption: Record<View, string> = {
     mine: 'Requests you submitted.',
-    queue: 'Open work in your departments.',
-    unassigned: 'Open tickets waiting for someone to claim them.',
-    mywork: 'Your open workload — tickets you claimed and are still working.',
-    claimed: 'Your history — everything you claimed, including completed.',
+    queue: 'Open work in your departments',
+    unassigned: 'Unassigned requests waiting for a claim',
+    mywork: 'Your open workload',
+    claimed: 'Your history, including completed',
   };
 
   return (
@@ -984,7 +994,6 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
         </div>
       ) : (
         <>
-          {initialView !== 'mine' && <h2 className="queue-section-heading">Department Queue</h2>}
           <Tabs options={tabOptions} value={view} onChange={(v) => setView(v as View)} />
           <p className="muted mt-sm" style={{ fontSize: '0.8rem' }}>{tabCaption[view]}</p>
 
@@ -1501,6 +1510,17 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
             {canWork && (
               <div style={{ display: 'grid', gap: '0.5rem', marginTop: '0.75rem' }}>
                 <div className="row ai-playbook-actions">
+                  <Button
+                    className="ai-draft-button"
+                    variant="ghost"
+                    small
+                    onClick={() => void handleDraftResolution(ticket)}
+                    disabled={!!playbookLoading[ticket.id]}
+                    title="Draft a resolution with AI"
+                  >
+                    <AiSparkIcon />
+                    {playbookLoading[ticket.id] ? 'Drafting…' : 'Draft with AI'}
+                  </Button>
                   <span className="muted">AI suggestions are drafts. Verify and edit the note before submitting.</span>
                 </div>
                 {Object.prototype.hasOwnProperty.call(playbookAssumptions, ticket.id) && (
@@ -1633,9 +1653,22 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
             {/* Action buttons row */}
             <div className="row" style={{ marginTop: '1rem', gap: '0.5rem', flexWrap: 'wrap' }}>
               {canClaim && (
-                <Button className="claim-draft-btn" variant="primary" small onClick={() => void handleClaimAndDraft(ticket)} disabled={loading || !!playbookLoading[ticket.id]}>
-                  {loading ? 'Claiming…' : playbookLoading[ticket.id] ? 'Preparing draft…' : 'Claim & draft resolution'}
-                </Button>
+                <>
+                  <Button variant="primary" small onClick={() => handleClaim(ticket)} disabled={loading}>
+                    {loading ? 'Claiming…' : 'Claim'}
+                  </Button>
+                  <Button
+                    className="ai-draft-button"
+                    variant="ghost"
+                    small
+                    onClick={() => void handleClaimAndDraft(ticket)}
+                    disabled={loading || !!playbookLoading[ticket.id]}
+                    title="Claim this request and draft a resolution with AI"
+                  >
+                    <AiSparkIcon />
+                    {playbookLoading[ticket.id] ? 'Preparing draft…' : 'Draft with AI'}
+                  </Button>
+                </>
               )}
               {canTakeover && !showTakeover[ticket.id] && (
                 <Button variant="ghost" small onClick={() => setShowTakeover((c) => ({ ...c, [ticket.id]: true }))} disabled={loading}>

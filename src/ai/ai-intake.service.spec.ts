@@ -171,4 +171,18 @@ describe('AI-assisted intake (Week 4)', () => {
       source: 'RULE',
     });
   });
+
+  it('resolution drafting uses a safe local template without a Groq key', async () => {
+    const svc = new AiIntakeService(stubPrisma, new LocalAiProvider(), undefined as any);
+    const draft = await svc.generateResolutionPlaybook({
+      title: 'Laptop screen issue',
+      description: 'The screen flickers after waking the device.',
+      department: 'IT',
+      requestType: 'Laptop Request',
+    });
+    expect(draft.provider).toBe('local-template');
+    expect(draft.confidence).toBe('low');
+    expect(draft.resolutionNote).toContain('[Confirm]');
+    expect(draft.assumptions.every((item) => item.startsWith('[Confirm]'))).toBe(true);
+  });
 });

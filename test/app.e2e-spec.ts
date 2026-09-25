@@ -212,6 +212,13 @@ describe('Service Request Flow (E2E)', () => {
       .post(`/requests/${created.body.id}/ai-playbook`)
       .set('Authorization', `Bearer ${employeeToken}`);
     expect(ownerDraftAttempt.status).toBe(403);
+    const agentDraft = await request(app.getHttpServer())
+      .post(`/requests/${created.body.id}/ai-playbook`)
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(agentDraft.status).toBe(200);
+    expect(agentDraft.body.provider).toBe('local-template');
+    expect(agentDraft.body.confidence).toBe('low');
+    expect(agentDraft.body.resolutionNote).toContain('[Confirm]');
   });
 
   it('concurrent completions: exactly one wins, the other gets 409', async () => {

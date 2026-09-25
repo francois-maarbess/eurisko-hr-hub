@@ -18,6 +18,7 @@ export function Button({
   variant = 'primary',
   small,
   block,
+  className,
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: BtnVariant; small?: boolean; block?: boolean }) {
   const cls = [
@@ -25,7 +26,8 @@ export function Button({
     `btn-${variant}`,
     small ? 'btn-sm' : '',
     block ? 'btn-block' : '',
-  ].join(' ');
+    className || '',
+  ].filter(Boolean).join(' ');
   return <button className={cls} {...props} />;
 }
 
@@ -133,7 +135,7 @@ export function Alert({ tone, children }: { tone: 'info' | 'warn' | 'danger' | '
   return <div className={`alert alert-${tone}`} role="alert">{children}</div>;
 }
 
-export function Modal({ title, sub, onClose, children }: { title: string; sub?: string; onClose: () => void; children: React.ReactNode }) {
+export function Modal({ title, sub, onClose, className, children }: { title: string; sub?: string; onClose: () => void; className?: string; children: React.ReactNode }) {
   const panelRef = React.useRef<HTMLDivElement>(null);
   const prevFocus = React.useRef<Element | null>(null);
   // Latest onClose without re-running the effect: parents pass a fresh
@@ -189,7 +191,7 @@ export function Modal({ title, sub, onClose, children }: { title: string; sub?: 
       <div
         ref={panelRef}
         tabIndex={-1}
-        className="card glass-panel modal-panel"
+        className={`card glass-panel modal-panel${className ? ` ${className}` : ''}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}

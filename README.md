@@ -6,7 +6,7 @@
 
 An internal service hub for submitting, routing, tracking, and resolving employee requests.
 
-**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 102 backend tests + 10 frontend tests, 9 offline AI evals (`npm run test:count`).
+**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 103 backend tests + 10 frontend tests, 9 offline AI evals (`npm run test:count`).
 
 ## Demo (2 minutes)
 
@@ -96,10 +96,14 @@ cd frontend && npm run dev
 3. Create a request (or draft one with AI — **no API key needed**), manage it as admin/agent, resolve it
 4. Optional: enable **two-factor authentication** — open Security settings, scan the QR with any authenticator app, verify the code. Next sign-in asks for password + code (backup codes cover a lost phone).
 
+The Overview page also includes a scripted Operations Assistant shell. It is a
+UI preview only: replies are local canned text and no assistant backend is
+enabled yet.
+
 ## Running Tests
 
 ```bash
-npm test      # 102 backend tests (all deterministic, SQLite)
+npm test      # 103 backend tests (all deterministic, SQLite)
 npm run eval:ai  # 9 AI eval cases (offline, no key, no DB)
 cd frontend && npm test  # 10 frontend unit tests (vitest)
 npm run test:count      # verify README counts match reality
@@ -207,7 +211,7 @@ completes the ticket, and existing completion evidence rules still apply.
 │   ├── requests.service.ts
 │   └── main.ts
 ├── scripts/
-│   └── eval-ai.ts         # 8 AI eval cases (`npm run eval:ai`)
+│   └── eval-ai.ts         # 9 AI eval cases (`npm run eval:ai`)
 ├── prisma/
 │   ├── schema.prisma      # Database schema
 │   ├── seed.ts            # Seed data

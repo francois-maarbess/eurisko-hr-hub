@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Field, Modal, Section, Tabs } from './components/ui';
+import { Badge, Button, Field, Modal, Section, Tabs } from './components/ui';
 import { formatDateTime, formatEnum } from './format';
 import { apiUrl } from './api';
 
@@ -36,6 +36,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [initialDataLoading, setInitialDataLoading] = useState(true);
   const [userToDeactivate, setUserToDeactivate] = useState<AdminUser | null>(null);
+  const [catalogAction, setCatalogAction] = useState<{ title: string; sub: string; confirmLabel: string; run: () => Promise<void> } | null>(null);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -430,9 +431,9 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
           sub="Live ticket counts across every department."
         >
           <div className="row mb-md">
-            <span className="badge" style={{ background: '#fef3c7', color: '#92400e' }}>
+            <Badge bg="#fef3c7" color="#92400e">
               ★ CSAT {report.csatAverage != null ? report.csatAverage.toFixed(2) : '—'} ({report.csatCount} ratings)
-            </span>
+            </Badge>
             <select
               className="select admin-mini-select"
               aria-label="Export filter: status"
@@ -493,34 +494,32 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
           )}
           {sysHealth && (
             <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-              <span
-                className="badge"
-                title={`Uptime ${Math.floor(sysHealth.uptimeSeconds / 60)}m · migrations applied ${sysHealth.migrations.applied}, pending ${sysHealth.migrations.pending}`}
-                style={{ background: sysHealth.status === 'ok' ? 'var(--success-bg)' : 'var(--danger-bg)', color: sysHealth.status === 'ok' ? 'var(--success)' : 'var(--danger)' }}
-              >
+              <span title={`Uptime ${Math.floor(sysHealth.uptimeSeconds / 60)}m · migrations applied ${sysHealth.migrations.applied}, pending ${sysHealth.migrations.pending}`}>
+              <Badge bg={sysHealth.status === 'ok' ? 'var(--success-bg)' : 'var(--danger-bg)'} color={sysHealth.status === 'ok' ? 'var(--success)' : 'var(--danger)'}>
                 System {sysHealth.status === 'ok' ? 'healthy' : sysHealth.status} · DB {sysHealth.database}
+              </Badge>
               </span>
-              <span className="badge" style={{ background: '#f1f5f9', color: 'var(--muted)' }} title="Notification outbox backlog">
+              <span title="Notification outbox backlog"><Badge bg="#f1f5f9" color="var(--muted)">
                 Outbox {sysHealth.outbox.pending} pending{sysHealth.outbox.failed > 0 ? ` · ${sysHealth.outbox.failed} failed` : ''}
-              </span>
-              <span className="badge" style={{ background: '#f1f5f9', color: 'var(--muted)' }} title={`AI model: ${sysHealth.ai.model}`}>
+              </Badge></span>
+              <span title={`AI model: ${sysHealth.ai.model}`}><Badge bg="#f1f5f9" color="var(--muted)">
                 AI: {sysHealth.ai.provider}
-              </span>
+              </Badge></span>
             </div>
           )}
           <div className="admin-overview">
           <div className="pill-group mb-md">
             {Object.entries(report.byStatus).map(([status, count]) => (
-              <span key={status} className="badge" style={{ background: 'var(--navy)', color: '#fff' }}>
+              <Badge key={status} bg="var(--navy)" color="#fff">
                 {formatEnum(status)}: {count}
-              </span>
+              </Badge>
             ))}
           </div>
           {report.departments.reduce((n, d) => n + d.breached, 0) > 0 && (
-            <div className="badge" style={{ background: '#fee2e2', color: 'var(--danger)', marginBottom: '0.75rem' }}>
+            <div style={{ marginBottom: '0.75rem' }}><Badge bg="#fee2e2" color="var(--danger)">
               {report.departments.reduce((n, d) => n + d.breached, 0)} ticket(s) past their SLA deadline
               in {report.departments.filter((d) => d.breached > 0).length} department(s) — needs attention
-            </div>
+            </Badge></div>
           )}
           <div className="admin-overview-list">
             {report.departments.map((d) => {
@@ -560,18 +559,18 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
           sub="Computed from audit timestamps — no extra data entry. Averages in hours."
         >
           <div className="row mb-md" style={{ gap: '0.5rem', flexWrap: 'wrap' }}>
-            <span className="badge" style={{ background: 'var(--blue-pale)', color: 'var(--blue-dark)' }}>
+            <Badge bg="var(--blue-pale)" color="var(--blue-dark)">
               Avg claim {analytics.timeToClaimAvgHours != null ? `${analytics.timeToClaimAvgHours}h` : '—'}
-            </span>
-            <span className="badge" style={{ background: 'var(--blue-pale)', color: 'var(--blue-dark)' }}>
+            </Badge>
+            <Badge bg="var(--blue-pale)" color="var(--blue-dark)">
               Avg resolve {analytics.timeToCompleteAvgHours != null ? `${analytics.timeToCompleteAvgHours}h` : '—'}
-            </span>
-            <span className="badge" style={{ background: '#f1f5f9', color: 'var(--muted)' }}>
+            </Badge>
+            <Badge bg="#f1f5f9" color="var(--muted)">
               Rejected {analytics.rejectionRate}% · Rerouted {analytics.rerouteRate}% ({analytics.rerouteCount})
-            </span>
-            <span className="badge" style={{ background: '#f1f5f9', color: 'var(--muted)' }}>
+            </Badge>
+            <Badge bg="#f1f5f9" color="var(--muted)">
               Aging &lt;1d {analytics.aging.under1d} · 1–3d {analytics.aging.d1to3} · 3–7d {analytics.aging.d3to7} · &gt;7d {analytics.aging.over7d}
-            </span>
+            </Badge>
           </div>
           {analytics.workloadByAgent.length > 0 && (
             <div className="admin-overview-list">
@@ -650,32 +649,27 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
                 <div>
                   <strong>{d.name}</strong>{' '}
                   <span className="muted" style={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{d.code}</span>
-                  {!d.active && <span className="badge" style={{ background: 'var(--danger-bg)', color: 'var(--danger)', marginLeft: '0.4rem' }}>Inactive</span>}
+                  {!d.active && <span style={{ marginLeft: '0.4rem' }}><Badge bg="var(--danger-bg)" color="var(--danger)">Inactive</Badge></span>}
                 </div>
-                <Button variant="ghost" small onClick={() => toggleDeptActive(d.id, !d.active)}>
+                <Button variant="ghost" small onClick={() => d.active
+                  ? setCatalogAction({ title: `Deactivate ${d.name}?`, sub: 'New requests will no longer route to this department. Existing history remains available.', confirmLabel: 'Deactivate department', run: async () => toggleDeptActive(d.id, false) })
+                  : toggleDeptActive(d.id, true)}>
                   {d.active ? 'Deactivate' : 'Reactivate'}
                 </Button>
               </div>
               <div className="admin-type-list">
                 {typesForDept.length === 0 && (
-                  <span className="badge" style={{ background: '#fef3c7', color: '#b45309', textTransform: 'none' }}>
+                  <Badge bg="#fef3c7" color="#b45309">
                     No request types yet — add one below so employees can select this department
-                  </span>
+                  </Badge>
                 )}
                 {typesForDept.map((t) => (
-                  <span
-                    key={t.id}
-                    className="badge"
-                    title={t.name}
-                    style={{
-                      background: t.active ? 'var(--blue-pale)' : '#f1f5f9',
-                      color: t.active ? '#1d4ed8' : 'var(--muted)',
-                      textTransform: 'none',
-                      cursor: 'pointer',
-                    }}
-                    onClick={() => toggleTypeActive(d.id, t.id, !t.active)}
-                  >
+                  <span key={t.id} title={t.name} style={{ cursor: 'pointer' }} onClick={() => t.active
+                    ? setCatalogAction({ title: `Deactivate ${t.name}?`, sub: 'Employees will no longer be able to select this request type. Existing requests remain unchanged.', confirmLabel: 'Deactivate request type', run: async () => toggleTypeActive(d.id, t.id, false) })
+                    : toggleTypeActive(d.id, t.id, true)}>
+                    <Badge bg={t.active ? 'var(--blue-pale)' : '#f1f5f9'} color={t.active ? '#1d4ed8' : 'var(--muted)'}>
                     {t.name} {!t.active && '(off)'}
+                    </Badge>
                   </span>
                 ))}
               </div>
@@ -804,15 +798,15 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
               </div>
               <div className="row" style={{ marginTop: '0.5rem' }}>
                 {u.memberships.filter((m) => m.active).map((m) => (
-                  <span className="badge badge-blue" key={m.departmentId}>
+                  <Badge bg="var(--blue-pale)" color="var(--blue-dark)" key={m.departmentId}>
                     {m.departmentCode || '?'} · {m.departmentRole}{' '}
                     <button
-                      onClick={() => removeMembership(u, m.departmentId)}
+                      onClick={() => setCatalogAction({ title: `Remove ${m.departmentCode || 'this'} membership?`, sub: `${u.displayName} will no longer have access to this department.`, confirmLabel: 'Remove membership', run: async () => removeMembership(u, m.departmentId) })}
                       className="admin-removable"
                     >
                       ×
                     </button>
-                  </span>
+                  </Badge>
                 ))}
                 <select
                   className="select admin-mini-select"
@@ -849,6 +843,16 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
           <div className="row">
             <Button variant="danger" small onClick={async () => { await toggleActive(userToDeactivate); setUserToDeactivate(null); }}>Deactivate user</Button>
             <Button variant="ghost" small onClick={() => setUserToDeactivate(null)}>Cancel</Button>
+          </div>
+        </Modal>
+      )}
+      {catalogAction && (
+        <Modal title={catalogAction.title} sub={catalogAction.sub} onClose={() => setCatalogAction(null)}>
+          <div className="row">
+            <Button variant="danger" small onClick={async () => { const action = catalogAction; setCatalogAction(null); await action.run(); }}>
+              {catalogAction.confirmLabel}
+            </Button>
+            <Button variant="ghost" small onClick={() => setCatalogAction(null)}>Cancel</Button>
           </div>
         </Modal>
       )}

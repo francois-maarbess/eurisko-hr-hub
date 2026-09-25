@@ -10,8 +10,9 @@ Every final request uses the authenticated, validated `POST /requests` flow.
 The default is the deterministic, dependency-free local provider. Setting the
 existing optional `GROQ_API_KEY` enables Groq. No new key or dependency is
 required. Provider failure falls back to local classification and policy-based
-SLA targets; resolution playbooks clearly report unavailable when Groq is not
-configured.
+SLA targets. Resolution playbooks use Groq when configured and a deterministic,
+low-confidence `[Confirm]` template when it is not; neither path changes ticket
+state.
 
 ## AI request draft
 
