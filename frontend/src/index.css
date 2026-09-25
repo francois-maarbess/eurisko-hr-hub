@@ -53,10 +53,10 @@
 [data-theme='dark'] {
   --navy: #f1f5f9;          /* headings become near-white */
   --ink-soft: #cbd5e1;
-  --blue: #60a5fa;
-  --blue-dark: #93c5fd;
-  --blue-pale: #162a52;
-  --blue-border: #274277;
+  --blue: #5a8fc4;
+  --blue-dark: #8aa9cc;
+  --blue-pale: #132539;
+  --blue-border: #243a5a;
 
   --canvas: #0b1220;
   --bg: #0f172a;
@@ -73,7 +73,7 @@
   --danger-bg: #33121a;
   --warning: #fbbf24;
   --warning-bg: #33220f;
-  --info-bg: #162a52;
+  --info-bg: #132539;
   --mark-bg: #854d0e;
   --mark-text: #fef3c7;
 
@@ -1091,7 +1091,7 @@ kbd {
 
 [data-theme='dark'] .login-wrap {
   background:
-    radial-gradient(700px 340px at 50% -80px, rgba(96, 165, 250, 0.22), transparent),
+    radial-gradient(700px 340px at 50% -80px, rgba(90, 143, 196, 0.14), transparent),
     var(--canvas);
 }
 
@@ -1265,7 +1265,7 @@ kbd {
 }
 
 [data-theme='dark'] .login-glow::before {
-  background: linear-gradient(135deg, rgba(96, 165, 250, 0.6), rgba(96, 165, 250, 0.08) 40%, rgba(167, 139, 250, 0.35));
+  background: linear-gradient(135deg, rgba(90, 143, 196, 0.35), rgba(90, 143, 196, 0.06) 40%, rgba(167, 139, 250, 0.22));
 }
 
 .stepper {

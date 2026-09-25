@@ -15,6 +15,8 @@ import { useTheme } from './theme';
 const Dashboard = React.lazy(() => import('./Dashboard'));
 const AdminPanel = React.lazy(() => import('./AdminPanel'));
 const MfaSettings = React.lazy(() => import('./MfaSettings'));
+const PasswordSettings = React.lazy(() => import('./PasswordSettings'));
+const SecurityAccount = React.lazy(() => import('./SecurityAccount'));
 
 function ViewFallback() {
   return (
@@ -515,7 +517,7 @@ export default function App() {
     ...(isStaff ? [{ id: 'queue', label: 'Department Queue', description: 'Work your department queue in list or Kanban view.', group: 'Pages', onSelect: () => setActiveView('queue') }] : []),
     { id: 'new', label: 'New Request', description: 'Create and route a service request.', group: 'Actions', onSelect: () => setActiveView('new') },
     ...(isAdmin ? [{ id: 'admin', label: 'Administration', description: 'Manage users, departments, and request types.', group: 'Pages', onSelect: () => setActiveView('admin') }] : []),
-    { id: 'security', label: 'Security', description: 'Manage two-factor authentication.', group: 'Pages', onSelect: () => setActiveView('security') },
+    { id: 'security', label: 'Security', description: 'Password, two-factor, and sessions.', group: 'Pages', onSelect: () => setActiveView('security') },
     ...quickTickets.map((ticket) => ({
       id: `ticket-${ticket.id}`,
       label: ticket.title,
@@ -716,7 +718,16 @@ export default function App() {
         ) : (
           <ErrorBoundary section="security settings">
             <Suspense fallback={<ViewFallback />}>
-              <MfaSettings token={token} />
+              <div style={{ display: 'grid', gap: '1.25rem' }}>
+                <SecurityAccount
+                  name={user.name}
+                  email={user.email}
+                  platformRole={user.platformRole}
+                  onSignOutEverywhere={handleLogout}
+                />
+                <PasswordSettings token={token} />
+                <MfaSettings token={token} />
+              </div>
             </Suspense>
           </ErrorBoundary>
         )}

@@ -23,7 +23,7 @@ export const en = {
     adminTitle: 'Administration',
     adminSub: 'People, catalog, and platform reporting.',
     securityTitle: 'Security',
-    securitySub: 'Sign-in protection for your account.',
+    securitySub: 'Password, two-factor, and sessions for your account.',
   },
   common: {
     search: 'Search',

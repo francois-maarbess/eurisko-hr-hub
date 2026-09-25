@@ -53,7 +53,7 @@ function useIsDark(): boolean {
 function palette(isDark: boolean) {
   return {
     NAVY: isDark ? '#f1f5f9' : '#0f172a',
-    BLUE: isDark ? '#60a5fa' : '#1d4ed8',
+    BLUE: isDark ? '#5a8fc4' : '#1d4ed8',
     GREEN: isDark ? '#4ade80' : '#15803d',
     RED: isDark ? '#f87171' : '#b91c1c',
     AMBER: isDark ? '#fbbf24' : '#b45309',
