@@ -184,5 +184,19 @@ describe('AI-assisted intake (Week 4)', () => {
     expect(draft.confidence).toBe('low');
     expect(draft.resolutionNote).toContain('[Confirm]');
     expect(draft.assumptions.every((item) => item.startsWith('[Confirm]'))).toBe(true);
+    expect(draft.degraded).toBe(true);
+  });
+
+  it('resolution drafting degrades to the local template when Groq throws', async () => {
+    process.env['GROQ_API_KEY'] = 'test-key';
+    const failingGroq = { generateResolutionPlaybook: async () => { throw new Error('Groq timeout'); } } as any;
+    const svc = new AiIntakeService(stubPrisma, new LocalAiProvider(), failingGroq);
+    const draft = await svc.generateResolutionPlaybook({
+      title: 'VPN access issue', description: 'VPN disconnects during remote work.', department: 'IT', requestType: 'VPN Access',
+    });
+    delete process.env['GROQ_API_KEY'];
+    expect(draft.provider).toBe('local-template');
+    expect(draft.degraded).toBe(true);
+    expect(draft.resolutionNote).toContain('[Confirm]');
   });
 });

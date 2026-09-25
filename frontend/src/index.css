@@ -547,6 +547,10 @@ a:focus-visible {
 .chatbot-message { max-width: 88%; border-radius: 12px; padding: .6rem .7rem; font-size: .84rem; line-height: 1.4; }
 .chatbot-message-assistant { color: var(--ink-soft); background: var(--blue-pale); border: 1px solid var(--blue-border); }
 .chatbot-message-user { justify-self: end; color: #fff; background: var(--navy); }
+.chatbot-chips { display: flex; gap: .4rem; flex-wrap: wrap; }
+.chatbot-chips .filter-button { font-size: .75rem; }
+.chatbot-confirmation { padding: .7rem; border: 1px solid var(--warning); border-radius: 10px; background: var(--warning-bg); color: #78350f; }
+.chatbot-confirmation p { margin: .35rem 0 .6rem; font-size: .84rem; }
 .chatbot-form { display: flex; gap: .5rem; align-items: center; }
 @media (max-width: 520px) {
   .chatbot-launcher { right: 1rem; bottom: 1rem; }

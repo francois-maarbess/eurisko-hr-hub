@@ -219,6 +219,7 @@ describe('Service Request Flow (E2E)', () => {
     expect(agentDraft.body.provider).toBe('local-template');
     expect(agentDraft.body.confidence).toBe('low');
     expect(agentDraft.body.resolutionNote).toContain('[Confirm]');
+    expect(agentDraft.body.degraded).toBe(true);
   });
 
   it('concurrent completions: exactly one wins, the other gets 409', async () => {
@@ -638,6 +639,19 @@ describe('Service Request Flow (E2E)', () => {
     const anon = await request(app.getHttpServer())
       .post('/requests/ai-draft')
       .send({ text: 'my laptop is broken' });
+    expect(anon.status).toBe(401);
+  });
+
+  it('operations assistant returns an honest local response without a Groq key', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/ai/chat')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ message: 'How does the queue work?' });
+    expect(res.status).toBe(201);
+    expect(res.body.sessionId).toEqual(expect.any(String));
+    expect(res.body.message).toMatch(/preview|Groq|assistant/i);
+
+    const anon = await request(app.getHttpServer()).post('/ai/chat').send({ message: 'hello' });
     expect(anon.status).toBe(401);
   });
 

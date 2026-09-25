@@ -65,22 +65,71 @@ function BotMark() {
   );
 }
 
-function ChatbotShell() {
+interface ChatMessage {
+  role: 'assistant' | 'user';
+  text: string;
+}
+
+function ChatbotShell({ token }: { token: string }) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
-  const [messages, setMessages] = useState(() => [
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [confirmation, setConfirmation] = useState<{ id: string; kind: string; summary: string } | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => [
     { role: 'assistant', text: 'Hello. I am the Operations Assistant preview.' },
     { role: 'assistant', text: 'I can explain queue views and where to find your work.' },
     { role: 'assistant', text: 'I can point you to New Request, Notifications, or Security.' },
     { role: 'assistant', text: 'A full assistant arrives in a later milestone.' },
   ]);
 
+  const sendMessage = async (text: string) => {
+    if (!text.trim() || sending) return;
+    const clean = text.trim();
+    setMessages((current) => [...current, { role: 'user', text: clean }]);
+    setInput('');
+    setSending(true);
+    try {
+      const response = await fetch(apiUrl('/ai/chat'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ...(sessionId ? { sessionId } : {}), message: clean }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.message || 'Assistant is unavailable.');
+      if (typeof data.sessionId === 'string') setSessionId(data.sessionId);
+      setMessages((current) => [...current, { role: 'assistant', text: data.message || 'I could not produce an answer.' }]);
+      setConfirmation(data.confirmation || null);
+    } catch (error) {
+      setMessages((current) => [...current, { role: 'assistant', text: error instanceof Error ? error.message : 'Assistant is unavailable.' }]);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const confirmAction = async (action: 'confirm' | 'cancel') => {
+    if (!confirmation || !sessionId || sending) return;
+    setSending(true);
+    try {
+      const response = await fetch(apiUrl('/ai/chat'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ sessionId, confirmationId: confirmation.id, confirmationAction: action }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.message || 'Confirmation failed.');
+      setMessages((current) => [...current, { role: 'assistant', text: data.message || 'No change was made.' }]);
+      setConfirmation(null);
+    } catch (error) {
+      setMessages((current) => [...current, { role: 'assistant', text: error instanceof Error ? error.message : 'Confirmation failed.' }]);
+    } finally {
+      setSending(false);
+    }
+  };
+
   const send = (event: React.FormEvent) => {
     event.preventDefault();
-    const text = input.trim();
-    if (!text) return;
-    setMessages((current) => [...current, { role: 'user', text }, { role: 'assistant', text: 'Full assistant arrives in a later milestone.' }]);
-    setInput('');
+    void sendMessage(input);
   };
 
   return (
@@ -98,9 +147,24 @@ function ChatbotShell() {
                 </div>
               ))}
             </div>
+            <div className="chatbot-chips" aria-label="Assistant suggestions">
+              {['Urgent today?', 'Show my stats', 'How does the queue work?'].map((chip) => (
+                <button key={chip} type="button" className="filter-button" onClick={() => void sendMessage(chip)} disabled={sending}>{chip}</button>
+              ))}
+            </div>
+            {confirmation && (
+              <div className="chatbot-confirmation" role="alert">
+                <strong>Confirmation required</strong>
+                <p>{confirmation.summary}</p>
+                <div className="row">
+                  <Button variant="primary" small onClick={() => void confirmAction('confirm')} disabled={sending}>Confirm</Button>
+                  <Button variant="ghost" small onClick={() => void confirmAction('cancel')} disabled={sending}>Cancel</Button>
+                </div>
+              </div>
+            )}
             <form className="chatbot-form" onSubmit={send}>
-              <input className="input" value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask a question" aria-label="Message Operations Assistant" />
-              <Button type="submit" small>Send</Button>
+              <input className="input" value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask about your work" aria-label="Message Operations Assistant" disabled={sending} />
+              <Button type="submit" small disabled={sending}>{sending ? 'Sending…' : 'Send'}</Button>
             </form>
           </div>
         </Modal>
@@ -643,7 +707,7 @@ export default function App() {
           </ErrorBoundary>
         )}
       </AppShell>
-      {activeView === 'overview' && !focusTicketId && <ChatbotShell />}
+      {activeView === 'overview' && !focusTicketId && <ChatbotShell token={token} />}
     </>
   );
 }

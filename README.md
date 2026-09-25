@@ -6,7 +6,7 @@
 
 An internal service hub for submitting, routing, tracking, and resolving employee requests.
 
-**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 103 backend tests + 10 frontend tests, 9 offline AI evals (`npm run test:count`).
+**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 110 backend tests + 10 frontend tests, 9 offline AI evals (`npm run test:count`).
 
 ## Demo (2 minutes)
 
@@ -96,20 +96,25 @@ cd frontend && npm run dev
 3. Create a request (or draft one with AI — **no API key needed**), manage it as admin/agent, resolve it
 4. Optional: enable **two-factor authentication** — open Security settings, scan the QR with any authenticator app, verify the code. Next sign-in asks for password + code (backup codes cover a lost phone).
 
-The Overview page also includes a scripted Operations Assistant shell. It is a
-UI preview only: replies are local canned text and no assistant backend is
-enabled yet.
+The Overview page includes an Operations Assistant. It provides an honest local
+preview without a Groq key; with `GROQ_API_KEY`, it can answer authorized
+questions, show caller-scoped ticket information, and propose sensitive actions
+for explicit confirmation. It never bypasses normal authorization or completion
+rules.
 
 ## Running Tests
 
 ```bash
-npm test      # 103 backend tests (all deterministic, SQLite)
+npm test      # 110 backend tests (all deterministic, SQLite)
 npm run eval:ai  # 9 AI eval cases (offline, no key, no DB)
 cd frontend && npm test  # 10 frontend unit tests (vitest)
 npm run test:count      # verify README counts match reality
 ```
 
-102 tests covering:
+The exact test counts are checked by `npm run test:count -- --check` and are
+kept synchronized here automatically.
+
+120 tests covering:
 - **Unit**: Status transitions (10) + AI extractor/validation/fallback/sensitive/off-topic (10) + SLA fallback (1) + password accounts (6) + purge & duplicate scoring (3) + production secret guard (4)
 - **Integration**: Prisma ↔ SQLite database lifecycle (3)
 - **E2E (59)**: Full HTTP flow with auth, scoped views, create, claim, takeover, complete, concurrent-completion race, documents lifecycle, notifications, overdue inbox dedupe, duplicates (scoped), report + analytics, manager memberships, owner-cancel/admin-claim rules, validation, regression + AI draft/correction/health endpoints + catalog + admin user lifecycle + audit search + filtered export + SLA deadlines + breach center + rate limiting + TOTP two-factor + logout revocation + deactivation + correlation IDs + queue pagination/claimedBy filters + timeline privacy
@@ -169,6 +174,7 @@ completes the ticket, and existing completion evidence rules still apply.
 | `GET` | `/requests/:id` | Yes | Get single request |
 | `POST` | `/requests` | Yes | Create a new request |
 | `POST` | `/requests/ai-draft` | Yes | Draft a ticket from free text (advisory, creates nothing) |
+| `POST` | `/ai/chat` | Yes | Caller-scoped operations assistant; writes require confirmation |
 | `PATCH` | `/requests/:id/claim` | Yes | Claim a pending request (dept members only) |
 | `PATCH` | `/requests/:id/status` | Yes | Update request status |
 | `PATCH` | `/requests/:id/reroute` | Manager | Re-route ticket to another department |

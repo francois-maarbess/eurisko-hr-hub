@@ -27,6 +27,7 @@ model User {
   notifications         Notification[]
   staffNotes            StaffNote[]
   refreshTokens         RefreshToken[]
+  chatSessions          ChatSession[]
 }
 
 model Department {
@@ -109,6 +110,32 @@ model Request {
   @@index([employeeId, createdAt(sort: Desc)])
   @@index([departmentId, status, priority, createdAt])
   @@index([parentRequestId, status])
+}
+
+model ChatSession {
+  id                  String        @id @default(cuid())
+  userId              String
+  pendingConfirmation String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+
+  @@index([userId, updatedAt])
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  sessionId String
+  role      String
+  content   String
+  toolName  String?
+  createdAt DateTime @default(now())
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
 }
 
 model StaffNote {

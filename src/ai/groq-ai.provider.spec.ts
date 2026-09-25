@@ -98,6 +98,8 @@ describe('GroqAiProvider confidence (Week 4 follow-up)', () => {
     const sent = JSON.parse(fetchMock.mock.calls[0][1].body as string);
     expect(sent.messages[0].content).toContain('Do not say or imply any action was already taken');
     expect(sent.messages[0].content).toContain('untrusted data');
+    expect(sent.messages[0].content).toContain('valid JSON');
+    expect(fetchMock.mock.calls[0][1].signal).toBeDefined();
   });
 
   it('rejects an unusable resolution note instead of returning unsafe text', async () => {

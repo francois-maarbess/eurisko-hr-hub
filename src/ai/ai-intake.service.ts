@@ -291,32 +291,40 @@ export class AiIntakeService {
     department: string;
     requestType: string;
   }) {
+    const localTemplate = () => ({
+      resolutionNote: [
+        `[Confirm] Review the reported ${input.requestType.toLowerCase()} issue: ${input.title.trim()}.`,
+        `[Confirm] Reproduce the issue using only the information provided: ${input.description.trim().slice(0, 360)}.`,
+        '[Confirm] Record the verified action taken, the observed result, and any remaining follow-up before completing the request.',
+      ].join('\n'),
+      assumptions: [
+        `[Confirm] The ${input.department} team owns this ${input.requestType.toLowerCase()} request.`,
+        '[Confirm] The reported issue and outcome have been independently verified before completion.',
+      ],
+      provider: 'local-template',
+      confidence: 'low' as const,
+      promptVersion: PROMPT_VERSION,
+      degraded: true,
+    });
     if (!process.env['GROQ_API_KEY']) {
-      return {
-        resolutionNote: [
-          `[Confirm] Review the reported ${input.requestType.toLowerCase()} issue: ${input.title.trim()}.`,
-          `[Confirm] Reproduce the issue using only the information provided: ${input.description.trim().slice(0, 360)}.`,
-          `[Confirm] Record the verified action taken, the observed result, and any remaining follow-up before completing the request.`,
-        ].join('\n'),
-        assumptions: [
-          `[Confirm] The ${input.department} team owns this ${input.requestType.toLowerCase()} request.`,
-          '[Confirm] The reported issue and outcome have been independently verified before completion.',
-        ],
-        provider: 'local-template',
-        confidence: 'low' as const,
-        promptVersion: PROMPT_VERSION,
-      };
+      return localTemplate();
     }
     try {
       return {
         ...(await this.groq.generateResolutionPlaybook(input)),
         provider: this.groq.name,
+        confidence: 'high' as const,
         promptVersion: PROMPT_VERSION,
+        degraded: false,
       };
     } catch (error) {
       this.recordProviderError((error as Error).message);
-      this.logger.warn('AI resolution drafting failed; no ticket state was changed.');
-      throw new ServiceUnavailableException('AI could not draft a safe resolution note. Write the verified resolution manually.');
+      this.logger.warn('AI resolution drafting failed; using the local template and leaving ticket state unchanged.');
+      const fallback = localTemplate();
+      if (!fallback.resolutionNote.trim()) {
+        throw new ServiceUnavailableException('AI could not draft a usable resolution note. Write one manually.');
+      }
+      return fallback;
     }
   }
 

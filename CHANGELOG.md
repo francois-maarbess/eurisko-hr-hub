@@ -3,6 +3,18 @@
 All instructor-visible changes. SQLite-only, zero new prerequisites — every entry
 preserves the SQLite setup and locked npm dependencies.
 
+## Unreleased (AI resolution reliability and assistant foundation)
+
+- Fixed Groq JSON-mode resolution drafting by requiring JSON explicitly in the
+  provider prompt; increased the playbook timeout to ten seconds.
+- Groq resolution failures now degrade to a clearly labeled local `[Confirm]`
+  template instead of returning a 503; no-key and provider-failure paths are
+  covered offline.
+- Added authenticated `POST /ai/chat` with caller-scoped reads, bounded tool
+  execution, confirmation-gated writes, injection refusal, audit events, and
+  SQLite-backed chat history. The Overview assistant now uses this endpoint
+  when configured and remains honest/local without a key.
+
 ## Unreleased (queue, trust, and onboarding polish)
 
 **Finish pass: contrast, touch, states, demo docs**

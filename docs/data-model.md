@@ -41,6 +41,16 @@ Store a storage key, not a public URL. A soft-deleted database row may remain fo
 
 `id`, request ID when applicable, actor ID, action, old value, new value, metadata, created timestamp. This is append-only.
 
+### `chat_sessions` and `chat_messages`
+
+`chat_sessions` belongs to exactly one user and stores conversation timestamps
+plus a nullable, non-sensitive pending-confirmation summary. `chat_messages`
+stores the session, role, content, optional tool name, and creation timestamp.
+Sessions are user-scoped: an authenticated caller cannot load another user's
+session. Executable confirmation payloads are intentionally held in process
+memory only and expire when the API restarts; secrets such as passwords are not
+stored in chat history or pending-confirmation metadata.
+
 ## 2. Invariants
 
 * Every request type and request department must match.

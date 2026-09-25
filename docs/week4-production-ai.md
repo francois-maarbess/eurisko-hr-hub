@@ -14,6 +14,31 @@ SLA targets. Resolution playbooks use Groq when configured and a deterministic,
 low-confidence `[Confirm]` template when it is not; neither path changes ticket
 state.
 
+## Operations Assistant
+
+Authenticated users can call `POST /ai/chat` with `{ message, sessionId? }`.
+The assistant uses the caller's JWT identity and active department memberships
+for every read. It can report caller-scoped statistics, list/search authorized
+tickets, show authorized ticket details, report non-secret AI health, and start
+MFA setup for the caller's own account. The authenticator code must still be
+entered by the user in Security settings.
+
+Create-request, claim, reroute, and admin create-user actions are proposal-only
+until the UI returns the confirmation card and the caller explicitly confirms
+with its confirmation ID. The server repeats authorization and validation when
+executing and writes an audit event. Pending confirmation records persist only a
+safe summary; executable details expire with the running API process, so a
+restart cannot execute a stale or sensitive action.
+
+With no `GROQ_API_KEY`, the same window returns an honest local capability
+message and performs no model-backed tool actions. With a key, Groq is called
+through the existing raw `fetch` provider, with bounded structured-answer
+parsing, a bounded six-step tool loop, a ten-second timeout, and a safe
+unavailable response on provider failure. Groq does not allow JSON response mode
+and function calling in the same request, so the server validates the returned
+answer shape instead. Keys, prompts, hashes, tokens, private notes, and
+unauthorized ticket data are never returned to the caller.
+
 ## AI request draft
 
 `POST /requests/ai-draft` loads the active, database-owned catalog and returns

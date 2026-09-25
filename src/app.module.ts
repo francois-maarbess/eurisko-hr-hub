@@ -17,6 +17,8 @@ import { AuditController } from './audit.controller';
 import { HealthController } from './health.controller';
 import { RequestLoggerMiddleware } from './request-logger.middleware';
 import { HttpExceptionFilter } from './http-exception.filter';
+import { AiChatController } from './ai/ai-chat.controller';
+import { AiChatService } from './ai/ai-chat.service';
 
 @Module({
   imports: [
@@ -44,6 +46,7 @@ import { HttpExceptionFilter } from './http-exception.filter';
     NotificationsController,
     DepartmentsController,
     HealthController,
+    AiChatController,
     AuditController,
   ],
   providers: [
@@ -51,6 +54,7 @@ import { HttpExceptionFilter } from './http-exception.filter';
     AuditService,
     NotificationsService,
     DocumentsService,
+    AiChatService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     // Registered here (not only in main.ts) so e2e, tests, and any
     // Nest bootstrap get identical error shape { statusCode, message,

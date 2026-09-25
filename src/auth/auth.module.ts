@@ -26,6 +26,6 @@ import { assertProductionSecrets } from '../config-check';
   ],
   controllers: [AuthController],
   providers: [JwtStrategy, AuthService, MfaService, TokenService],
-  exports: [JwtModule, PassportModule],
+  exports: [JwtModule, PassportModule, AuthService, MfaService],
 })
 export class AuthModule {}

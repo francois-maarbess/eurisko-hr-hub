@@ -533,7 +533,10 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
       if (typeof data.resolutionNote !== 'string' || data.resolutionNote.trim().length < 30) {
         throw new Error('AI returned an unusable resolution note. Write the verified resolution manually.');
       }
-      setResolutionInputs((current) => ({ ...current, [ticket.id]: data.resolutionNote }));
+      const draftText = data.degraded
+        ? `${data.resolutionNote}\n\nAI service degraded — template draft, verify every step.`
+        : data.resolutionNote;
+      setResolutionInputs((current) => ({ ...current, [ticket.id]: draftText }));
       setPlaybookAssumptions((current) => ({ ...current, [ticket.id]: Array.isArray(data.assumptions) ? data.assumptions : [] }));
       return true;
     } catch (error) {
