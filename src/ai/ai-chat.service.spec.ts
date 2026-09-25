@@ -247,4 +247,41 @@ describe('AI operations assistant safety', () => {
       else process.env['GROQ_API_KEY'] = realKey;
     }
   });
+
+  it('proposes completion with a drafted note for tickets the caller claimed', async () => {
+    const { service, prisma, requests } = harness();
+    const ticket = { id: 't1', status: 'IN_PROGRESS', title: 'Broken screen', department: { name: 'IT' }, requestType: { name: 'Laptop' }, claimant: null };
+    requests.findOne.mockResolvedValue(ticket);
+    requests.generateResolutionPlaybook = jest.fn(async () => ({ resolutionNote: 'Verified fix applied and tested OK today.', assumptions: [] }));
+    const result = await (service as any).proposeComplete({ id: 'alice', platformRole: 'EMPLOYEE' }, 'session-1', { requestId: 't1' });
+    expect(result.requiresConfirmation).toBe(true);
+    const stored = JSON.parse(prisma.chatSession.update.mock.calls[0][0].data.pendingConfirmation);
+    expect(stored.kind).toBe('complete');
+    expect(stored.payload.resolutionNote).toContain('Verified fix');
+  });
+
+  it('refuses completion proposals for tickets the caller did not claim', async () => {
+    const { service, requests } = harness();
+    requests.findOne.mockResolvedValue({ id: 't1', status: 'IN_PROGRESS' });
+    requests.generateResolutionPlaybook = jest.fn(async () => { throw new ForbiddenException('Only the agent currently assigned to this request can draft its resolution.'); });
+    await expect((service as any).proposeComplete({ id: 'alice', platformRole: 'EMPLOYEE' }, 'session-1', { requestId: 't1' })).rejects.toThrow(/currently assigned/);
+  });
+
+  it('surfaces partial progress instead of failing when the tool loop caps out', async () => {
+    const { service, prisma, requests } = harness();
+    prisma.department.findMany.mockResolvedValue([]);
+    requests.findOne.mockResolvedValue({ id: 't1', status: 'PENDING', title: 'T', department: { name: 'IT' }, requestType: { name: 'L' }, claimant: null });
+    const realFetch = global.fetch;
+    const mkCall = (name: string, args: object, id: string) => ({ id, type: 'function', function: { name, arguments: JSON.stringify(args) } });
+    (global as any).fetch = jest.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ choices: [{ message: { role: 'assistant', tool_calls: [mkCall('propose_claim', { requestId: 't1' }, 'c1')] } }] }) })
+      .mockImplementation(async () => ({ ok: true, json: async () => ({ choices: [{ message: { role: 'assistant', tool_calls: [mkCall('my_stats', {}, 'c2')] } }] }) }));
+    try {
+      const result = await (service as any).runGroq({ id: 'alice', platformRole: 'EMPLOYEE' }, 'session-1', true);
+      expect(result.message).toMatch(/first step/i);
+      expect(result.confirmation).toBeTruthy();
+    } finally {
+      (global as any).fetch = realFetch;
+    }
+  });
 });

@@ -728,6 +728,41 @@ describe('Service Request Flow (E2E)', () => {
     await prisma.user.delete({ where: { id: created!.id } });
   });
 
+  it('operations assistant complete-confirm resolves a claimed ticket', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP', departmentId: dept!.id } });
+    const agent = await prisma.user.findFirst({ where: { email: 'bob@acme.com' } });
+    const made = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ departmentId: dept!.id, requestTypeId: rt!.id, title: 'E2E chat-complete probe ticket', description: 'Resolving through the assistant confirm path.', priority: 'STANDARD' });
+    expect(made.status).toBe(201);
+    const claimed = await request(app.getHttpServer())
+      .patch(`/requests/${made.body.id}/claim`)
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(claimed.status).toBe(200);
+    const session = await (prisma as any).chatSession.create({ data: { userId: agent!.id } });
+    await (prisma as any).chatSession.update({
+      where: { id: session.id },
+      data: {
+        pendingConfirmation: JSON.stringify({
+          id: 'hypothesis-done-action', kind: 'complete', summary: 'Complete with drafted note',
+          payload: { requestId: made.body.id, resolutionNote: 'Verified fix applied and tested in the e2e probe.' },
+        }),
+      },
+    });
+    const res = await request(app.getHttpServer())
+      .post('/ai/chat')
+      .set('Authorization', `Bearer ${agentToken}`)
+      .send({ sessionId: session.id, confirmationId: 'hypothesis-done-action', confirmationAction: 'confirm' });
+    expect(res.status).toBe(201);
+    expect(res.body.message).toMatch(/confirmed/i);
+    const done = await prisma.request.findUnique({ where: { id: made.body.id } });
+    expect(done!.status).toBe('COMPLETED');
+    await prisma.auditLog.deleteMany({ where: { requestId: made.body.id } });
+    await prisma.request.delete({ where: { id: made.body.id } });
+  });
+
   it('catalog lists departments and filters types without duplicates', async () => {
     const depts = await request(app.getHttpServer())
       .get('/catalog/departments')
