@@ -13,7 +13,7 @@ An internal service hub for submitting, routing, tracking, and resolving employe
 > Replace the two placeholder URLs below with the real Render URLs before submitting.
 
 - **App:** `https://eurisko-hr-hub-frontend.onrender.com`
-- **API health:** `https://<backend>.onrender.com/health` (expect `"status":"ok"`)
+- **API health:** `https://eurisko-hr-hub-1.onrender.com/health` (expect `"status":"ok"`)
 - **What it does:** employees submit requests (IT, HR, Finance, Facilities, People Ops) through one intake; department staff claim, resolve, and attach documents; everything is audit-logged and notification-driven, with an AI assistant that drafts (never decides).
 - **Demo access** (password for all three: `Password123!`):
   - `alice@acme.com` — Employee: submits, tracks, rates, cancels own pending requests

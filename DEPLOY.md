@@ -13,8 +13,9 @@ both describe the same configuration.
    - `CORS_ORIGINS` — leave blank for the first deploy; set to the frontend
      URL (step 4) afterwards.
    - `VITE_API_BASE` — leave blank for the first deploy (see step 3).
-3. After the backend is live, copy its URL (`https://<backend>.onrender.com`),
-   set the frontend's `VITE_API_BASE` to it, and redeploy the static site
+3. After the backend is live (`https://eurisko-hr-hub-1.onrender.com/health`
+   returns `"status":"ok"`), copy its URL and set the frontend's
+   `VITE_API_BASE` to it, then redeploy the static site
    (the API address is baked in at build time — editing the variable alone
    does nothing without a rebuild).
 4. Back on the backend, set `CORS_ORIGINS` to the frontend URL and redeploy.
