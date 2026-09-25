@@ -8,9 +8,12 @@ interface LoginPageProps {
     user: { id: string; email: string; name: string; platformRole: string },
     refreshToken?: string,
   ) => void;
+  themeMode?: string;
+  isDark?: boolean;
+  onToggleTheme?: () => void;
 }
 
-export default function LoginPage({ onLogin }: LoginPageProps) {
+export default function LoginPage({ onLogin, themeMode, isDark, onToggleTheme }: LoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -88,12 +91,24 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
   return (
     <div className="login-wrap">
-      <div className="card login-card">
-        <div className="brand auth-brand">
-          <span className="brand-mark">H</span>
-          Internal Operations Hub
+      <div className="card login-card login-glow">
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="brand auth-brand">
+            <span className="brand-mark">H</span>
+            Internal Operations Hub
+          </div>
+          {onToggleTheme && (
+            <button
+              className="theme-toggle"
+              onClick={onToggleTheme}
+              title={`Theme: ${themeMode || 'system'} — click to switch`}
+              aria-label={`Switch theme (current: ${themeMode || 'system'})`}
+            >
+              {isDark ? '☾' : '☀'}
+            </button>
+          )}
         </div>
-        <p className="card-sub">Sign in with your company email</p>
+        <p className="card-sub">Operations cockpit — submit, track, and resolve requests in one calm place.</p>
 
         {mfaToken ? (
           <form onSubmit={handleMfaChallenge}>

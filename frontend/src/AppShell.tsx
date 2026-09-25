@@ -41,6 +41,9 @@ interface AppShellProps {
   onSignOut: () => void;
   topRight?: React.ReactNode;
   children: React.ReactNode;
+  themeMode?: string;
+  isDark?: boolean;
+  onToggleTheme?: () => void;
 }
 
 /**
@@ -61,6 +64,9 @@ export default function AppShell({
   onSignOut,
   topRight,
   children,
+  themeMode,
+  isDark,
+  onToggleTheme,
 }: AppShellProps) {
   const items = NAV.filter(
     (n) => (!n.staffOnly || isStaff) && (!n.adminOnly || isAdmin),
@@ -106,6 +112,16 @@ export default function AppShell({
               <div className="shell-sub">{ctx.sub}</div>
             </div>
             <div className="shell-header-actions">
+              {onToggleTheme && (
+                <button
+                  className="theme-toggle"
+                  onClick={onToggleTheme}
+                  title={`Theme: ${themeMode || 'system'} — click to switch`}
+                  aria-label={`Switch theme (current: ${themeMode || 'system'})`}
+                >
+                  {isDark ? '☾' : '☀'}
+                </button>
+              )}
               <button className="shell-search-button" onClick={onQuickSwitcher} aria-label="Open quick switcher">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 5 5" /></svg>
                 <span>{en.common.search}</span>

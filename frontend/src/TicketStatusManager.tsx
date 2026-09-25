@@ -24,7 +24,7 @@ function Tracker({ status }: { status: TicketStatus }) {
               padding: '0.25rem 0.6rem',
               borderRadius: '999px',
               border: '1px solid var(--border)',
-              background: current ? 'var(--navy)' : done ? 'var(--blue-pale)' : '#fff',
+              background: current ? 'var(--blue)' : done ? 'var(--blue-pale)' : 'var(--card)',
               color: current ? '#fff' : done ? 'var(--blue-dark)' : 'var(--muted)',
             }}
           >
@@ -123,15 +123,15 @@ interface CardErrorState {
 
 const STATUS_COLORS: Record<TicketStatus, { background: string; color: string }> = {
   PENDING: { background: 'var(--warning-bg)', color: 'var(--warning)' },
-  IN_PROGRESS: { background: 'var(--info-bg)', color: '#1d4ed8' },
+  IN_PROGRESS: { background: 'var(--info-bg)', color: 'var(--blue-dark)' },
   COMPLETED: { background: 'var(--success-bg)', color: 'var(--success)' },
-  CANCELLED: { background: '#f1f5f9', color: 'var(--muted)' },
+  CANCELLED: { background: 'var(--surface-2)', color: 'var(--muted)' },
   REJECTED: { background: 'var(--danger-bg)', color: 'var(--danger)' },
 };
 
 const PRIORITY_COLORS: Record<TicketPriority, { background: string; color: string }> = {
-  LOW: { background: '#f1f5f9', color: 'var(--muted)' },
-  STANDARD: { background: 'var(--info-bg)', color: '#1d4ed8' },
+  LOW: { background: 'var(--surface-2)', color: 'var(--muted)' },
+  STANDARD: { background: 'var(--info-bg)', color: 'var(--blue-dark)' },
   URGENT: { background: 'var(--danger-bg)', color: 'var(--danger)' },
 };
 
@@ -169,8 +169,8 @@ function getSlaInfo(ticket: TicketState): { label: string; bg: string; color: st
     const met = completedMs <= deadlineMs;
     return {
       label: met ? `✓ SLA Met` : `SLA Breached`,
-      bg: met ? '#dcfce7' : '#fee2e2',
-      color: met ? '#15803d' : '#b91c1c',
+      bg: met ? 'var(--success-bg)' : 'var(--danger-bg)',
+      color: met ? 'var(--success)' : 'var(--danger)',
       title: `${sourceTitle} · finished ${met ? 'on time' : 'late'}`,
     };
   }
@@ -178,7 +178,7 @@ function getSlaInfo(ticket: TicketState): { label: string; bg: string; color: st
   if (isTerminal) {
     return {
       label: `SLA target: ${targetLabel}`,
-      bg: '#f1f5f9',
+      bg: 'var(--surface-2)',
       color: 'var(--muted)',
       title: sourceTitle,
     };
@@ -189,8 +189,8 @@ function getSlaInfo(ticket: TicketState): { label: string; bg: string; color: st
     const overdue = formatDuration(Math.abs(remainingMs));
     return {
       label: `SLA Overdue (+${overdue})`,
-      bg: '#fee2e2',
-      color: '#b91c1c',
+      bg: 'var(--danger-bg)',
+      color: 'var(--danger)',
       title: `${sourceTitle} · overdue by ${overdue}`,
     };
   }
@@ -203,8 +203,8 @@ function getSlaInfo(ticket: TicketState): { label: string; bg: string; color: st
 
   return {
     label: `SLA: ${text} left`,
-    bg: isWarning ? '#fef3c7' : '#eff6ff',
-    color: isWarning ? '#b45309' : '#1d4ed8',
+    bg: isWarning ? 'var(--warning-bg)' : 'var(--blue-pale)',
+    color: isWarning ? 'var(--warning)' : 'var(--blue-dark)',
     title: `${sourceTitle} · ${text} remaining`,
   };
 }
@@ -220,8 +220,8 @@ function highlightMatch(text: string, q: string): React.ReactNode {
           <mark
             key={i}
             style={{
-              background: '#fef08a',
-              color: '#854d0e',
+              background: 'var(--mark-bg)',
+              color: 'var(--mark-text)',
               padding: '0 2px',
               borderRadius: '2px',
               fontWeight: 700,
@@ -277,6 +277,11 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
   const [filterHasNotes, setFilterHasNotes] = useState(!!savedFilters.filterHasNotes);
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [boardView, setBoardView] = useState(initialView !== 'mine' && !!savedFilters.boardView);
+  // De-density UI: expanded long descriptions, overflow menu for
+  // secondary actions, collapsible filter panel. Purely presentational.
+  const [expandedDesc, setExpandedDesc] = useState<Record<string, boolean>>({});
+  const [moreOpen, setMoreOpen] = useState<Record<string, boolean>>({});
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Per-ticket form inputs
   const [resolutionInputs, setResolutionInputs] = useState<Record<string, string>>({});
@@ -987,7 +992,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
           <button
             onClick={onBack}
             style={{
-              border: '1px solid var(--border)', background: '#fff', borderRadius: '10px',
+              border: '1px solid var(--border)', background: 'var(--card)', borderRadius: '10px',
               padding: '0.5rem 0.9rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700,
               color: 'var(--blue)',
             }}
@@ -1028,11 +1033,13 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search requests by title, description, or dept…"
+              aria-label="Search requests"
             />
             <select
               className="select toolbar-select"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
+              aria-label="Filter by status"
             >
               <option value="ALL">All statuses</option>
               <option value="PENDING">Pending</option>
@@ -1048,43 +1055,57 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
             >
               {sortLabel}
             </button>
+            <div className="filter-popover-wrap">
+              <button
+                className={`toolbar-button${filterUrgentOnly || filterHasDocs || filterHasNotes || overdueOnly ? ' active' : ''}`}
+                onClick={() => setFiltersOpen((o) => !o)}
+                aria-expanded={filtersOpen}
+                aria-label="Toggle extra filters"
+              >
+                Filters{(filterUrgentOnly || filterHasDocs || filterHasNotes || overdueOnly) ? ` (${[filterUrgentOnly, filterHasDocs, filterHasNotes && isStaff, overdueOnly].filter(Boolean).length})` : ''}
+              </button>
+              {filtersOpen && (
+                <>
+                  <div className="notification-backdrop" onClick={() => setFiltersOpen(false)} />
+                  <div className="filter-popover" role="group" aria-label="Extra filters">
+                    <button
+                      className={`filter-button${filterUrgentOnly ? ' danger-active' : ''}`}
+                      onClick={() => setFilterUrgentOnly((u) => !u)}
+                    >
+                      Urgent only
+                    </button>
+                    <button
+                      className={`filter-button${filterHasDocs ? ' active' : ''}`}
+                      onClick={() => setFilterHasDocs((d) => !d)}
+                    >
+                      Has attachments
+                    </button>
+                    {isStaff && (
+                      <button
+                        className={`filter-button${filterHasNotes ? ' active' : ''}`}
+                        onClick={() => setFilterHasNotes((n) => !n)}
+                      >
+                        Has staff notes
+                      </button>
+                    )}
+                    <button
+                      className={`filter-button${overdueOnly ? ' danger-active' : ''}`}
+                      onClick={() => {
+                        setOverdueOnly((o) => {
+                          if (!o) setStatusFilter('ALL');
+                          return !o;
+                        });
+                      }}
+                      title="Show only open tickets past their SLA deadline"
+                    >
+                      Overdue only
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
-          <div className="row quick-filters">
-            <span className="muted">Quick filters:</span>
-        <button
-          className={`filter-button${filterUrgentOnly ? ' danger-active' : ''}`}
-          onClick={() => setFilterUrgentOnly((u) => !u)}
-        >
-          Urgent Only
-        </button>
-        <button
-          className={`filter-button${filterHasDocs ? ' active' : ''}`}
-          onClick={() => setFilterHasDocs((d) => !d)}
-        >
-          Has Attachments
-        </button>
-        {isStaff && (
-          <button
-            className={`filter-button${filterHasNotes ? ' active' : ''}`}
-            onClick={() => setFilterHasNotes((n) => !n)}
-          >
-            Has Staff Notes
-          </button>
-        )}
-        <button
-          className={`filter-button${overdueOnly ? ' danger-active' : ''}`}
-          onClick={() => {
-            setOverdueOnly((o) => {
-              if (!o) setStatusFilter('ALL');
-              return !o;
-            });
-          }}
-          title="Show only open tickets past their SLA deadline"
-        >
-          Overdue
-        </button>
-        </div>
           <div className="row active-filter-chips" aria-label="Active filters">
             {query.trim() && <button className="filter-button" onClick={() => setQuery('')} aria-label="Remove search filter">Search: {query.trim()} ×</button>}
             {statusFilter !== 'ALL' && <button className="filter-button" onClick={() => setStatusFilter('ALL')} aria-label="Remove status filter">Status: {formatEnum(statusFilter)} ×</button>}
@@ -1100,7 +1121,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
       )}
 
       {toast && (
-        <div style={{ background: 'var(--navy)', color: '#fff', borderRadius: '10px', padding: '0.7rem 0.9rem', fontWeight: 600 }}>
+        <div style={{ background: '#0f172a', color: '#fff', borderRadius: '10px', padding: '0.7rem 0.9rem', fontWeight: 600 }}>
           {toast}
         </div>
       )}
@@ -1199,23 +1220,37 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                     {sla.label}
                   </Badge>
                 </span>
-                <Badge bg={PRIORITY_COLORS[ticket.priority].background} color={PRIORITY_COLORS[ticket.priority].color}>
-                  {formatEnum(ticket.priority)}
-                </Badge>
                 <Badge bg={STATUS_COLORS[ticket.status].background} color={STATUS_COLORS[ticket.status].color}>
                   {formatEnum(ticket.status)}
                 </Badge>
-                {!isTerminalCard && (
-                  <Badge bg="var(--blue-pale)" color="#1d4ed8">
-                    Open {ageOf(ticket.createdAt)}
+                {ticket.priority === 'URGENT' && !isTerminalCard && (
+                  <Badge bg={PRIORITY_COLORS[ticket.priority].background} color={PRIORITY_COLORS[ticket.priority].color}>
+                    Urgent
                   </Badge>
                 )}
               </div>
             </div>
+            <div className="muted" style={{ fontSize: '0.78rem', marginTop: '0.3rem' }}>
+              {ticket.department && `${ticket.department.code}`}
+              {ticket.requestType && ` · ${ticket.requestType.name}`}
+              {ticket.priority !== 'URGENT' && ` · ${formatEnum(ticket.priority)}`}
+              {!isTerminalCard && ` · Open ${ageOf(ticket.createdAt)}`}
+              {ticket.owner && ` · by ${ticket.owner.displayName}`}
+              {ticket.claimant && ` · Claimed by ${ticket.claimant.displayName}`}
+            </div>
 
-            <p style={{ margin: '0.75rem 0', lineHeight: 1.5, color: '#334155' }}>
+            <p className={`ticket-desc${expandedDesc[ticket.id] ? '' : ' clamp-2'}`}>
               {highlightMatch(ticket.description, debouncedQuery)}
             </p>
+            {ticket.description.length > 140 && (
+              <button
+                className="subsurface-toggle"
+                onClick={() => setExpandedDesc((c) => ({ ...c, [ticket.id]: !c[ticket.id] }))}
+                aria-expanded={!!expandedDesc[ticket.id]}
+              >
+                {expandedDesc[ticket.id] ? 'Show less' : 'Show more'}
+              </button>
+            )}
 
             {!!ticket.macroProgress?.total && (
               <section className="macro-progress" aria-label="Workflow task progress">
@@ -1279,7 +1314,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                 {activityOpen[ticket.id] ? '▾ Activity Timeline' : '▸ Activity Timeline'}
               </button>
               {activityOpen[ticket.id] && (
-                <div style={{ marginTop: '0.5rem', display: 'grid', gap: '0.4rem', background: '#f8fafc', padding: '0.65rem 0.85rem', borderRadius: '8px' }}>
+                <div className="ticket-subsurface">
                   {(activityCache[ticket.id] || []).map((a, idx, arr) => {
                     const isStatus = a.label.startsWith('Status changed:');
                     const isReroute = a.label.startsWith('Re-routed');
@@ -1288,15 +1323,15 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                     const isRated = a.label.startsWith('Rated');
                     const newStatus = isStatus ? a.label.replace('Status changed: ', '').split(' → ')[1] : '';
                     const nodeColor = isCreated
-                      ? 'var(--navy)'
+                      ? 'var(--muted)'
                       : newStatus === 'COMPLETED' || isRated
-                        ? '#15803d'
+                        ? 'var(--success)'
                         : newStatus === 'REJECTED'
                           ? 'var(--danger)'
                           : isNote
-                            ? '#7c3aed'
+                            ? 'var(--blue-dark)'
                             : isReroute
-                              ? '#b45309'
+                              ? 'var(--warning)'
                               : isStatus
                                 ? 'var(--blue)'
                                 : 'var(--muted)';
@@ -1309,7 +1344,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                         <span
                           style={{
                             position: 'absolute', left: 0, top: '3px', width: '12px', height: '12px',
-                            borderRadius: '999px', background: nodeColor, border: '2px solid #fff',
+                            borderRadius: '999px', background: nodeColor, border: '2px solid var(--card)',
                             boxShadow: '0 0 0 1px var(--border)',
                           }}
                         />
@@ -1317,11 +1352,11 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                           {isStatus ? (
                             <span>
                               Status:{' '}
-                              <span style={{ background: '#f1f5f9', padding: '1px 5px', borderRadius: '4px', fontSize: '0.78rem' }}>
+                              <span style={{ background: 'var(--surface-2)', padding: '1px 5px', borderRadius: '4px', fontSize: '0.78rem' }}>
                                 {a.label.replace('Status changed: ', '').split(' → ')[0]}
                               </span>
                               {' ➔ '}
-                              <span style={{ background: 'var(--blue-pale)', color: '#1d4ed8', padding: '1px 5px', borderRadius: '4px', fontSize: '0.78rem' }}>
+                              <span style={{ background: 'var(--blue-pale)', color: 'var(--blue-dark)', padding: '1px 5px', borderRadius: '4px', fontSize: '0.78rem' }}>
                                 {a.label.replace('Status changed: ', '').split(' → ')[1]}
                               </span>
                             </span>
@@ -1331,7 +1366,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                         </div>
                         {isNote && isStaff && <span className="private-staff-label">Private to staff</span>}
                         {isReroute && a.details && (
-                          <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '4px', padding: '0.25rem 0.45rem', marginTop: '0.2rem', fontSize: '0.76rem' }}>
+                          <div className="ticket-subsurface-inner" style={{ marginTop: '0.2rem', fontSize: '0.76rem' }}>
                             <strong>Audit Reason:</strong> {a.details}
                           </div>
                         )}
@@ -1367,7 +1402,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                   {docsOpen[ticket.id] ? '▾ Attachments' : '▸ Attachments'}
                 </button>
                 {docsOpen[ticket.id] && (
-                  <div style={{ marginTop: '0.4rem', display: 'grid', gap: '0.35rem', background: '#f8fafc', padding: '0.65rem 0.85rem', borderRadius: '8px' }}>
+                  <div className="ticket-subsurface">
                     {(docsCache[ticket.id] || []).map((d) => (
                       <div key={d.id} className="row" style={{ justifyContent: 'space-between' }}>
                         <span style={{ fontSize: '0.85rem' }}>
@@ -1419,7 +1454,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                             aria-valuemin={0}
                             aria-valuemax={100}
                             aria-label="Upload progress"
-                            style={{ display: 'block', height: '6px', borderRadius: '999px', background: '#e2e8f0', marginTop: '0.4rem', overflow: 'hidden' }}
+                            style={{ display: 'block', height: '6px', borderRadius: '999px', background: 'var(--border)', marginTop: '0.4rem', overflow: 'hidden' }}
                           >
                             <span style={{ display: 'block', height: '100%', width: `${uploadProgress[ticket.id] ?? 0}%`, background: 'var(--blue)' }} />
                           </span>
@@ -1450,9 +1485,9 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
               </button>
               <span className="private-staff-label">Private to staff</span>
                 {notesOpen[ticket.id] && (
-                  <div style={{ marginTop: '0.4rem', display: 'grid', gap: '0.4rem', background: '#f8fafc', padding: '0.65rem 0.85rem', borderRadius: '8px' }}>
+                  <div className="ticket-subsurface">
                     {(notesCache[ticket.id] || []).map((n) => (
-                      <div key={n.id} style={{ fontSize: '0.85rem', background: '#fff', border: '1px solid var(--border)', borderRadius: '6px', padding: '0.45rem 0.6rem' }}>
+                      <div key={n.id} className="ticket-subsurface-inner">
                         <div>{n.content}</div>
                         <div className="muted" style={{ fontSize: '0.75rem', marginTop: '0.2rem' }}>
                           {n.author?.displayName || n.authorName || 'Staff'} · {n.createdAt ? new Date(n.createdAt).toLocaleString() : ''}
@@ -1572,8 +1607,8 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
             {canRate && (
               <div style={{ marginTop: '0.75rem' }}>
                 {ratingFor === ticket.id ? (
-                  <div style={{ display: 'grid', gap: '0.5rem', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '0.75rem' }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#92400e' }}>How satisfied are you with this resolution?</div>
+                  <div className="ticket-subsurface">
+                    <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--warning)' }}>How satisfied are you with this resolution?</div>
                     <div className="row" style={{ gap: '0.35rem' }}>
                       {[1, 2, 3, 4, 5].map((s) => (
                         <button
@@ -1583,11 +1618,11 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                           style={{
                             border: '1px solid var(--border)',
                             borderRadius: '6px',
-                            background: s <= ratingStars ? '#fef3c7' : '#fff',
+                            background: s <= ratingStars ? 'var(--warning-bg)' : 'var(--card)',
                             fontSize: '1.25rem',
                             cursor: 'pointer',
                             padding: '0.2rem 0.5rem',
-                            color: s <= ratingStars ? '#f59e0b' : '#cbd5e1',
+                            color: s <= ratingStars ? 'var(--warning)' : 'var(--muted)',
                           }}
                         >
                           ★
@@ -1653,7 +1688,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
               </div>
             )}
 
-            {/* Action buttons row */}
+            {/* Action buttons row — primary actions inline, secondary in More */}
             <div className="row" style={{ marginTop: '1rem', gap: '0.5rem', flexWrap: 'wrap' }}>
               {canClaim && (
                 <>
@@ -1672,21 +1707,6 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                     {playbookLoading[ticket.id] ? 'Preparing draft…' : 'Draft with AI'}
                   </Button>
                 </>
-              )}
-              {canTakeover && !showTakeover[ticket.id] && (
-                <Button variant="ghost" small onClick={() => setShowTakeover((c) => ({ ...c, [ticket.id]: true }))} disabled={loading}>
-                  Take over
-                </Button>
-              )}
-              {canTakeover && showTakeover[ticket.id] && (
-                <Modal title="Take over this request?" sub="The current assignee will be replaced with you." onClose={() => setShowTakeover((c) => ({ ...c, [ticket.id]: false }))}>
-                  <div className="row">
-                    <Button variant="primary" small onClick={() => { handleTakeover(ticket); setShowTakeover((c) => ({ ...c, [ticket.id]: false })); }} disabled={loading}>
-                      {loading ? 'Taking over…' : 'Confirm takeover'}
-                    </Button>
-                    <Button variant="ghost" small onClick={() => setShowTakeover((c) => ({ ...c, [ticket.id]: false }))}>Cancel</Button>
-                  </div>
-                </Modal>
               )}
               {canCancel && (
                 <Button variant="ghost" small onClick={() => handleCancel(ticket)} disabled={loading}>
@@ -1709,20 +1729,49 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                   )}
                 </>
               )}
-              {canRejectPending && !showReject[ticket.id] && (
-                <Button variant="danger-outline" small onClick={() => setShowReject((c) => ({ ...c, [ticket.id]: true }))} disabled={loading}>
-                  Reject
-                </Button>
+              {(canTakeover || canReroute || canRejectPending) && (
+                <div className="overflow-menu-wrap">
+                  <Button variant="ghost" small onClick={() => setMoreOpen((c) => ({ ...c, [ticket.id]: !c[ticket.id] }))} aria-expanded={!!moreOpen[ticket.id]}>
+                    More ▾
+                  </Button>
+                  {moreOpen[ticket.id] && (
+                    <>
+                      <div className="notification-backdrop" onClick={() => setMoreOpen((c) => ({ ...c, [ticket.id]: false }))} />
+                      <div className="overflow-menu" role="menu">
+                        {canTakeover && !showTakeover[ticket.id] && (
+                          <button role="menuitem" onClick={() => { setMoreOpen((c) => ({ ...c, [ticket.id]: false })); setShowTakeover((c) => ({ ...c, [ticket.id]: true })); }}>
+                            Take over
+                          </button>
+                        )}
+                        {canRejectPending && !showReject[ticket.id] && (
+                          <button role="menuitem" onClick={() => { setMoreOpen((c) => ({ ...c, [ticket.id]: false })); setShowReject((c) => ({ ...c, [ticket.id]: true })); }}>
+                            Reject
+                          </button>
+                        )}
+                        {canRejectPending && showReject[ticket.id] && (
+                          <button role="menuitem" onClick={() => { setMoreOpen((c) => ({ ...c, [ticket.id]: false })); void handleReject(ticket); }}>
+                            Confirm reject
+                          </button>
+                        )}
+                        {canReroute && (
+                          <button role="menuitem" onClick={() => { setMoreOpen((c) => ({ ...c, [ticket.id]: false })); openReroute(ticket); }}>
+                            Re-route…
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
-              {canRejectPending && showReject[ticket.id] && (
-                <Button variant="danger" small onClick={() => handleReject(ticket)} disabled={loading}>
-                  {loading ? '...' : 'Confirm Reject'}
-                </Button>
-              )}
-              {canReroute && (
-                <Button variant="ghost" small onClick={() => openReroute(ticket)} disabled={loading}>
-                  Re-route
-                </Button>
+              {canTakeover && showTakeover[ticket.id] && (
+                <Modal title="Take over this request?" sub="The current assignee will be replaced with you." onClose={() => setShowTakeover((c) => ({ ...c, [ticket.id]: false }))}>
+                  <div className="row">
+                    <Button variant="primary" small onClick={() => { handleTakeover(ticket); setShowTakeover((c) => ({ ...c, [ticket.id]: false })); }} disabled={loading}>
+                      {loading ? 'Taking over…' : 'Confirm takeover'}
+                    </Button>
+                    <Button variant="ghost" small onClick={() => setShowTakeover((c) => ({ ...c, [ticket.id]: false }))}>Cancel</Button>
+                  </div>
+                </Modal>
               )}
             </div>
 

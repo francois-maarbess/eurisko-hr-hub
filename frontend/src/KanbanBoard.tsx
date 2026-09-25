@@ -33,8 +33,8 @@ const COLUMNS: { status: BoardStatus; title: string; hint: string }[] = [
 ];
 
 const PRIORITY_COLORS: Record<string, { background: string; color: string }> = {
-  LOW: { background: '#f1f5f9', color: 'var(--muted)' },
-  STANDARD: { background: 'var(--info-bg)', color: '#1d4ed8' },
+  LOW: { background: 'var(--surface-2)', color: 'var(--muted)' },
+  STANDARD: { background: 'var(--info-bg)', color: 'var(--blue-dark)' },
   URGENT: { background: 'var(--danger-bg)', color: 'var(--danger)' },
 };
 

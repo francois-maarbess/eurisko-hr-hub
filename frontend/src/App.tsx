@@ -7,6 +7,7 @@ import AppShell, { type AppView } from './AppShell';
 import { Button, Modal } from './components/ui';
 import QuickSwitcher, { type QuickSwitcherItem } from './components/QuickSwitcher';
 import { apiUrl } from './api';
+import { useTheme } from './theme';
 
 // Lazy-load heavy/below-fold views so first paint stays fast on instructor
 // laptops. recharts (Dashboard) and the admin console split out of the
@@ -214,6 +215,7 @@ export default function App() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
   const [quickTickets, setQuickTickets] = useState<QuickTicket[]>([]);
+  const { mode: themeMode, isDark, cycle: cycleTheme } = useTheme();
 
   const handleLogin = (accessToken: string, userData: User, refresh?: string) => {
     setToken(accessToken);
@@ -500,7 +502,7 @@ export default function App() {
         </div>
       );
     }
-    return <LoginPage onLogin={handleLogin} />;
+    return <LoginPage onLogin={handleLogin} themeMode={themeMode} isDark={isDark} onToggleTheme={cycleTheme} />;
   }
 
   const isAdmin = user.platformRole === 'SYSTEM_ADMIN';
@@ -607,7 +609,7 @@ export default function App() {
                         textAlign: 'left',
                         border: 'none',
                         borderTop: i === 0 ? 'none' : '1px solid var(--border)',
-                        background: n.readAt ? '#fff' : 'var(--blue-pale)',
+                        background: n.readAt ? 'var(--card)' : 'var(--blue-pale)',
                         padding: '0.6rem 0.8rem',
                         cursor: n.requestId ? 'pointer' : 'default',
                         font: 'inherit',
@@ -643,6 +645,9 @@ export default function App() {
         onShortcuts={() => setShortcutsOpen(true)}
         onSignOut={handleLogout}
         topRight={notifButton}
+        themeMode={themeMode}
+        isDark={isDark}
+        onToggleTheme={cycleTheme}
       >
         {focusTicketId ? (
           <ErrorBoundary section="ticket detail">

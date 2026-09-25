@@ -69,6 +69,9 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
   const [dupLoading, setDupLoading] = useState(false);
   const [duplicates, setDuplicates] = useState<{ id: string; title: string; status: string }[] | null>(null);
   const [dupConfirmedFor, setDupConfirmedFor] = useState<string | null>(null);
+  // Stepper: 1 AI draft → 2 Classify → 3 Details → 4 Review.
+  // Purely presentational; all fields stay mounted in the same form.
+  const [step, setStep] = useState(1);
 
   // Draft persistence: survives reloads, cleared on submit. Private-mode
   // failures are ignored — the form simply starts empty.
@@ -293,7 +296,27 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
   };
 
   return (
-    <Card title="New Service Request">
+    <Card title="New Service Request" sub="Four quick steps — AI draft is optional, review is required.">
+      <div className="stepper" role="tablist" aria-label="New request steps">
+        {[
+          { n: 1, label: 'Draft' },
+          { n: 2, label: 'Classify' },
+          { n: 3, label: 'Details' },
+          { n: 4, label: 'Review' },
+        ].map((s) => (
+          <button
+            key={s.n}
+            type="button"
+            role="tab"
+            aria-selected={step === s.n}
+            className={`stepper-step${step === s.n ? ' active' : ''}${step > s.n ? ' done' : ''}`}
+            onClick={() => setStep(s.n)}
+          >
+            {s.n}. {s.label}
+          </button>
+        ))}
+      </div>
+      {step === 1 && (
       <Section
         title="1. What do you need help with?"
         sub="Optional: describe the issue in your own words and AI drafts the fields below. You review everything before anything is created."
@@ -387,6 +410,14 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
         )}
       </div>
       </Section>
+      )}
+      {step === 1 && (
+        <div className="row" style={{ marginTop: '1rem', justifyContent: 'flex-end' }}>
+          <Button type="button" variant="primary" small onClick={() => setStep(2)}>
+            Continue → Classify
+          </Button>
+        </div>
+      )}
 
       <form
         onSubmit={handleSubmit}
@@ -397,6 +428,7 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
           }
         }}
       >
+      {step === 2 && (
       <Section
         title="2. Classify your request"
         sub="The department owns the ticket; the type must belong to it."
@@ -449,7 +481,19 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
           </select>
         </Field>
       </Section>
+      )}
+      {step === 2 && (
+        <div className="row" style={{ marginTop: '1rem', justifyContent: 'space-between' }}>
+          <Button type="button" variant="ghost" small onClick={() => setStep(1)}>
+            ← Back
+          </Button>
+          <Button type="button" variant="primary" small onClick={() => setStep(3)} disabled={!selectedDept || !selectedType}>
+            Continue → Details
+          </Button>
+        </div>
+      )}
 
+      {step === 3 && (
       <Section
         title="3. Add the details"
         sub="Used for search, duplicate detection, and the SLA estimate."
@@ -484,7 +528,25 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
           <p id="description-count" className="muted mt-sm" style={{ fontSize: '0.78rem' }}>{description.length}/2000</p>
         </Field>
       </Section>
+      )}
+      {step === 3 && (
+        <div className="row" style={{ marginTop: '1rem', justifyContent: 'space-between' }}>
+          <Button type="button" variant="ghost" small onClick={() => setStep(2)}>
+            ← Back
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            small
+            onClick={() => setStep(4)}
+            disabled={title.trim().length < 3 || description.trim().length < 10}
+          >
+            Continue → Review
+          </Button>
+        </div>
+      )}
 
+      {step === 4 && (
       <Section
         title="4. Review and submit"
         sub="Duplicates are advisory — a twin never blocks creation."
@@ -522,6 +584,14 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
           </Button>
         </div>
       </Section>
+      )}
+      {step === 4 && (
+        <div className="row" style={{ marginTop: '1rem', justifyContent: 'flex-start' }}>
+          <Button type="button" variant="ghost" small onClick={() => setStep(3)}>
+            ← Back to details
+          </Button>
+        </div>
+      )}
       </form>
     </Card>
   );

@@ -35,7 +35,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
           <button
             onClick={() => this.setState({ crashed: false })}
             style={{
-              border: '1px solid var(--border)', background: '#fff', borderRadius: '10px',
+              border: '1px solid var(--border)', background: 'var(--card)', borderRadius: '10px',
               padding: '0.5rem 0.9rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700,
               color: 'var(--blue)', marginTop: '0.5rem',
             }}

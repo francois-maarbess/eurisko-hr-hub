@@ -30,11 +30,36 @@ interface Report {
 }
 
 const TERMINAL = ['COMPLETED', 'CANCELLED', 'REJECTED'];
-const NAVY = '#0f172a';
-const BLUE = '#1d4ed8';
-const GREEN = '#15803d';
-const RED = '#b91c1c';
-const AMBER = '#b45309';
+
+function useIsDark(): boolean {
+  const [isDark, setIsDark] = useState(() => {
+    try {
+      return document.documentElement.getAttribute('data-theme') === 'dark';
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    const root = document.documentElement;
+    const obs = new MutationObserver(() => {
+      setIsDark(root.getAttribute('data-theme') === 'dark');
+    });
+    obs.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => obs.disconnect();
+  }, []);
+  return isDark;
+}
+
+function palette(isDark: boolean) {
+  return {
+    NAVY: isDark ? '#f1f5f9' : '#0f172a',
+    BLUE: isDark ? '#60a5fa' : '#1d4ed8',
+    GREEN: isDark ? '#4ade80' : '#15803d',
+    RED: isDark ? '#f87171' : '#b91c1c',
+    AMBER: isDark ? '#fbbf24' : '#b45309',
+    MUTED: isDark ? '#94a3b8' : '#64748b',
+  };
+}
 
 function dayKey(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -57,6 +82,7 @@ export default function Dashboard({ token, userName, isStaff }: { token: string;
   const [breached, setBreached] = useState<MiniTicket[]>([]);
   const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
+  const isDark = useIsDark();
 
   useEffect(() => {
     let cancelled = false;
@@ -149,21 +175,39 @@ export default function Dashboard({ token, userName, isStaff }: { token: string;
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const { NAVY, BLUE, GREEN, RED, AMBER } = palette(isDark);
 
   return (
     <div className="card dashboard-card">
-      <h3 className="card-title">
-        {greeting}, {userName.split(' ')[0]}
-      </h3>
-      <p className="card-sub">
-        {openCount === 0
-          ? isOrg
-            ? 'All clear across every department.'
-            : isTeam
-              ? 'All clear in your departments.'
-              : 'All clear — nothing open on your plate.'
-          : `${openCount} open ticket${openCount === 1 ? '' : 's'}${overdueCount > 0 ? `, ${overdueCount} past deadline` : ''}${scopeSuffix}.`}
-      </p>
+      <div className="dashboard-hero">
+        <div>
+          <h3 className="card-title page-title-tight">
+            {greeting}, {userName.split(' ')[0]}
+          </h3>
+          <p className="card-sub" style={{ marginBottom: 0 }}>
+            {openCount === 0
+              ? isOrg
+                ? 'All clear across every department.'
+                : isTeam
+                  ? 'All clear in your departments.'
+                  : 'All clear — nothing open on your plate.'
+              : `${openCount} open ticket${openCount === 1 ? '' : 's'}${overdueCount > 0 ? `, ${overdueCount} past deadline` : ''}${scopeSuffix}.`}
+          </p>
+        </div>
+        <span
+          className="badge"
+          title={compliance === 100 ? 'All open work is on track' : 'Some work needs attention'}
+          style={{
+            background: 'var(--surface-2)',
+            color: compliance === 100 ? GREEN : AMBER,
+            border: '1px solid var(--border)',
+            alignSelf: 'flex-start',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {compliance === 100 ? '● On track' : `● ${compliance}% on track`}
+        </span>
+      </div>
 
       <div className="dashboard-stats">
         <div className="dashboard-stat dashboard-stat-blue">
@@ -204,9 +248,16 @@ export default function Dashboard({ token, userName, isStaff }: { token: string;
             </span>
             <ResponsiveContainer width="100%" height={150}>
               <BarChart data={volume} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                <Tooltip />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: isDark ? '#94a3b8' : '#64748b' }} axisLine={false} tickLine={false} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: isDark ? '#94a3b8' : '#64748b' }} axisLine={false} tickLine={false} />
+                <Tooltip
+                  contentStyle={{
+                    background: isDark ? '#111c33' : '#fff',
+                    border: `1px solid ${isDark ? '#1e2e4d' : '#e2e8f0'}`,
+                    borderRadius: 8,
+                    color: isDark ? '#e2e8f0' : '#0f172a',
+                  }}
+                />
                 <Bar dataKey="tickets" fill={BLUE} radius={[5, 5, 0, 0]} maxBarSize={28} />
               </BarChart>
             </ResponsiveContainer>
@@ -242,11 +293,18 @@ export default function Dashboard({ token, userName, isStaff }: { token: string;
               </span>
               <ResponsiveContainer width="100%" height={150}>
                 <PieChart>
-                  <Pie data={donut} dataKey="value" nameKey="name" innerRadius={42} outerRadius={65} paddingAngle={3}>
+                  <Pie data={donut} dataKey="value" nameKey="name" innerRadius={42} outerRadius={65} paddingAngle={3} stroke={isDark ? '#111c33' : '#fff'}>
                     <Cell fill={GREEN} />
                     <Cell fill={RED} />
                   </Pie>
-                  <Tooltip />
+                  <Tooltip
+                    contentStyle={{
+                      background: isDark ? '#111c33' : '#fff',
+                      border: `1px solid ${isDark ? '#1e2e4d' : '#e2e8f0'}`,
+                      borderRadius: 8,
+                      color: isDark ? '#e2e8f0' : '#0f172a',
+                    }}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -267,8 +325,8 @@ export default function Dashboard({ token, userName, isStaff }: { token: string;
                 <span
                   className="badge"
                   style={{
-                    background: overdue ? '#fee2e2' : t.status === 'IN_PROGRESS' ? '#eff6ff' : '#fef9c3',
-                    color: overdue ? RED : t.status === 'IN_PROGRESS' ? BLUE : '#854d0e',
+                    background: overdue ? 'var(--danger-bg)' : t.status === 'IN_PROGRESS' ? 'var(--blue-pale)' : 'var(--warning-bg)',
+                    color: overdue ? RED : t.status === 'IN_PROGRESS' ? BLUE : AMBER,
                   }}
                 >
                   {overdue ? '● Overdue' : t.status === 'IN_PROGRESS' ? '● In progress' : '● Pending'}

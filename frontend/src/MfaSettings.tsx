@@ -120,7 +120,9 @@ export default function MfaSettings({ token }: { token: string }) {
             1. Scan this QR code with your authenticator app (Google/Microsoft Authenticator, 1Password…),
             then 2. enter the 6-digit code below.
           </p>
-          <img className="mfa-qr" src={qr} alt="Authenticator QR code" />
+          <span className="mfa-qr-frame">
+            <img className="mfa-qr" src={qr} alt="Authenticator QR code" />
+          </span>
           <div className="row mfa-code-row">
             <input
               className="input mfa-code-input"

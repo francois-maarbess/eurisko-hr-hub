@@ -431,7 +431,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
           sub="Live ticket counts across every department."
         >
           <div className="row mb-md">
-            <Badge bg="#fef3c7" color="#92400e">
+            <Badge bg="var(--warning-bg)" color="var(--warning)">
               ★ CSAT {report.csatAverage != null ? report.csatAverage.toFixed(2) : '—'} ({report.csatCount} ratings)
             </Badge>
             <select
@@ -478,7 +478,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
               aria-label="Explain active and total ticket counts"
               style={{
                 width: '24px', height: '24px', borderRadius: '999px',
-                border: '1px solid var(--border)', background: '#fff',
+                border: '1px solid var(--border)', background: 'var(--card)',
                 color: 'var(--blue)', fontSize: '0.8rem', fontWeight: 800,
                 fontStyle: 'italic', fontFamily: 'Georgia, serif',
                 cursor: 'pointer', lineHeight: 1,
@@ -499,10 +499,10 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
                 System {sysHealth.status === 'ok' ? 'healthy' : sysHealth.status} · DB {sysHealth.database}
               </Badge>
               </span>
-              <span title="Notification outbox backlog"><Badge bg="#f1f5f9" color="var(--muted)">
+              <span title="Notification outbox backlog"><Badge bg="var(--surface-2)" color="var(--muted)">
                 Outbox {sysHealth.outbox.pending} pending{sysHealth.outbox.failed > 0 ? ` · ${sysHealth.outbox.failed} failed` : ''}
               </Badge></span>
-              <span title={`AI model: ${sysHealth.ai.model}`}><Badge bg="#f1f5f9" color="var(--muted)">
+              <span title={`AI model: ${sysHealth.ai.model}`}><Badge bg="var(--surface-2)" color="var(--muted)">
                 AI: {sysHealth.ai.provider}
               </Badge></span>
             </div>
@@ -510,13 +510,13 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
           <div className="admin-overview">
           <div className="pill-group mb-md">
             {Object.entries(report.byStatus).map(([status, count]) => (
-              <Badge key={status} bg="var(--navy)" color="#fff">
+              <Badge key={status} bg="#0f172a" color="#fff">
                 {formatEnum(status)}: {count}
               </Badge>
             ))}
           </div>
           {report.departments.reduce((n, d) => n + d.breached, 0) > 0 && (
-            <div style={{ marginBottom: '0.75rem' }}><Badge bg="#fee2e2" color="var(--danger)">
+            <div style={{ marginBottom: '0.75rem' }}><Badge bg="var(--danger-bg)" color="var(--danger)">
               {report.departments.reduce((n, d) => n + d.breached, 0)} ticket(s) past their SLA deadline
               in {report.departments.filter((d) => d.breached > 0).length} department(s) — needs attention
             </Badge></div>
@@ -565,10 +565,10 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
             <Badge bg="var(--blue-pale)" color="var(--blue-dark)">
               Avg resolve {analytics.timeToCompleteAvgHours != null ? `${analytics.timeToCompleteAvgHours}h` : '—'}
             </Badge>
-            <Badge bg="#f1f5f9" color="var(--muted)">
+            <Badge bg="var(--surface-2)" color="var(--muted)">
               Rejected {analytics.rejectionRate}% · Rerouted {analytics.rerouteRate}% ({analytics.rerouteCount})
             </Badge>
-            <Badge bg="#f1f5f9" color="var(--muted)">
+            <Badge bg="var(--surface-2)" color="var(--muted)">
               Aging &lt;1d {analytics.aging.under1d} · 1–3d {analytics.aging.d1to3} · 3–7d {analytics.aging.d3to7} · &gt;7d {analytics.aging.over7d}
             </Badge>
           </div>
@@ -659,7 +659,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
               </div>
               <div className="admin-type-list">
                 {typesForDept.length === 0 && (
-                  <Badge bg="#fef3c7" color="#b45309">
+                  <Badge bg="var(--warning-bg)" color="var(--warning)">
                     No request types yet — add one below so employees can select this department
                   </Badge>
                 )}
@@ -667,7 +667,7 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
                   <span key={t.id} title={t.name} style={{ cursor: 'pointer' }} onClick={() => t.active
                     ? setCatalogAction({ title: `Deactivate ${t.name}?`, sub: 'Employees will no longer be able to select this request type. Existing requests remain unchanged.', confirmLabel: 'Deactivate request type', run: async () => toggleTypeActive(d.id, t.id, false) })
                     : toggleTypeActive(d.id, t.id, true)}>
-                    <Badge bg={t.active ? 'var(--blue-pale)' : '#f1f5f9'} color={t.active ? '#1d4ed8' : 'var(--muted)'}>
+                    <Badge bg={t.active ? 'var(--blue-pale)' : 'var(--surface-2)'} color={t.active ? 'var(--blue-dark)' : 'var(--muted)'}>
                     {t.name} {!t.active && '(off)'}
                     </Badge>
                   </span>
