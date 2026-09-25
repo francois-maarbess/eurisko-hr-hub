@@ -25,7 +25,7 @@ department/type/priority before proposing, report non-secret AI health, and star
 MFA setup for the caller's own account. The authenticator code must still be
 entered by the user in Security settings.
 
-Create-request, claim, complete (with an AI-drafted, human-verified resolution note), reroute, and admin create-user actions are proposal-only
+Create-request, claim, complete (with an AI-drafted, human-verified resolution note), cancel (owner's own pending only), reroute, workload and inbox reads, and admin create-user actions are proposal-only
 until the UI returns the confirmation card and the caller explicitly confirms
 with its confirmation ID. The full pending payload persists in the chat
 session row, so a restart rehydrates (never silently drops) a proposal, and
@@ -46,11 +46,21 @@ through the existing raw `fetch` provider, with bounded structured-answer
 parsing, a bounded six-step tool loop that surfaces partial progress instead of
 failing when multi-step jobs (claim then resolve) need another turn, a twenty-second
 timeout with one retry on network failure and one backoff retry on rate limits,
-a twelve-message trimmed history so token load stays flat no matter how long the
+an eight-message, 1200-char trimmed history so token load stays flat no matter
+how long the
 chat gets, malformed tool arguments recovered as model data instead of turn
 killers, and every chat failure recorded into provider status so `/ai/health`
-names the true cause within seconds. The client retries once automatically on
-the two transient messages (safe: no write executes without confirmation). Groq does not allow JSON response mode
+names the true cause within seconds (rate limits, timeouts, and generic
+hiccups each get their own message). There is no client auto-retry: transient
+provider failures already get one server-side backoff, and every assistant turn
+is explicit — the user resends deliberately instead of the UI doubling traffic.
+Routing is always-tools with a local intent hint (chit-chat / act / sensitive,
+asserted offline in `scripts/eval-ai.ts`): small talk never becomes a ticket,
+sensitive cases get empathy plus an immediate confidential proposal, and the
+catalog is cached for sixty seconds so repeated turns skip the database.
+Passwords and secrets are never accepted in chat (history is persisted) — the
+assistant routes password changes to Security settings and starts 2FA setup
+server-side, walking the caller through the QR plus code there. Groq does not allow JSON response mode
 and function calling in the same request, so the server validates the returned
 answer shape instead. Keys, prompts, hashes, tokens, private notes, and
 unauthorized ticket data are never returned to the caller.

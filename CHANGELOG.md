@@ -3,6 +3,28 @@
 All instructor-visible changes. SQLite-only, zero new prerequisites — every entry
 preserves the SQLite setup and locked npm dependencies.
 
+## Unreleased (smart assistant, password session revoke, dark mode, docs)
+
+- Assistant brain upgrade: tools are always on (a keyword gate once locked the
+  model out of proposing on paraphrased asks), local intent hint
+  (chit-chat/act/sensitive) asserted offline, 60s catalog cache, trimmed
+  8-message history, no client auto-retry, timeouts named distinctly from
+  rate limits. New tools: owner-cancel proposals, agent workload, inbox
+  summary. Passwords/secrets are never accepted in chat — the assistant routes
+  to Security settings and starts 2FA setup server-side. Evals grow 9 → 13
+  (`npm run eval:ai`), including the exact transcript lines that used to fail.
+- Password changes now revoke every session: the app bounces to login with
+  "sign in with your new password". Security view is Account + Change
+  password + two-factor, with sign-out-everywhere. Covered by a revoke test.
+- Dark mode (navy slate, opt-in, light always default): full token system,
+  header/login toggle with system follow, dimmed action blue, chatbot and
+  dashboard contrast sweep. Ticket cards de-densified (clamped descriptions,
+  More menu, filter popover) and New Request is a 4-step stepper.
+- Docs: `NOTIFY_WEBHOOK_URL` documented in `.env.example` (outbox POSTs JSON
+  with `X-Idempotency-Key`, backoff then dead-letter; unset = local inbox
+  only). Week-4 assistant doc and week-5 release gate re-synced to 137
+  backend tests / 13 evals.
+
 ## Unreleased (submission handoff: week-5 ops doc, README handoff, deploy blueprint)
 
 - New `docs/week5-release-operations.md`: remote target, config/secrets table,

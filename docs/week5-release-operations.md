@@ -36,7 +36,7 @@ all env-overridable with safe local defaults (see `.env.example`).
 ## 3. Release gate (must ALL pass before any submit or deploy)
 
 1. `npm run verify` exits 0 (typecheck, both lints with zero warnings,
-   132 backend tests, 9 AI evals, both builds).
+    137 backend tests, 13 AI evals, both builds).
 2. `cd frontend && npm test` — 10 vitest suites green.
 3. `npm run test:count -- --check` passes with README counts synced.
 4. CI on the pushed branch is green (typecheck, lint ×2, tests, evals,
