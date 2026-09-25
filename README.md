@@ -8,6 +8,20 @@ An internal service hub for submitting, routing, tracking, and resolving employe
 
 **Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 132 backend tests + 10 frontend tests, 9 offline AI evals (`npm run test:count`).
 
+## Live App
+
+> Replace the two placeholder URLs below with the real Render URLs before submitting.
+
+- **App:** `https://<frontend>.onrender.com`
+- **API health:** `https://<backend>.onrender.com/health` (expect `"status":"ok"`)
+- **What it does:** employees submit requests (IT, HR, Finance, Facilities, People Ops) through one intake; department staff claim, resolve, and attach documents; everything is audit-logged and notification-driven, with an AI assistant that drafts (never decides).
+- **Demo access** (password for all three: `Password123!`):
+  - `alice@acme.com` — Employee: submits, tracks, rates, cancels own pending requests
+  - `bob@acme.com` — IT Agent: claims and resolves from the IT queue
+  - `admin@acme.com` — System Admin: users, catalog, queues, reports, exports
+- **One critical journey to try:** as Alice create an IT laptop request → sign in as Bob, claim it from the queue, resolve it with a note → sign in as Alice, give it 5 stars and watch the CSAT move.
+- **Cold starts:** the free tier sleeps after ~15 idle minutes; the first request after sleep takes ~50s (refresh once). Active use never sleeps. Restart/redeploy wipes evaluator-created tickets by design — the 3 seed users and catalog rebuild automatically; see [Operations](#operations).
+
 ## Demo (2 minutes)
 
 Full click-by-click script: [`DEMO.md`](./DEMO.md) — reset, seed the storyline, and tour employee → agent → admin.
@@ -118,6 +132,17 @@ kept synchronized here automatically.
 - **Unit**: Status transitions (10) + AI extractor/validation/fallback/sensitive/off-topic (10) + SLA fallback (1) + password accounts (6) + purge & duplicate scoring (3) + production secret guard (4) + chat assistant safety (23)
 - **Integration**: Prisma ↔ SQLite database lifecycle (3)
 - **E2E (63)**: Full HTTP flow with auth, scoped views, create, claim, takeover, complete, concurrent-completion race, documents lifecycle, notifications, overdue inbox dedupe, duplicates (scoped), report + analytics, manager memberships, owner-cancel/admin-claim rules, validation, regression + AI draft/correction/health/chat-confirm/complete endpoints + catalog + admin user lifecycle + audit search + filtered export + SLA deadlines + breach center + rate limiting + TOTP two-factor + logout revocation + deactivation + correlation IDs + queue pagination/claimedBy filters + timeline privacy
+
+## Operations
+
+- **Health / readiness:** `GET /health` returns `status`, database, migrations `{applied, pending}`, outbox `{pending, failed}`, retention sweep state, and AI `{provider, model, lastErrorAt, lastErrorMessage}` — counts and status words only, never secrets. It returns **503** when the database is unreachable or migrations are pending. `GET /ai/health` (auth) adds `keyPresent` for AI debugging.
+- **Logs / signals / monitoring:** one log line per request (`method path status ms`) with an `x-request-id` echoed on the response and inside error bodies — one ID traces any failure end to end. Routes slower than `SLOW_LOG_MS` (default 1000ms) log WARN. No paid observability; health + logs + CI is the monitoring story.
+- **Controlled failure + recovery:** wipe the DB file (or redeploy) and reboot — migrations apply, the seed rebuilds the 3 users + catalog automatically, `/health` returns ok, login works. Tickets do not auto-reappear (explicit decision, not data loss hiding). Full procedure with evidence: `docs/week5-release-operations.md` §5.
+- **Post-recovery verification:** re-run the release gate below; a red build is never submitted.
+
+### Release gate (all must pass before any submit or deploy)
+
+1. `npm run verify` exits 0 · 2. `cd frontend && npm test` green · 3. `npm run test:count -- --check` passes, README synced · 4. CI green on the pushed branch · 5. `npm run db:doctor` reports 3 users, 0 requests on fresh reset.
 
 ## AI-Assisted Intake (Week 4)
 
@@ -233,16 +258,35 @@ completes the ticket, and existing completion evidence rules still apply.
 │       ├── TicketStatusManager.tsx
 │       └── AdminPanel.tsx         # Admin-only user management
 └── docs/
+    ├── week2-agentic-workflow.md
     ├── week3-full-stack-delivery.md
-    └── week4-production-ai.md
+    ├── week4-production-ai.md     # Week 4 AI intake, evals, assistant
+    └── week5-release-operations.md# Week 5 release gate, health, recovery, smoke
 ```
 
 ## Documentation
 
-- `docs/product-spec.md` — Product scope and requirements
-- `docs/data-model.md` — Entities, constraints, and state machine
-- `docs/architecture.md` — Components and flows
-- `docs/week3-full-stack-delivery.md` — Week 3 delivery details
-- `docs/week4-production-ai.md` — Week 4 AI intake details + eval guide
-- `docs/decisions/ADR-002.md` — Password auth + single-company scope (SSO deferred)
-- `docs/decisions/ADR-003.md` — Document storage backend (DB bytea on localhost, S3 seam)
+```
+└── docs/
+    ├── product-spec.md            # Product scope and requirements
+    ├── architecture.md            # Components and flows
+    ├── data-model.md              # Entities, constraints, and state machine
+    ├── sla-design.md              # SLA targets and deadline computation
+    ├── week2-agentic-workflow.md  # Week 2: agent workflow evidence
+    ├── week3-full-stack-delivery.md
+    ├── week4-production-ai.md     # Week 4: AI intake, evals, assistant
+    ├── week5-release-operations.md# Week 5: release gate, health, recovery, smoke
+    ├── security-notes.md          # Known dependency risks and mitigations
+    └── decisions/
+        ├── ADR-001.md
+        ├── ADR-002.md             # Password auth + single-company scope (SSO deferred)
+        └── ADR-003.md             # Document storage backend (DB bytea on localhost, S3 seam)
+```
+
+### Evidence map (no hunting)
+
+- **Week 1 (design):** `product-spec.md`, `architecture.md`, `data-model.md`, `decisions/`
+- **Week 2 (engineering ownership):** `week2-agentic-workflow.md` + Git history (`git log`)
+- **Week 3 (full stack):** `week3-full-stack-delivery.md`, E2E suite (`test/`), [Demo](#demo-2-minutes)
+- **Week 4 (production AI):** `week4-production-ai.md`, `scripts/eval-ai.ts` (`npm run eval:ai`)
+- **Week 5 (release ownership):** `week5-release-operations.md`, [Operations](#operations), `render.yaml`, `DEPLOY.md`

@@ -3,6 +3,16 @@
 All instructor-visible changes. SQLite-only, zero new prerequisites — every entry
 preserves the SQLite setup and locked npm dependencies.
 
+## Unreleased (submission handoff: week-5 ops doc, README handoff, deploy blueprint)
+
+- New `docs/week5-release-operations.md`: remote target, config/secrets table,
+  release gate, health/logs monitoring, failure+recovery procedure, final smoke.
+- README is now a handoff surface: Live App (URL, demo access, critical
+  journey), Operations (health, logs, recovery, release gate), full docs tree
+  and week-by-week evidence map.
+- New `render.yaml` + `DEPLOY.md`: one-blueprint Render deploy, cold-start and
+  ephemeral-data honesty notes, troubleshooting.
+
 ## Unreleased (AI resolution reliability and assistant foundation)
 
 - Fixed Groq JSON-mode resolution drafting by requiring JSON explicitly in the
