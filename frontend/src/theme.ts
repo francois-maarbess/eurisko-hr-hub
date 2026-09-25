@@ -17,9 +17,10 @@ function loadMode(): ThemeMode {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw === 'light' || raw === 'dark' || raw === 'system') return raw;
   } catch {
-    // Private mode: fall back to system.
+    // Private mode: fall back to light.
   }
-  return 'system';
+  // Light is always the default: everyone starts bright, dark is opt-in.
+  return 'light';
 }
 
 function applyIsDark(isDark: boolean) {
@@ -79,7 +80,7 @@ export function useTheme() {
   }, []);
 
   const cycle = useCallback(() => {
-    setMode((m) => (m === 'system' ? 'light' : m === 'light' ? 'dark' : 'system'));
+    setMode((m) => (m === 'light' ? 'dark' : m === 'dark' ? 'system' : 'light'));
   }, []);
 
   return { mode, isDark, setMode, cycle };
