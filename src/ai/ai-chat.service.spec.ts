@@ -11,27 +11,41 @@ function harness() {
     chatMessage: { create: jest.fn(async () => ({})), findMany: jest.fn(async () => []) },
     user: { findUnique: jest.fn(async () => ({ id: 'alice', email: 'alice@acme.com', displayName: 'Alice', platformRole: 'EMPLOYEE', departmentMemberships: [] })) },
     departmentMember: { findMany: jest.fn(async () => []) },
-    request: { findMany: jest.fn(async () => []) },
+    department: { findMany: jest.fn(async () => []) },
+    request: { findMany: jest.fn(async () => []), count: jest.fn(async () => 0) },
   };
   const requests: any = {
     findAll: jest.fn(async () => [
       { id: 'one', status: 'PENDING', priority: 'URGENT', createdAt: new Date() },
       { id: 'two', status: 'COMPLETED', priority: 'STANDARD', createdAt: new Date() },
     ]),
-    create: jest.fn(),
+    create: jest.fn(async () => ({ id: 'c'.repeat(25) })),
     findOne: jest.fn(),
+    findDuplicates: jest.fn(async () => []),
   };
   const audit = { append: jest.fn(async () => undefined) } as any;
+  const ai = {
+    providerStatus: () => ({ provider: 'local' }),
+    draft: jest.fn(async (text: string) => ({
+      departmentId: 'dept-it', requestTypeId: 'type-laptop', title: text.slice(0, 40),
+      description: text, priority: 'URGENT', confidence: 'high', provider: 'local',
+    })),
+  } as any;
   const service = new AiChatService(
     prisma,
     requests,
     { createUser: jest.fn() } as any,
     { setup: jest.fn() } as any,
     audit,
-    { providerStatus: () => ({ provider: 'local' }) } as any,
+    ai,
   );
-  return { service, prisma, requests, audit };
+  return { service, prisma, requests, audit, ai };
 }
+
+const CATALOG = [
+  { id: 'dept-it', code: 'IT', name: 'IT & Technical Support', requestTypes: [{ id: 'type-laptop', code: 'LAPTOP', name: 'Laptop Request', active: true }] },
+  { id: 'dept-hr', code: 'HR', name: 'Human Resources', requestTypes: [{ id: 'type-letter', code: 'EMP_LETTER', name: 'Employment Letter', active: true }] },
+];
 
 describe('AI operations assistant safety', () => {
   const oldKey = process.env['GROQ_API_KEY'];
@@ -77,5 +91,95 @@ describe('AI operations assistant safety', () => {
     const { service, requests } = harness();
     requests.findOne.mockRejectedValue(new ForbiddenException('You do not have access to this request.'));
     await expect((service as any).ticketDetail({ id: 'alice', platformRole: 'EMPLOYEE' }, 'private-ticket')).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('resolves human words to catalog codes at propose time', async () => {
+    const { service, prisma, requests } = harness();
+    prisma.department.findMany.mockResolvedValue(CATALOG);
+    const result = await (service as any).propose(
+      { id: 'alice', platformRole: 'EMPLOYEE' }, 'session-1', 'create-request', 'Create this service request',
+      { department: 'it', requestType: 'laptop', title: 'My screen is cracked badly', description: 'The laptop screen cracked this morning and I cannot work.', priority: 'URGENT' },
+    );
+    expect(result.requiresConfirmation).toBe(true);
+    const stored = JSON.parse(prisma.chatSession.update.mock.calls[0][0].data.pendingConfirmation);
+    expect(stored.payload.departmentId).toBe('dept-it');
+    expect(stored.payload.requestTypeId).toBe('type-laptop');
+    expect(requests.findDuplicates).toHaveBeenCalledWith(expect.objectContaining({ departmentId: 'dept-it' }));
+  });
+
+  it('rejects unknown departments once with the valid options', async () => {
+    const { service, prisma } = harness();
+    prisma.department.findMany.mockResolvedValue(CATALOG);
+    await expect((service as any).propose(
+      { id: 'alice', platformRole: 'EMPLOYEE' }, 'session-1', 'create-request', 'Create this service request',
+      { department: 'plumbing', requestType: 'pipes', title: 'Leaking sink in the kitchen', description: 'The office kitchen sink is leaking badly today.', priority: 'STANDARD' },
+    )).rejects.toThrow(/IT.*HR|HR.*IT/);
+  });
+
+  it('rehydrates confirmations from the database after a restart', async () => {
+    const { service, prisma, requests } = harness();
+    await (service as any).storeProposal('session-1', {
+      kind: 'create-request', summary: 'Create this service request',
+      payload: { departmentId: 'dept-it', requestTypeId: 'type-laptop', title: 'Typed title here', description: 'A long enough description body.', priority: 'STANDARD' },
+    });
+    const stored = JSON.parse(prisma.chatSession.update.mock.calls[0][0].data.pendingConfirmation);
+    // Simulate a restart: memory cache gone, database row remains.
+    (service as any).pendingActions.clear();
+    const session = { id: 'session-1', userId: 'alice', pendingConfirmation: JSON.stringify(stored) };
+    prisma.chatSession.findFirst.mockResolvedValue(session);
+    const result = await service.chat({ id: 'alice', platformRole: 'EMPLOYEE' }, { sessionId: 'session-1', confirmationId: stored.id, confirmationAction: 'confirm' });
+    expect(requests.create).toHaveBeenCalledWith(expect.objectContaining({ departmentId: 'dept-it' }), 'alice');
+    expect(result.message).toMatch(/confirmed/i);
+  });
+
+  it('never leaks UUIDs or markdown into assistant messages', async () => {
+    const { service, prisma } = harness();
+    const out = await (service as any).answer('session-1', 'Created **REQ-abc** (cmugpjkdz00coa0q4zteti8me) `done` ## hi');
+    expect(out.message).not.toContain('**');
+    expect(out.message).not.toContain('`');
+    expect(out.message).not.toContain('cmugpjkdz00coa0q4zteti8me');
+    expect(prisma.chatMessage.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ content: out.message }) }));
+  });
+
+  it('classifies vague text into catalog names without asking for IDs', async () => {
+    const { service, prisma } = harness();
+    prisma.department.findMany.mockResolvedValue(CATALOG);
+    const result = await (service as any).classifyText('my laptop is on fire');
+    expect(result.understood).toBe(true);
+    expect(result.department).toContain('IT');
+    expect(result.requestType).toContain('LAPTOP');
+  });
+
+  it('scopes department stats by role', async () => {
+    const adminHarness = harness();
+    adminHarness.prisma.user.findUnique.mockResolvedValue({ id: 'admin', email: 'a@a.com', displayName: 'Admin', platformRole: 'SYSTEM_ADMIN', departmentMemberships: [] });
+    adminHarness.prisma.department.findMany.mockResolvedValue(CATALOG);
+    adminHarness.prisma.request.count.mockResolvedValue(3);
+    const adminStats = await (adminHarness.service as any).departmentStats({ id: 'admin', platformRole: 'SYSTEM_ADMIN' });
+    expect(adminStats.scope).toBe('all');
+    expect(adminStats.departments).toHaveLength(2);
+
+    const { service } = harness();
+    const empStats = await (service as any).departmentStats({ id: 'alice', platformRole: 'EMPLOYEE' });
+    expect(empStats.scope).toBe('own');
+    expect(empStats.personal.total).toBe(2);
+  });
+
+  it('runs the tool loop and returns plain, UUID-free answers', async () => {
+    const { service, prisma } = harness();
+    prisma.department.findMany.mockResolvedValue(CATALOG);
+    const realFetch = global.fetch;
+    const toolCall = { id: 'call-1', type: 'function', function: { name: 'my_stats', arguments: '{}' } };
+    (global as any).fetch = jest.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ choices: [{ message: { role: 'assistant', tool_calls: [toolCall] } }] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ choices: [{ message: { role: 'assistant', content: JSON.stringify({ answer: 'You have **2** tickets (cmugpjkdz00coa0q4zteti8me).' }) } }] }) });
+    try {
+      const result = await (service as any).runGroq({ id: 'alice', platformRole: 'EMPLOYEE' }, 'session-1', true);
+      expect(result.message).toContain('2');
+      expect(result.message).not.toContain('**');
+      expect(result.message).not.toContain('cmugpjkdz00coa0q4zteti8me');
+    } finally {
+      (global as any).fetch = realFetch;
+    }
   });
 });

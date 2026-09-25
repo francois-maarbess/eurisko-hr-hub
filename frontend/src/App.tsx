@@ -77,10 +77,8 @@ function ChatbotShell({ token }: { token: string }) {
   const [sending, setSending] = useState(false);
   const [confirmation, setConfirmation] = useState<{ id: string; kind: string; summary: string } | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
-    { role: 'assistant', text: 'Hello. I am the Operations Assistant preview.' },
-    { role: 'assistant', text: 'I can explain queue views and where to find your work.' },
-    { role: 'assistant', text: 'I can point you to New Request, Notifications, or Security.' },
-    { role: 'assistant', text: 'A full assistant arrives in a later milestone.' },
+    { role: 'assistant', text: 'Hello. I am the Operations Assistant.' },
+    { role: 'assistant', text: 'Ask me for stats, your tickets, or queue help — or tell me what you need, like "my laptop is on fire", and I will draft it for your review.' },
   ]);
 
   const sendMessage = async (text: string) => {
@@ -138,7 +136,7 @@ function ChatbotShell({ token }: { token: string }) {
         <BotMark />
       </button>
       {open && (
-        <Modal className="chatbot-modal" title="Operations Assistant" sub="Preview shell · replies are scripted locally" onClose={() => setOpen(false)}>
+          <Modal className="chatbot-modal" title="Operations Assistant" sub="Ask in plain words — I confirm before changing anything" onClose={() => setOpen(false)}>
           <div className="chatbot-content">
             <div className="chatbot-messages" aria-live="polite">
               {messages.map((message, index) => (

@@ -18,17 +18,23 @@ state.
 
 Authenticated users can call `POST /ai/chat` with `{ message, sessionId? }`.
 The assistant uses the caller's JWT identity and active department memberships
-for every read. It can report caller-scoped statistics, list/search authorized
-tickets, show authorized ticket details, report non-secret AI health, and start
+for every read. It can report caller-scoped statistics (including per-department
+numbers for admins and department members), list/search authorized
+tickets, show authorized ticket details, classify vague free text into catalog
+department/type/priority before proposing, report non-secret AI health, and start
 MFA setup for the caller's own account. The authenticator code must still be
 entered by the user in Security settings.
 
 Create-request, claim, reroute, and admin create-user actions are proposal-only
 until the UI returns the confirmation card and the caller explicitly confirms
 with its confirmation ID. The server repeats authorization and validation when
-executing and writes an audit event. Pending confirmation records persist only a
-safe summary; executable details expire with the running API process, so a
-restart cannot execute a stale or sensitive action.
+executing and writes an audit event. The full pending payload persists in the
+chat session row, so a restart rehydrates (never silently drops) a proposal;
+confirmation IDs stay valid only for their own session. Departments and request
+types are matched server-side from human words against the active catalog at
+propose time — bad proposals fail once with the valid options, never in a loop.
+Tool results shown to the model carry no confirmation or database IDs, and
+assistant messages render as plain text (no markdown, no raw ids).
 
 With no `GROQ_API_KEY`, the same window returns an honest local capability
 message and performs no model-backed tool actions. With a key, Groq is called

@@ -655,6 +655,53 @@ describe('Service Request Flow (E2E)', () => {
     expect(anon.status).toBe(401);
   });
 
+  it('operations assistant confirm executes a seeded proposal without any model call', async () => {
+    const emp = await prisma.user.findFirst({ where: { email: 'alice@acme.com' } });
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP', departmentId: dept!.id } });
+    const session = await (prisma as any).chatSession.create({ data: { userId: emp!.id } });
+    const actionId = 'hypothesis-confirmed-action';
+    await (prisma as any).chatSession.update({
+      where: { id: session.id },
+      data: {
+        pendingConfirmation: JSON.stringify({
+          id: actionId, kind: 'create-request', summary: 'Create this service request',
+          payload: { departmentId: dept!.id, requestTypeId: rt!.id, title: 'E2E chat-created ticket', description: 'Created through the assistant confirm path.', priority: 'STANDARD' },
+        }),
+      },
+    });
+    const res = await request(app.getHttpServer())
+      .post('/ai/chat')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ sessionId: session.id, confirmationId: actionId, confirmationAction: 'confirm' });
+    expect(res.status).toBe(201);
+    expect(res.body.message).toMatch(/confirmed/i);
+    const created = await prisma.request.findFirst({ where: { title: 'E2E chat-created ticket' } });
+    expect(created).toBeTruthy();
+    expect(created!.employeeId).toBe(emp!.id);
+    await prisma.request.deleteMany({ where: { title: 'E2E chat-created ticket' } });
+  });
+
+  it('operations assistant refuses employee user-creation at confirm time', async () => {
+    const emp = await prisma.user.findFirst({ where: { email: 'alice@acme.com' } });
+    const session = await (prisma as any).chatSession.create({ data: { userId: emp!.id } });
+    await (prisma as any).chatSession.update({
+      where: { id: session.id },
+      data: {
+        pendingConfirmation: JSON.stringify({
+          id: 'hypothesis-evil-action', kind: 'create-user', summary: 'Create user evil@acme.com',
+          payload: { email: 'evil@acme.com', displayName: 'Evil', platformRole: 'EMPLOYEE', password: 'Password123!' },
+        }),
+      },
+    });
+    const res = await request(app.getHttpServer())
+      .post('/ai/chat')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ sessionId: session.id, confirmationId: 'hypothesis-evil-action', confirmationAction: 'confirm' });
+    expect(res.status).toBe(403);
+    expect(await prisma.user.findFirst({ where: { email: 'evil@acme.com' } })).toBeNull();
+  });
+
   it('catalog lists departments and filters types without duplicates', async () => {
     const depts = await request(app.getHttpServer())
       .get('/catalog/departments')

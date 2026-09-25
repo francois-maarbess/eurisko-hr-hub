@@ -6,7 +6,7 @@
 
 An internal service hub for submitting, routing, tracking, and resolving employee requests.
 
-**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 110 backend tests + 10 frontend tests, 9 offline AI evals (`npm run test:count`).
+**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 119 backend tests + 10 frontend tests, 9 offline AI evals (`npm run test:count`).
 
 ## Demo (2 minutes)
 
@@ -105,7 +105,7 @@ rules.
 ## Running Tests
 
 ```bash
-npm test      # 110 backend tests (all deterministic, SQLite)
+npm test      # 119 backend tests (all deterministic, SQLite)
 npm run eval:ai  # 9 AI eval cases (offline, no key, no DB)
 cd frontend && npm test  # 10 frontend unit tests (vitest)
 npm run test:count      # verify README counts match reality
@@ -114,10 +114,10 @@ npm run test:count      # verify README counts match reality
 The exact test counts are checked by `npm run test:count -- --check` and are
 kept synchronized here automatically.
 
-120 tests covering:
-- **Unit**: Status transitions (10) + AI extractor/validation/fallback/sensitive/off-topic (10) + SLA fallback (1) + password accounts (6) + purge & duplicate scoring (3) + production secret guard (4)
+129 tests covering:
+- **Unit**: Status transitions (10) + AI extractor/validation/fallback/sensitive/off-topic (10) + SLA fallback (1) + password accounts (6) + purge & duplicate scoring (3) + production secret guard (4) + chat assistant safety (12)
 - **Integration**: Prisma ↔ SQLite database lifecycle (3)
-- **E2E (59)**: Full HTTP flow with auth, scoped views, create, claim, takeover, complete, concurrent-completion race, documents lifecycle, notifications, overdue inbox dedupe, duplicates (scoped), report + analytics, manager memberships, owner-cancel/admin-claim rules, validation, regression + AI draft/correction/health endpoints + catalog + admin user lifecycle + audit search + filtered export + SLA deadlines + breach center + rate limiting + TOTP two-factor + logout revocation + deactivation + correlation IDs + queue pagination/claimedBy filters + timeline privacy
+- **E2E (61)**: Full HTTP flow with auth, scoped views, create, claim, takeover, complete, concurrent-completion race, documents lifecycle, notifications, overdue inbox dedupe, duplicates (scoped), report + analytics, manager memberships, owner-cancel/admin-claim rules, validation, regression + AI draft/correction/health/chat-confirm endpoints + catalog + admin user lifecycle + audit search + filtered export + SLA deadlines + breach center + rate limiting + TOTP two-factor + logout revocation + deactivation + correlation IDs + queue pagination/claimedBy filters + timeline privacy
 
 ## AI-Assisted Intake (Week 4)
 
