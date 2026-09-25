@@ -20,7 +20,14 @@
 
 ### `requests`
 
-`id`, `employee_id`, `department_id`, `request_type_id`, title, description, priority, status, claimed_by, resolution_note, rejection_reason, completed_at, created_at, updated_at.
+`id`, `employee_id`, `department_id`, `request_type_id`, title, description, priority, status, claimed_by, resolution_note, rejection_reason, completed_at, `sla_due_at`, `sla_source`, nullable `parent_request_id`, nullable unique `submission_key`, created_at, updated_at.
+
+Macro workflows use a nullable self-reference from each child request to its
+parent. Parent and child rows retain independent claim/status/audit lifecycles;
+completion of the parent is rejected until every child is completed. The
+submission key makes client retries idempotent. The self-reference uses
+restrict-on-delete so workflow history cannot be removed by deleting a parent.
+The additive migration is `prisma/migrations/20260924183000_request_workflows`.
 
 Store both department and request type on the request for stable historical routing. A normal update cannot change either value. Re-routing is an explicit audited operation.
 
@@ -37,6 +44,7 @@ Store a storage key, not a public URL. A soft-deleted database row may remain fo
 ## 2. Invariants
 
 * Every request type and request department must match.
+* A request's optional parent link must reference an existing request; a parent is not completed while any child remains incomplete.
 * An employee can read only their own requests.
 * An agent or manager can read a request only when actively assigned to its department.
 * Only an active department member or system administrator can operate a department request.

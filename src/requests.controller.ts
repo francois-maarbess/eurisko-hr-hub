@@ -23,6 +23,7 @@ import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { Roles, RolesGuard } from './auth/roles.guard';
 import { CurrentUser } from './auth/current-user.decorator';
 import { AuditService } from './audit.service';
+import { Throttle } from '@nestjs/throttler';
 
 /** Human-friendly labels for audit actions (activity timeline). */
 function activityLabel(action: string, oldValue?: string | null, newValue?: string | null): string {
@@ -216,6 +217,13 @@ export class RequestsController {
   @Post()
   create(@Body() dto: CreateRequestDto, @CurrentUser() user: any) {
     return this.requestsService.create(dto, user.id);
+  }
+
+  @Post(':id/ai-playbook')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 6, ttl: 60000 } })
+  resolutionPlaybook(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.requestsService.generateResolutionPlaybook(id, user.id);
   }
 
   @Patch(':id/claim')

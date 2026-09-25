@@ -126,11 +126,61 @@ All catalog entries are active by default and have a stable identifier, descript
 
 Every transition records the actor, timestamp, previous status, new status, and reason or note where applicable.
 
+### AI-assisted intake and cross-department workflows
+
+- AI is advisory. It may propose a department, request type, priority, and
+  concise evidence-based rationale; the employee reviews and submits through
+  the same validated request flow.
+- If the request is genuinely ambiguous, AI must ask a focused clarification
+  and must not silently apply a guessed department/request type. Off-topic
+  requests receive a clear explanation instead of a forced ticket.
+- AI suggestions must use the active server-owned catalog. Server validation
+  remains authoritative even if the model returns structured JSON.
+- A clearly multi-department request may propose up to six child tasks. The
+  employee can edit or remove each task, or reject the whole proposal. Only
+  approved tasks submitted by the employee are persisted.
+- The parent remains a normal request in the employee-selected department.
+  Each child is an independent `PENDING` request in its own active department
+  and request type, owned by the same employee and independently claimed and
+  completed. The parent may be completed only after all child requests reach
+  `COMPLETED`; completing a parent never completes its children.
+- Parent and child creation and their audit entries are atomic. A stable
+  client submission key prevents network retries from duplicating a workflow.
+- An employee or system administrator may see the complete workflow. Staff
+  may see child details only within their authorized departments; sibling
+  task titles and descriptions must not leak across department boundaries.
+
+### SLA target policy
+
+- Each new request receives a stored target completion deadline. With the
+  optional Groq provider, an evidence-grounded continuous duration may be
+  selected anywhere from **15 minutes to 30 days** (integer milliseconds).
+  The estimate weighs stated impact, affected scope, operational blockage,
+  time sensitivity, and sensitivity; priority is considered but is not an
+  unconditional command.
+- The target is an estimate for internal work planning, not a contractual
+  guarantee or a safety/medical emergency response promise. The product is
+  not an emergency dispatch service.
+- Groq is optional. Missing configuration, timeout, provider failure, or
+  invalid output falls back to URGENT 4h / STANDARD 24h / LOW 48h and records
+  the source as `RULE`; accepted model estimates are recorded as `AI`.
+- SLA decisions happen before the request transaction. The external call is
+  bounded to 2.5 seconds; no network call runs while the database is locked.
+- Child requests in a macro use the deterministic priority fallback rather
+  than adding one model call per child.
+- Authorized department staff or a system administrator may use the pending
+  queue's combined claim-and-draft action. Claiming is a normal audited claim;
+  the generated resolution remains an editable draft. A human must submit the
+  verified resolution through the normal completion endpoint.
+
 ## 6. Functional requirements
 
 * **Catalog:** Employees can list active departments and request types. Inactive entries cannot receive new requests.
 * **Routing:** The request's `department_id` and `request_type_id` are stored at creation and validated together.
 * **Priority:** Employees choose `LOW`, `STANDARD`, or `URGENT`; queues sort urgent requests first, then oldest creation time.
+* **AI clarification:** Low-confidence workplace requests ask a focused question; the UI must not apply an uncertain classification.
+* **AI workflow decomposition:** Cross-department child tasks are suggestions only, reviewed and editable before the single atomic submit.
+* **SLA:** Store a bounded, per-request target completion estimate and its source; fall back to deterministic priority targets if AI is unavailable.
 * **Employee history:** Employees can list and inspect only their own requests.
 * **Department queue:** Agents and managers can list only requests belonging to their assigned departments.
 * **Claiming:** Claiming is atomic; only one agent can claim an unclaimed request.
@@ -213,7 +263,7 @@ The exact API routes and technical implementation belong in the architecture and
 
 ## 11. Open decisions before implementation
 
-* Department-specific service-level targets
+* Whether to introduce separate department-specific SLA bands after enough operational outcome data has been collected; the current global bounded estimate policy remains authoritative until then.
 * Maximum attachment size and allowed document formats
 * Notification preferences and escalation rules
 * Production hosting, backup, and disaster-recovery targets

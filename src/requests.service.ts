@@ -1,11 +1,12 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException, ForbiddenException, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, ForbiddenException, Inject, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
-import { CreateRequestDto } from './dto/create-request.dto';
+import { CreateChildRequestDto, CreateRequestDto } from './dto/create-request.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { PRISMA_CLIENT_TOKEN } from './prisma.service';
 import { AuditService } from './audit.service';
 import { NotificationsService } from './notifications.service';
 import { AiIntakeService } from './ai/ai-intake.service';
+import { fallbackSlaDurationMs } from './sla-policy';
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   PENDING: ['IN_PROGRESS', 'CANCELLED', 'REJECTED'],
@@ -19,6 +20,16 @@ const PRIORITY_RANK: Record<string, number> = { URGENT: 0, STANDARD: 1, LOW: 2 }
 const STOPWORDS = new Set(
   'a,an,and,are,as,at,be,by,for,from,has,have,how,in,into,is,it,its,of,on,or,that,the,their,this,to,was,what,when,with,need,needs,please,help,request,my,me,get,got,has,had,been,are,was,were,will,would,can,could,should,our,you,your,our,for,than,then,there,they,them,do,does,did,not,no,yes,if,else,than,too,very,just,about,into,over,after,before,up,down,out,off,on,again,once,here,there,when,where,which,who,whom,this,that,these,those,am,an,are,as,at,be,because,been,before,being,below,between,both,but,by,doing,each,few,further,had,having,he,her,hers,herself,him,himself,his,i,me,more,most,my,myself,nor,now,once,only,other,ought,same,she,so,some,such,than,too,until,very,was,were,yours,yourself'.split(','),
 );
+
+function titleOverlap(left: string, right: string): number {
+  const tokens = (value: string) => new Set(value.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((word) => word.length > 2));
+  const a = tokens(left);
+  const b = tokens(right);
+  if (a.size === 0 || b.size === 0) return 0;
+  let common = 0;
+  for (const word of a) if (b.has(word)) common++;
+  return common / Math.min(a.size, b.size);
+}
 
 export interface Viewer {
   id: string;
@@ -39,14 +50,13 @@ export class RequestsService {
   private async slaFor(title: string, description: string, priority: string) {
     try {
       if (this.ai) {
-        const { hours, source } = await this.ai.decideSlaHours(`${title}\n${description}`, priority);
-        return { slaDueAt: new Date(Date.now() + hours * 3600_000), slaSource: source };
+        const { durationMs, source } = await this.ai.decideSlaMs(`${title}\n${description}`, priority);
+        return { slaDueAt: new Date(Date.now() + durationMs), slaSource: source };
       }
     } catch {
       // Fall through to the rule-based deadline below.
     }
-    const hours = priority === 'URGENT' ? 4 : priority === 'STANDARD' ? 24 : 48;
-    return { slaDueAt: new Date(Date.now() + hours * 3600_000), slaSource: 'RULE' as const };
+    return { slaDueAt: new Date(Date.now() + fallbackSlaDurationMs(priority)), slaSource: 'RULE' as const };
   }
 
   private openWhere() {
@@ -215,24 +225,53 @@ export class RequestsService {
   async findOne(id: string, viewer: Viewer) {
     const request = await this.prisma.request.findUnique({
       where: { id },
-      include: { department: true, requestType: true, owner: true, claimant: true },
+      include: {
+        department: true,
+        requestType: true,
+        owner: true,
+        claimant: true,
+        parent: { select: { id: true, title: true, departmentId: true } },
+        children: {
+          include: { department: true, requestType: true, claimant: true },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
     });
     if (!request) throw new NotFoundException('Request not found');
-    if (viewer.platformRole === 'SYSTEM_ADMIN') return request;
-    if (request.employeeId === viewer.id) return request;
+    const unrestricted = viewer.platformRole === 'SYSTEM_ADMIN' || request.employeeId === viewer.id;
+    if (unrestricted) {
+      const completed = request.children.filter((child) => child.status === 'COMPLETED').length;
+      return { ...request, macroProgress: { completed, total: request.children.length } };
+    }
     const membership = await this.prisma.departmentMember.findUnique({
       where: { userId_departmentId: { userId: viewer.id, departmentId: request.departmentId } },
     });
     if (!membership?.active) {
       throw new ForbiddenException('You do not have access to this request.');
     }
-    return request;
+    // A department agent sees only child work routed to their department.
+    // This deliberately avoids leaking other teams' task titles or details.
+    const children = request.children.filter((child) => child.departmentId === request.departmentId);
+    const completed = children.filter((child) => child.status === 'COMPLETED').length;
+    return { ...request, parent: undefined, children, macroProgress: { completed, total: children.length } };
   }
 
   async create(dto: CreateRequestDto, employeeId: string) {
+    if (dto.submissionKey) {
+      const existing = await this.prisma.request.findUnique({
+        where: { submissionKey: dto.submissionKey },
+        include: { department: true, requestType: true, children: { include: { department: true, requestType: true } } },
+      });
+      if (existing) {
+        if (existing.employeeId !== employeeId) throw new ConflictException('Submission key has already been used.');
+        return existing;
+      }
+    }
+
     // Validate department + request type belong together
     const requestType = await this.prisma.requestType.findUnique({
       where: { id: dto.requestTypeId },
+      include: { department: true },
     });
     if (!requestType) throw new BadRequestException('Invalid request type');
     if (requestType.departmentId !== dto.departmentId) {
@@ -241,14 +280,43 @@ export class RequestsService {
     if (!requestType.active) {
       throw new BadRequestException('Request type is inactive');
     }
+    if (!requestType.department.active) throw new BadRequestException('Department is inactive');
+
+    const childTasks = dto.childTasks || [];
+    if (childTasks.length > 6) throw new BadRequestException('A workflow can contain at most six child requests.');
+    const validatedChildren: CreateChildRequestDto[] = [];
+    for (const child of childTasks) {
+      if (child.title.trim().length < 8 || child.title.length > 240 || child.description.trim().length < 8 || child.description.length > 400) {
+        throw new BadRequestException('Each child request needs a specific title and description.');
+      }
+      if (child.departmentId === dto.departmentId && child.requestTypeId === dto.requestTypeId &&
+          titleOverlap(child.title.trim(), dto.title.trim()) >= 0.8) {
+        throw new BadRequestException('A child request cannot duplicate its parent.');
+      }
+      const type = await this.prisma.requestType.findUnique({ where: { id: child.requestTypeId }, include: { department: true } });
+      if (!type || !type.active || !type.department.active || type.departmentId !== child.departmentId) {
+        throw new BadRequestException('A child request must use an active request type in its selected department.');
+      }
+      if (validatedChildren.some((prior) => titleOverlap(prior.title, child.title) >= 0.8)) {
+        throw new BadRequestException('Duplicate child requests are not allowed.');
+      }
+      validatedChildren.push({ ...child, title: child.title.trim(), description: child.description.trim() });
+    }
 
     // Request row + audit row atomically; notifications fan out after commit
     // and can never fail the write. The SLA deadline is decided BEFORE the
     // transaction so no LLM call ever holds a database transaction open.
     const sla = await this.slaFor(dto.title, dto.description, dto.priority);
-    const created = await this.prisma.$transaction(async (tx) => {
-      const req = await tx.request.create({
-        data: {
+    // Child SLAs use the deterministic published priority policy so a macro
+    // requires only one bounded Groq request, never one slow call per child.
+    const childSlas = validatedChildren.map((child) => {
+      return { slaDueAt: new Date(Date.now() + fallbackSlaDurationMs(child.priority)), slaSource: 'RULE' as const };
+    });
+    let created;
+    try {
+      created = await this.prisma.$transaction(async (tx) => {
+        const req = await tx.request.create({
+          data: {
           employeeId,
           departmentId: dto.departmentId,
           requestTypeId: dto.requestTypeId,
@@ -258,14 +326,61 @@ export class RequestsService {
           status: 'PENDING',
           slaDueAt: sla.slaDueAt,
           slaSource: sla.slaSource,
+          submissionKey: dto.submissionKey,
         },
-        include: { department: true, requestType: true },
+          include: { department: true, requestType: true },
+        });
+        await tx.auditLog.create({
+          data: {
+            requestId: req.id,
+            actorId: employeeId,
+            action: 'REQUEST_CREATED',
+            newValue: req.title,
+            metadata: validatedChildren.length ? JSON.stringify({ workflow: 'parent', childCount: validatedChildren.length }) : null,
+          },
+        });
+        const children: Awaited<ReturnType<typeof tx.request.create>>[] = [];
+        for (let i = 0; i < validatedChildren.length; i++) {
+          const child = validatedChildren[i];
+          const childReq = await tx.request.create({
+            data: {
+              employeeId,
+              departmentId: child.departmentId,
+              requestTypeId: child.requestTypeId,
+              title: child.title,
+              description: child.description,
+              priority: child.priority,
+              status: 'PENDING',
+              parentRequestId: req.id,
+              slaDueAt: childSlas[i].slaDueAt,
+              slaSource: childSlas[i].slaSource,
+            },
+            include: { department: true, requestType: true },
+          });
+          await tx.auditLog.create({
+            data: {
+              requestId: childReq.id,
+              actorId: employeeId,
+              action: 'REQUEST_CREATED',
+              newValue: childReq.title,
+              metadata: JSON.stringify({ parentRequestId: req.id }),
+            },
+          });
+          children.push(childReq);
+        }
+        return { ...req, children };
       });
-      await tx.auditLog.create({
-        data: { requestId: req.id, actorId: employeeId, action: 'REQUEST_CREATED', newValue: req.title },
-      });
-      return req;
-    });
+    } catch (error) {
+      if (dto.submissionKey && error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
+        const existing = await this.prisma.request.findUnique({
+          where: { submissionKey: dto.submissionKey },
+          include: { department: true, requestType: true, children: { include: { department: true, requestType: true } } },
+        });
+        if (existing?.employeeId === employeeId) return existing;
+        throw new ConflictException('Submission key has already been used.');
+      }
+      throw error;
+    }
 
     await this.notifications.emit({
       requestId: created.id,
@@ -274,6 +389,15 @@ export class RequestsService {
       idempotencyKey: `req-${created.id}-created`,
     });
     await this.notifications.fanout({ requestId: created.id, eventType: 'request.created', actorId: employeeId });
+    for (const child of created.children) {
+      await this.notifications.emit({
+        requestId: child.id,
+        eventType: 'request.created',
+        payload: { departmentId: child.departmentId, priority: child.priority, title: child.title, parentRequestId: created.id },
+        idempotencyKey: `req-${child.id}-created`,
+      });
+      await this.notifications.fanout({ requestId: child.id, eventType: 'request.created', actorId: employeeId });
+    }
     return created;
   }
 
@@ -329,6 +453,24 @@ export class RequestsService {
     });
     await this.notifications.fanout({ requestId: id, eventType: 'request.claimed', actorId: userId });
     return claimed;
+  }
+
+  async generateResolutionPlaybook(id: string, userId: string) {
+    const viewer = await this.viewerOf(userId);
+    const request = await this.findOne(id, viewer);
+    if (request.status !== 'IN_PROGRESS') {
+      throw new ConflictException('Only in-progress requests can receive a resolution draft.');
+    }
+    if (request.employeeId === userId || request.claimedById !== userId) {
+      throw new ForbiddenException('Only the agent currently assigned to this request can draft its resolution.');
+    }
+    if (!this.ai) throw new ServiceUnavailableException('AI resolution drafting is unavailable. Add a resolution note manually.');
+    return this.ai.generateResolutionPlaybook({
+      title: request.title,
+      description: request.description,
+      department: request.department.name,
+      requestType: request.requestType.name,
+    });
   }
 
   /**
@@ -500,6 +642,14 @@ export class RequestsService {
     if (dto.status === 'COMPLETED') updateData.completedAt = new Date();
 
     await this.prisma.$transaction(async (tx) => {
+      if (dto.status === 'COMPLETED') {
+        const unfinishedChildren = await tx.request.count({
+          where: { parentRequestId: id, status: { not: 'COMPLETED' } },
+        });
+        if (unfinishedChildren > 0) {
+          throw new BadRequestException('Complete every child request before completing the parent workflow.');
+        }
+      }
       // Conditional write: the row must still be in the state we validated
       // against. A concurrent transition wins the race; the loser gets 409
       // instead of writing contradictory history.

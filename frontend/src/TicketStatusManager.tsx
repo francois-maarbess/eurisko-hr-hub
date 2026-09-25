@@ -47,6 +47,19 @@ interface TicketState {
   status: TicketStatus;
   employeeId: string;
   departmentId: string;
+  parentRequestId?: string | null;
+  parent?: { id: string; title: string; departmentId: string } | null;
+  macroProgress?: { completed: number; total: number };
+  children?: Array<{
+    id: string;
+    title: string;
+    status: TicketStatus;
+    departmentId: string;
+    department?: { id: string; code: string; name: string };
+    requestType?: { code: string; name: string };
+    claimedById?: string | null;
+    claimant?: { id: string; displayName: string } | null;
+  }>;
   claimedById?: string | null;
   resolutionNote?: string;
   rejectionReason?: string;
@@ -115,14 +128,25 @@ const PRIORITY_COLORS: Record<TicketPriority, { background: string; color: strin
 type View = 'mine' | 'queue' | 'claimed' | 'unassigned' | 'mywork';
 
 function getSlaInfo(ticket: TicketState): { label: string; bg: string; color: string; title: string } {
-  // Prefer the stored per-ticket deadline (AI-set when Groq configured,
-  // rule-based otherwise); fall back to legacy priority math for tickets
-  // created before deadlines existed.
+  // Prefer the stored per-ticket duration (AI-estimated within policy,
+  // rule-based otherwise); fall back only for legacy rows.
   const hasStored = !!ticket.slaDueAt;
   const targetHours = ticket.priority === 'URGENT' ? 4 : ticket.priority === 'STANDARD' ? 24 : 48;
+  const createdMs = new Date(ticket.createdAt).getTime();
   const deadlineMs = hasStored
     ? new Date(ticket.slaDueAt as string).getTime()
-    : new Date(ticket.createdAt).getTime() + targetHours * 3600000;
+    : createdMs + targetHours * 3600000;
+  const formatDuration = (durationMs: number) => {
+    const totalMinutes = Math.max(1, Math.round(durationMs / 60000));
+    if (totalMinutes < 60) return `${totalMinutes}m`;
+    const totalHours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (totalHours < 24) return minutes ? `${totalHours}h ${minutes}m` : `${totalHours}h`;
+    const days = Math.floor(totalHours / 24);
+    const hours = totalHours % 24;
+    return hours ? `${days}d ${hours}h` : `${days}d`;
+  };
+  const targetLabel = formatDuration(deadlineMs - createdMs);
   const sourceTitle = hasStored
     ? ticket.slaSource === 'AI'
       ? 'AI-estimated deadline from ticket content'
@@ -143,7 +167,7 @@ function getSlaInfo(ticket: TicketState): { label: string; bg: string; color: st
 
   if (isTerminal) {
     return {
-      label: `SLA: ${targetHours}h`,
+      label: `SLA target: ${targetLabel}`,
       bg: '#f1f5f9',
       color: 'var(--muted)',
       title: sourceTitle,
@@ -152,12 +176,12 @@ function getSlaInfo(ticket: TicketState): { label: string; bg: string; color: st
 
   const remainingMs = deadlineMs - Date.now();
   if (remainingMs <= 0) {
-    const overdueHrs = Math.ceil(Math.abs(remainingMs) / 3600000);
+    const overdue = formatDuration(Math.abs(remainingMs));
     return {
-      label: `SLA Overdue (+${overdueHrs}h)`,
+      label: `SLA Overdue (+${overdue})`,
       bg: '#fee2e2',
       color: '#b91c1c',
-      title: `${sourceTitle} · overdue by about ${overdueHrs}h`,
+      title: `${sourceTitle} · overdue by ${overdue}`,
     };
   }
 
@@ -246,6 +270,8 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
 
   // Per-ticket form inputs
   const [resolutionInputs, setResolutionInputs] = useState<Record<string, string>>({});
+  const [playbookLoading, setPlaybookLoading] = useState<Record<string, boolean>>({});
+  const [playbookAssumptions, setPlaybookAssumptions] = useState<Record<string, string[]>>({});
   const [rejectionInputs, setRejectionInputs] = useState<Record<string, string>>({});
   const [showReject, setShowReject] = useState<Record<string, boolean>>({});
   const [showTakeover, setShowTakeover] = useState<Record<string, boolean>>({});
@@ -399,26 +425,38 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
       if (!response.ok) {
         setCardErrors((current) => ({ ...current, [ticket.id]: data?.message || 'Request failed.' }));
         if (optimistic) await fetchTickets(view);
-        return;
+        return false;
       }
       await fetchTickets(view);
       if (successMsg) showToast(successMsg);
+      return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to reach the server.';
       setCardErrors((current) => ({ ...current, [ticket.id]: message }));
       if (optimistic) await fetchTickets(view);
+      return false;
     } finally {
       setLoading(false);
     }
   };
 
-  const handleClaim = (ticket: TicketState) =>
+  const handleClaim = (ticket: TicketState, quiet = false) =>
     mutate(
       ticket,
       () => fetch(apiUrl(`/requests/${ticket.id}/claim`), { method: 'PATCH', headers: authHeaders }),
-      'Claimed — you are now working on this request.',
+      quiet ? undefined : 'Claimed — you are now working on this request.',
       { status: 'IN_PROGRESS', claimedById: userId },
     );
+
+  const handleClaimAndDraft = async (ticket: TicketState) => {
+    const claimed = await handleClaim(ticket, true);
+    if (claimed) {
+      const drafted = await handleDraftResolution({ ...ticket, status: 'IN_PROGRESS', claimedById: userId });
+      showToast(drafted
+        ? 'Request claimed. Review the AI draft, edit as needed, then submit to complete.'
+        : 'Request claimed. AI drafting was unavailable; add the verified resolution manually.');
+    }
+  };
 
   const handleCancel = (ticket: TicketState) =>
     mutate(
@@ -470,6 +508,30 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
       'Marked as completed.',
       { status: 'COMPLETED', resolutionNote: typedNote || ticket.resolutionNote },
     );
+  };
+
+  const handleDraftResolution = async (ticket: TicketState) => {
+    setPlaybookLoading((current) => ({ ...current, [ticket.id]: true }));
+    setCardErrors((current) => ({ ...current, [ticket.id]: null }));
+    try {
+      const response = await fetch(apiUrl(`/requests/${ticket.id}/ai-playbook`), {
+        method: 'POST',
+        headers: authHeaders,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.message || 'AI could not draft a resolution note.');
+      if (typeof data.resolutionNote !== 'string' || data.resolutionNote.trim().length < 30) {
+        throw new Error('AI returned an unusable resolution note. Write the verified resolution manually.');
+      }
+      setResolutionInputs((current) => ({ ...current, [ticket.id]: data.resolutionNote }));
+      setPlaybookAssumptions((current) => ({ ...current, [ticket.id]: Array.isArray(data.assumptions) ? data.assumptions : [] }));
+      return true;
+    } catch (error) {
+      setCardErrors((current) => ({ ...current, [ticket.id]: error instanceof Error ? error.message : 'AI draft failed.' }));
+      return false;
+    } finally {
+      setPlaybookLoading((current) => ({ ...current, [ticket.id]: false }));
+    }
   };
 
   const handleTakeover = (ticket: TicketState) =>
@@ -1143,6 +1205,26 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
               {highlightMatch(ticket.description, debouncedQuery)}
             </p>
 
+            {!!ticket.macroProgress?.total && (
+              <section className="macro-progress" aria-label="Workflow task progress">
+                <strong>Workflow progress: {ticket.macroProgress.completed} of {ticket.macroProgress.total} tasks completed</strong>
+                <div className="macro-progress-list">
+                  {(ticket.children || []).map((child) => (
+                    <div className="macro-progress-item" key={child.id}>
+                      <span>{child.title}</span>
+                      <span className="muted">{child.department?.name || 'Department'} · {formatEnum(child.status)}{child.claimant ? ` · Claimed by ${child.claimant.displayName}` : ''}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+            {ticket.parent && (
+              <div className="macro-parent-link">
+                <span className="muted">Part of workflow: {ticket.parent.title}</span>
+                {onOpenTicket && <Button variant="ghost" small onClick={() => onOpenTicket(ticket.parent!.id)}>Open parent request</Button>}
+              </div>
+            )}
+
             {focusTicketId && (
               <>
                 <div className="muted" style={{ fontSize: '0.8rem' }}>
@@ -1418,10 +1500,22 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
             {/* Resolution note input box when in progress */}
             {canWork && (
               <div style={{ display: 'grid', gap: '0.5rem', marginTop: '0.75rem' }}>
+                <div className="row ai-playbook-actions">
+                  <span className="muted">AI suggestions are drafts. Verify and edit the note before submitting.</span>
+                </div>
+                {Object.prototype.hasOwnProperty.call(playbookAssumptions, ticket.id) && (
+                  <div className="note-ai" role="status">
+                    <strong>AI-generated draft — verify every statement and edit before completion.</strong>
+                    {(playbookAssumptions[ticket.id] || []).length > 0 && (
+                      <ul className="plain-list"><li><strong>Confirm before using:</strong></li>
+                        {playbookAssumptions[ticket.id].map((assumption, index) => <li key={`${ticket.id}-assumption-${index}`}>{assumption}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                )}
                 <Field label="Resolution note (or complete with an attached document above)">
-                  <input
-                    className="input"
-                    type="text"
+                  <textarea
+                    className="textarea"
                     value={resolutionInputs[ticket.id] ?? ''}
                     onChange={(e) => setResolutionInputs((c) => ({ ...c, [ticket.id]: e.target.value }))}
                     onKeyDown={(e) => {
@@ -1431,6 +1525,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                       }
                     }}
                     placeholder="Enter resolution details (Ctrl+Enter to complete)"
+                    rows={4}
                   />
                 </Field>
               </div>
@@ -1538,8 +1633,8 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
             {/* Action buttons row */}
             <div className="row" style={{ marginTop: '1rem', gap: '0.5rem', flexWrap: 'wrap' }}>
               {canClaim && (
-                <Button variant="primary" small onClick={() => handleClaim(ticket)} disabled={loading}>
-                  {loading ? '...' : 'Claim'}
+                <Button className="claim-draft-btn" variant="primary" small onClick={() => void handleClaimAndDraft(ticket)} disabled={loading || !!playbookLoading[ticket.id]}>
+                  {loading ? 'Claiming…' : playbookLoading[ticket.id] ? 'Preparing draft…' : 'Claim & draft resolution'}
                 </Button>
               )}
               {canTakeover && !showTakeover[ticket.id] && (
@@ -1565,7 +1660,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
               {canWork && (
                 <>
                   <Button variant="success" small onClick={() => handleResolve(ticket)} disabled={loading}>
-                    {loading ? '...' : 'Resolve'}
+                    {loading ? 'Submitting…' : 'Submit & complete'}
                   </Button>
                   {!showReject[ticket.id] ? (
                     <Button variant="danger-outline" small onClick={() => setShowReject((c) => ({ ...c, [ticket.id]: true }))} disabled={loading}>

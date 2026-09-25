@@ -26,6 +26,13 @@ export interface RawDraft {
   priority: string;
 }
 
+export interface RawChildTask {
+  departmentCode: string;
+  requestTypeCode: string;
+  task: string;
+  reason: string;
+}
+
 export type DraftConfidence = 'high' | 'low';
 
 export interface ProviderDraft {
@@ -37,6 +44,9 @@ export interface ProviderDraft {
   /** Explainability: which catalog words matched and why this won. Shown in
    * the UI as "why this classification" so instructors see the reasoning. */
   trace?: { matchedKeywords: string[]; rationale: string };
+  needsClarification?: boolean;
+  clarificationQuestions?: string[];
+  macro?: { summary: string; childTasks: RawChildTask[] } | null;
 }
 
 export interface AiProvider {

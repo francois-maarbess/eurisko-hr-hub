@@ -91,6 +91,8 @@ model Request {
   feedbackNote   String?
   slaDueAt       DateTime?
   slaSource      String?   // 'AI' | 'RULE' — who set the deadline
+  parentRequestId String?
+  submissionKey String? @unique
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -101,9 +103,12 @@ model Request {
   documents   Document[]
   auditLogs   AuditLog[]
   staffNotes  StaffNote[]
+  parent      Request?     @relation("RequestChildren", fields: [parentRequestId], references: [id], onDelete: Restrict)
+  children    Request[]    @relation("RequestChildren")
 
   @@index([employeeId, createdAt(sort: Desc)])
   @@index([departmentId, status, priority, createdAt])
+  @@index([parentRequestId, status])
 }
 
 model StaffNote {

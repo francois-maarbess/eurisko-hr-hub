@@ -64,27 +64,31 @@ describe('AI-assisted intake (Week 4)', () => {
     expect(res.confidence).toBe('high');
   });
 
-  it('thin input: a single word still resolves, validation pads description to DTO minimums', async () => {
+  it('does not let shared department keywords make a clear laptop request ambiguous', async () => {
+    const svc = new AiIntakeService(stubPrisma, new LocalAiProvider(), undefined as any);
+    const out = await svc.draft('my laptop screen is cracked, need it asap');
+    expect(out.departmentId).toBe('dept-it');
+    expect(out.requestTypeId).toBe('type-laptop');
+    expect(out.needsClarification).toBe(false);
+  });
+
+  it('thin input: a single word asks for clarification rather than guessing missing details', async () => {
     const res = await local.extractDraft('vpn', CATALOG);
     expect(res.draft.departmentCode).toBe('IT');
     expect(res.draft.requestTypeCode).toBe('VPN');
-    expect(res.draft.priority).toBe('STANDARD');
-    const validated = validateCandidate(
-      res.draft,
-      ROWS.map((d) => ({ id: d.id, code: d.code, requestTypes: d.requestTypes })),
-    );
-    expect(validated.description.length).toBeGreaterThanOrEqual(10);
+    expect(res.confidence).toBe('low');
+    const draft = await new AiIntakeService(stubPrisma, new LocalAiProvider(), undefined as any).draft('vpn');
+    expect(draft.needsClarification).toBe(true);
+    expect(draft.departmentId).toBeNull();
+    expect(draft.clarificationQuestions.length).toBeGreaterThan(0);
   });
 
-  it('ambiguous input: returns valid in-catalog values flagged low-confidence', async () => {
-    const res = await local.extractDraft('help me get set up', CATALOG);
-    expect(res.confidence).toBe('low');
-    const validated = validateCandidate(
-      res.draft,
-      ROWS.map((d) => ({ id: d.id, code: d.code, requestTypes: d.requestTypes })),
-    );
-    expect(validated.departmentId).toBeTruthy();
-    expect(validated.requestTypeId).toBeTruthy();
+  it('ambiguous input: asks a focused question and does not choose a category', async () => {
+    const res = await new AiIntakeService(stubPrisma, new LocalAiProvider(), undefined as any).draft('help me get set up');
+    expect(res.needsClarification).toBe(true);
+    expect(res.departmentId).toBeNull();
+    expect(res.requestTypeId).toBeNull();
+    expect(res.clarificationQuestions.length).toBeGreaterThan(0);
   });
 
   it('calm input: no urgency words means STANDARD, never forced URGENT', async () => {
@@ -152,18 +156,18 @@ describe('AI-assisted intake (Week 4)', () => {
     );
   });
 
-  it('SLA estimator falls back to priority targets without a key', async () => {
+  it('SLA estimator falls back to priority targets in milliseconds without a key', async () => {
     const svc = new AiIntakeService(stubPrisma, new LocalAiProvider(), undefined as any);
-    await expect(svc.decideSlaHours('my laptop is on fire', 'URGENT')).resolves.toEqual({
-      hours: 4,
+    await expect(svc.decideSlaMs('my laptop is on fire', 'URGENT')).resolves.toEqual({
+      durationMs: 4 * 3600_000,
       source: 'RULE',
     });
-    await expect(svc.decideSlaHours('need a new mouse', 'STANDARD')).resolves.toEqual({
-      hours: 24,
+    await expect(svc.decideSlaMs('need a new mouse', 'STANDARD')).resolves.toEqual({
+      durationMs: 24 * 3600_000,
       source: 'RULE',
     });
-    await expect(svc.decideSlaHours('new mouse when convenient', 'LOW')).resolves.toEqual({
-      hours: 48,
+    await expect(svc.decideSlaMs('new mouse when convenient', 'LOW')).resolves.toEqual({
+      durationMs: 48 * 3600_000,
       source: 'RULE',
     });
   });

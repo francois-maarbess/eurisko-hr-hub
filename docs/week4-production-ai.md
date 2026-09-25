@@ -1,88 +1,81 @@
-# Week 4 — Production AI: AI-Assisted Request Intake (v0.4)
+# AI-assisted intake and operations workflows
 
-## What was built
+## Authority and trust
 
-One AI-assisted Request Intake capability in the same Internal Operations
-Service Hub repo. An employee types free text ("my laptop screen is cracked,
-need a replacement ASAP"); the backend returns a **structured draft
-candidate** (department, request type, title, description, priority); the
-human reviews it in the form and submits through the existing validated
-`POST /requests` flow.
+AI is advisory. The model proposes structured drafts; software validates them
+against the active catalog, and an employee reviews or corrects them before
+submission. The model never writes database records or changes ticket status.
+Every final request uses the authenticated, validated `POST /requests` flow.
 
-**AI is advisory. Software + human authority stays final.** Nothing is ever
-created by the AI path — `POST /requests/ai-draft` returns a candidate only.
-The existing creation endpoint, DTO validation, auth rules, and state machine
-are untouched.
+The default is the deterministic, dependency-free local provider. Setting the
+existing optional `GROQ_API_KEY` enables Groq. No new key or dependency is
+required. Provider failure falls back to local classification and policy-based
+SLA targets; resolution playbooks clearly report unavailable when Groq is not
+configured.
 
-**No paid AI provider required.** The default provider is a deterministic,
-dependency-free local extractor (keyword scoring over the product's own
-catalog — zero network, zero keys, works offline). If `GROQ_API_KEY` is set,
-a Groq LLM provider is tried first and any failure falls back to local.
+## AI request draft
 
-## How it works
+`POST /requests/ai-draft` loads the active, database-owned catalog and returns
+validated department/type IDs, title, description, priority, confidence,
+sensitivity, short rationale, and the prompt version. Model text is treated
+as untrusted input and output must match a strict runtime JSON contract.
 
-```
-free text → POST /requests/ai-draft (JWT) → catalog load (DB-owned context)
-  → provider extracts codes → validateCandidate() enforces product rules
-  → { departmentId, requestTypeId, title, description, priority,
-      confidence, provider } → human reviews → POST /requests
-```
+- Unknown or inactive catalog entries are never accepted.
+- Low-confidence or ambiguous workplace input returns focused clarification
+  questions and no applied department/request-type IDs. Off-topic input gets a
+  clear workplace-request message rather than a forced classification.
+- Distress/harassment/safety signals are discreetly flagged and force the
+  advisory draft priority to URGENT. This is not emergency response or
+  professional advice; the employee reviews all fields.
+- The offline classifier scores request-type evidence separately from
+  department-wide context. Type-specific evidence has full weight; shared
+  department words only break weak ties.
 
-- **Bounded context:** the model only ever sees department/request-type
-  codes from the database. It cannot invent values.
-- **Validation (`validateCandidate`, pure function):** unknown department or
-  type → 400s with messages; unknown priority → coerced to STANDARD;
-  short/garbage text → safe fallbacks that still satisfy DTO minimums. Invalid output is
-  rejected, never created.
-- **UNKNOWN is reserved for off-topic input only** (gibberish, sports,
-  cooking, small talk): the service answers 400 with a human-readable
-  message ("I can only help with workplace requests…"). Anything
-  work-related — typos, emotions, vague wording, personal hardship — always
-  resolves to the closest category, never UNKNOWN.
-- **Confidence:** `high` when the match is decisive, `low` when ambiguous —
-  the UI tells the user to double-check (`CreateRequestForm.tsx` AI box).
-- **Sensitive flag:** distress/safety signals (harassment, crying, unsafe…)
-  mark the draft `sensitive: true`, force URGENT, and show a discreet UI
-  note. Advisory only — a human still reviews every word.
-- **Frontend:** "Draft with AI" box above the existing form fills every
-  field from the candidate. Submit path unchanged.
+## SLA target policy
 
-## How to run
+See [SLA target design](sla-design.md). Groq may estimate a continuous integer
+millisecond duration between 15 minutes and 30 days from stated impact, scope,
+blockage, time sensitivity, and sensitivity. The target is an internal planning
+estimate, not a contractual or emergency-response guarantee. The bounded call
+has a 2.5-second timeout and runs before the request transaction. On any
+failure, URGENT/STANDARD/LOW use 4/24/48-hour deterministic targets and source
+`RULE`; accepted estimates are stored with source `AI`.
 
-```bash
-npm install
-npx prisma generate
-npx prisma migrate dev
-npx tsx prisma/seed.ts
+## Reviewed multi-department workflows
 
-npm test          # 62 tests: 10 transitions + 3 integration + 10 AI unit + 6 auth unit + 3 purge/duplicate unit + 30 E2E
-npm run eval:ai   # 8 representative AI eval cases, offline, deterministic
-```
+For clearly multi-department requests, AI may propose up to six child tasks,
+each routed using an active catalog pair. The requester may edit task text and
+routing, remove individual tasks, or reject the full proposal. Server-side
+validation is repeated at submit time. A stable submission UUID prevents
+network retries from duplicating the request set.
 
-Optional: set `GROQ_API_KEY` to enable the LLM provider (falls back to
-local on any failure). Nothing else changes.
+The parent remains a normal request in the employee-selected department.
+Approved children are normal independent requests owned by the same employee,
+and are independently claimed, completed, audited, and assigned deterministic
+fallback SLAs. Parent and child rows plus audit entries are created in one
+Prisma transaction. The parent cannot complete while any child is not
+`COMPLETED`; a rejected child means the overall parent must be rejected rather
+than falsely marked complete. Owners and system administrators can inspect
+the complete workflow. Department staff see only child details for requests
+their department is authorized to access.
 
-## Eval coverage (PROVE)
+## Resolution playbook
 
-`npm run eval:ai` runs 8 cases with no network, no database, no key:
+An authenticated department agent or administrator can use **Claim & draft
+resolution** on an eligible pending queue item. The UI first claims it through
+the normal audited endpoint, then requests `POST /requests/:id/ai-playbook` as
+the current assignee. The result is a professional resolution-note draft with
+explicit assumptions. It must not claim work has already been performed. The
+agent edits and verifies it, then chooses **Submit & complete**. AI never
+updates status or request data; the existing completion endpoint still
+enforces claim ownership and a resolution note or document. The endpoint is
+rate-limited; if drafting fails after claim, the request remains claimed and
+can still be completed with a manually written note.
 
-1. **clear** — urgent laptop request → IT/LAPTOP/URGENT, high confidence
-2. **thin** — single word "vpn" → IT/VPN/STANDARD, description padded
-3. **ambiguous** — "help me get set up" → valid in-catalog values, low confidence
-4. **invalid output** — unknown department/category codes → rejected (400)
-5. **provider failure** — throwing provider → local fallback still drafts
-6. **conditional behavior** — calm wording ("at your convenience, no rush") → STANDARD, never forced URGENT
-7. **distressed + typos** — harassment/crying/sick wording → PEO/WELLBEING, URGENT, `sensitive: true`, high confidence
-8. **off-topic** — "who won the formula 1 race" → clean 400 workplace-requests message, never a forced ticket
+## Verification
 
-## Files
-
-- `src/ai/ai.provider.ts` — provider contract + catalog/draft types
-- `src/ai/local-ai.provider.ts` — deterministic offline extractor (default)
-- `src/ai/groq-ai.provider.ts` — optional LLM provider (raw HTTPS, no SDK)
-- `src/ai/ai-intake.service.ts` — catalog load, provider fallback, `validateCandidate`
-- `src/ai/ai.controller.ts` — `POST /requests/ai-draft` (JWT-guarded)
-- `src/ai/ai.module.ts`, `src/ai/ai-intake.service.spec.ts` (8 unit tests)
-- `scripts/eval-ai.ts` — 8 eval cases, exit code signals pass/fail
-- `test/app.e2e-spec.ts` — draft happy path (creates nothing) + empty/anon rejections
-- `frontend/src/CreateRequestForm.tsx` — AI draft box + confidence note
+`npm run eval:ai` is deterministic and offline. Unit/e2e tests cover catalog
+validation, ambiguous and sensitive examples, prompt-injection resistance,
+strict provider schemas, bounded SLA calculations, provider fallback, macro
+atomicity/idempotency/access/completion rules, and playbook output validation
+and authorization. The standard test suite does not call Groq.

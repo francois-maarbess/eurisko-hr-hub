@@ -6,7 +6,7 @@
 
 An internal service hub for submitting, routing, tracking, and resolving employee requests.
 
-**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 96 backend tests + 10 frontend tests, 9 AI evals (`npm run test:count`).
+**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 102 backend tests + 10 frontend tests, 9 offline AI evals (`npm run test:count`).
 
 ## Demo (2 minutes)
 
@@ -99,13 +99,13 @@ cd frontend && npm run dev
 ## Running Tests
 
 ```bash
-npm test      # 96 backend tests (all deterministic, SQLite)
+npm test      # 102 backend tests (all deterministic, SQLite)
 npm run eval:ai  # 9 AI eval cases (offline, no key, no DB)
 cd frontend && npm test  # 10 frontend unit tests (vitest)
 npm run test:count      # verify README counts match reality
 ```
 
-96 tests covering:
+102 tests covering:
 - **Unit**: Status transitions (10) + AI extractor/validation/fallback/sensitive/off-topic (10) + SLA fallback (1) + password accounts (6) + purge & duplicate scoring (3) + production secret guard (4)
 - **Integration**: Prisma ↔ SQLite database lifecycle (3)
 - **E2E (59)**: Full HTTP flow with auth, scoped views, create, claim, takeover, complete, concurrent-completion race, documents lifecycle, notifications, overdue inbox dedupe, duplicates (scoped), report + analytics, manager memberships, owner-cancel/admin-claim rules, validation, regression + AI draft/correction/health endpoints + catalog + admin user lifecycle + audit search + filtered export + SLA deadlines + breach center + rate limiting + TOTP two-factor + logout revocation + deactivation + correlation IDs + queue pagination/claimedBy filters + timeline privacy
@@ -114,13 +114,20 @@ npm run test:count      # verify README counts match reality
 
 Type rough words in the **Draft with AI** box and the backend returns a
 structured draft candidate (department, type, title, description, priority,
-confidence). You review it, then Submit creates the request through the
-normal validated flow — the AI never creates anything.
+confidence). Ambiguous workplace requests ask a clarification rather than
+silently receiving a guessed category. Clear multi-department requests may
+include an editable, rejectable child-task proposal. You review it, then Submit
+creates the request through the normal validated flow — the AI never creates
+anything automatically. From a pending queue item, authorized staff can use
+**Claim & draft resolution** to claim it and request an optional AI resolution
+draft. Review and edit the draft, then use **Submit & complete**; AI never
+completes the ticket, and existing completion evidence rules still apply.
 
 - Default provider is a built-in offline extractor (no key, no network).
 - Set `GROQ_API_KEY` to use an LLM provider instead (any failure falls back
   to the offline extractor).
 - Details: `docs/week4-production-ai.md`
+- Workflow, SLA bounds, privacy and lifecycle: `docs/product-spec.md` and `docs/sla-design.md`
 
 ## API Endpoints
 

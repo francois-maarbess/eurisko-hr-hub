@@ -39,10 +39,12 @@ flowchart TD
 
 1. API validates the credential and loads the user and active memberships. (Academy implementation: email + password with TOTP per ADR-002; SSO token validation stays the production target.)
 2. For creation, API validates the request type and derives the owning department.
-3. API writes the request and audit entry transactionally.
-4. A durable event triggers notifications after commit.
-5. Authorized staff claim and resolve requests through the API.
-6. Document transfers are streamed through the API after an authorization check.
+3. Optional AI intake returns a validated draft only. Optional bounded SLA estimation happens before the database transaction; provider failure uses the documented rule fallback.
+4. For a user-approved macro, API revalidates every catalog pairing and atomically writes the parent, children, and audit entries. Submission keys make retries idempotent.
+5. API writes ordinary requests and their audit entry transactionally.
+6. A durable event triggers notifications after commit.
+7. Authorized staff claim and resolve requests through the API. An assigned agent may ask AI for a resolution-note draft; the draft is untrusted, editable, and cannot mutate ticket state.
+8. Document transfers are streamed through the API after an authorization check.
 
 ## 4. Trust and authorization boundaries
 
@@ -84,6 +86,7 @@ Communication between client and API is synchronous REST. Notifications and main
   with static priority fallback) and stored as `slaDueAt`/`slaSource`; see
   `docs/sla-design.md`. The breach center (`GET /requests/breach`) lists
   open overdue tickets with queue-equivalent scoping.
+* **AI operations assistance** is optional and non-authoritative: catalog-validated intake, bounded SLA estimates, reviewed parent/child proposals, and assigned-agent resolution drafts. See `docs/week4-production-ai.md`.
 * **Healthcheck** (`GET /health`) returns 200 + version/uptime when the
   database pings, **503** when it does not, so orchestrators restart or
   alert on real outages.

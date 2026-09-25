@@ -90,20 +90,24 @@ export class LocalAiProvider implements AiProvider {
 
     for (const dept of catalog) {
       for (const type of dept.types) {
-        const keys = keywordSet(
-          [
-            dept.code.replace(/_/g, ' '),
-            dept.name,
-            dept.description,
-            type.code.replace(/_/g, ' '),
-            type.name,
-            type.description,
-          ],
-          TYPE_SYNONYMS[type.code] || [],
-        );
+        const departmentKeys = keywordSet([
+          dept.code.replace(/_/g, ' '), dept.name, dept.description,
+        ]);
+        const typeKeys = keywordSet([
+          type.code.replace(/_/g, ' '), type.name, type.description,
+        ], TYPE_SYNONYMS[type.code] || []);
         const matched: string[] = [];
-        for (const t of tokens) if (keys.has(t)) matched.push(t);
-        const score = matched.length;
+        let score = 0;
+        for (const token of tokens) {
+          if (typeKeys.has(token)) {
+            matched.push(token);
+            score += 1;
+          } else if (departmentKeys.has(token)) {
+            // Shared department words provide weak context only. Counting
+            // them as full category evidence makes sibling types tie.
+            score += 0.2;
+          }
+        }
         if (!best || score > best.score) {
           runnerUpScore = best ? best.score : 0;
           best = { deptCode: dept.code, typeCode: type.code, score, matched };
@@ -156,7 +160,10 @@ export class LocalAiProvider implements AiProvider {
       ? best
       : { deptCode: fallbackDept.code, typeCode: fallbackType.code, score: 0, matched: [] as string[] };
 
-    const high = picked.score >= 3 && picked.score - runnerUpScore >= 2;
+    // Two independent catalog signals with a clear lead are enough to
+    // confidently route; a single thin match still asks the employee to clarify.
+    const high = picked.score >= 2 && picked.score - runnerUpScore >= 1;
+    const onboardingIntent = /\bonboard(?:ing)?\b/.test(lowered);
     const pickedTypeName =
       catalog.flatMap((d) => d.types).find((t) => t.code === picked.typeCode)?.name || picked.typeCode;
     const firstClause = text.split(/[.?!;\n]/)[0].trim().slice(0, 90) || text.trim().slice(0, 90);
@@ -174,9 +181,37 @@ export class LocalAiProvider implements AiProvider {
         description: text.trim(),
         priority: urgent || sensitive ? 'URGENT' : 'STANDARD',
       },
-      confidence: high ? 'high' : 'low',
+      confidence: high || (onboardingIntent && picked.typeCode === 'ONBOARDING') ? 'high' : 'low',
       sensitive,
       trace: { matchedKeywords, rationale },
+      ...(onboardingIntent && picked.typeCode === 'ONBOARDING'
+        ? { macro: this.onboardingMacro(catalog, text) }
+        : {}),
     };
+  }
+
+  private onboardingMacro(catalog: CatalogDepartment[], text: string) {
+    const tasks: NonNullable<ProviderDraft['macro']>['childTasks'] = [];
+    const it = catalog.find((department) => ['IT', 'TECH'].includes(department.code.toUpperCase()));
+    const equipment = it?.types.find((type) => ['EQUIPMENT', 'LAPTOP', 'ACCESS'].includes(type.code.toUpperCase()));
+    if (it && equipment) {
+      tasks.push({
+        departmentCode: it.code,
+        requestTypeCode: equipment.code,
+        task: 'Prepare employee equipment and access',
+        reason: `The request explicitly asks to onboard a new employee: ${text.trim().slice(0, 120)}`,
+      });
+    }
+    const facilities = catalog.find((department) => ['FAC', 'FACILITIES'].includes(department.code.toUpperCase()));
+    const workspace = facilities?.types.find((type) => ['DESK', 'SUPPLIES', 'MAINTENANCE'].includes(type.code.toUpperCase()));
+    if (facilities && workspace) {
+      tasks.push({
+        departmentCode: facilities.code,
+        requestTypeCode: workspace.code,
+        task: 'Prepare the new employee workspace',
+        reason: `The request explicitly asks to onboard a new employee: ${text.trim().slice(0, 120)}`,
+      });
+    }
+    return tasks.length > 0 ? { summary: 'Coordinate setup for the new employee', childTasks: tasks } : null;
   }
 }

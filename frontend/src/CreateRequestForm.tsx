@@ -10,10 +10,30 @@ interface CreateRequestFormProps {
 
 interface Department { id: string; code: string; name: string; }
 interface RequestType { id: string; code: string; name: string; departmentId: string; }
+interface MacroEditorTask {
+  key: string;
+  departmentId: string;
+  requestTypeId: string;
+  title: string;
+  description: string;
+}
+
+function idempotencyKeyFor(payload: Record<string, unknown>): string {
+  const fingerprint = JSON.stringify(payload);
+  try {
+    const previous = JSON.parse(localStorage.getItem('request-submission-key-v1') || 'null') as { fingerprint?: string; key?: string } | null;
+    if (previous?.fingerprint === fingerprint && previous.key) return previous.key;
+    const key = crypto.randomUUID();
+    localStorage.setItem('request-submission-key-v1', JSON.stringify({ fingerprint, key }));
+    return key;
+  } catch {
+    return crypto.randomUUID();
+  }
+}
 
 const DRAFT_KEY = 'new-request-draft-v1';
 
-function loadDraft(): Record<string, string> {
+function loadDraft(): Record<string, any> {
   try {
     return JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
   } catch {
@@ -22,7 +42,7 @@ function loadDraft(): Record<string, string> {
 }
 
 export default function CreateRequestForm({ token, onCreated, catalogVersion }: CreateRequestFormProps) {
-  const [draft] = useState<Record<string, string>>(loadDraft);
+  const [draft] = useState<Record<string, any>>(loadDraft);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [requestTypes, setRequestTypes] = useState<RequestType[]>([]);
   const [selectedDept, setSelectedDept] = useState(draft.selectedDept || '');
@@ -44,6 +64,8 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
     matched: string[];
     rationale: string;
   } | null>(null);
+  const [macroTasks, setMacroTasks] = useState<MacroEditorTask[]>(() => Array.isArray(draft.macroTasks) ? draft.macroTasks : []);
+  const [macroSummary, setMacroSummary] = useState(typeof draft.macroSummary === 'string' ? draft.macroSummary : '');
   const [dupLoading, setDupLoading] = useState(false);
   const [duplicates, setDuplicates] = useState<{ id: string; title: string; status: string }[] | null>(null);
   const [dupConfirmedFor, setDupConfirmedFor] = useState<string | null>(null);
@@ -54,12 +76,12 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
     try {
       localStorage.setItem(
         DRAFT_KEY,
-        JSON.stringify({ selectedDept, selectedType, title, description, priority, aiText }),
+        JSON.stringify({ selectedDept, selectedType, title, description, priority, aiText, macroTasks, macroSummary }),
       );
     } catch {
       // Ignore quota/private-mode errors.
     }
-  }, [selectedDept, selectedType, title, description, priority, aiText]);
+  }, [selectedDept, selectedType, title, description, priority, aiText, macroTasks, macroSummary]);
 
   const clearDraft = () => {
     try {
@@ -108,6 +130,19 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
         setAiNote(data.message || 'AI could not structure that. Try describing the issue.');
         return;
       }
+      if (data.needsClarification === true) {
+        setMacroTasks([]);
+        setMacroSummary('');
+        const questions = Array.isArray(data.clarificationQuestions) ? data.clarificationQuestions : [];
+        setAiNote(questions.length ? `Please clarify: ${questions.join(' ')}` : 'AI needs more detail. Select the request category and describe the outcome you need.');
+        setAiTrace({
+          provider: data.provider || 'local', promptVersion: data.promptVersion || '',
+          confidence: data.confidence || 'low',
+          matched: Array.isArray(data?.trace?.matchedKeywords) ? data.trace.matchedKeywords : [],
+          rationale: typeof data?.trace?.rationale === 'string' ? data.trace.rationale : '',
+        });
+        return;
+      }
       const dept = departments.find((d) => d.id === data.departmentId);
       if (dept) {
         setSelectedDept(dept.id);
@@ -119,6 +154,19 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
       if (['LOW', 'STANDARD', 'URGENT'].includes(data.priority)) {
         setPriority(data.priority);
       }
+      if (data.macro && Array.isArray(data.macro.childTasks)) {
+        setMacroSummary(data.macro.summary || 'Suggested multi-department workflow');
+        setMacroTasks(data.macro.childTasks.map((task: any) => ({
+          key: crypto.randomUUID(),
+          departmentId: task.departmentId,
+          requestTypeId: task.requestTypeId,
+          title: task.task,
+          description: task.reason,
+        })));
+      } else {
+        setMacroTasks([]);
+        setMacroSummary('');
+      }
       let note =
         data.confidence === 'high'
           ? 'AI suggestion applied — review it, then Submit below.'
@@ -126,7 +174,7 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
       if (data.sensitive === true) {
         note += ' This looks personal and urgent — it will be handled discreetly.';
       }
-      setAiNote(note);
+      setAiNote(note + (data.macro?.childTasks?.length ? ` Review ${data.macro.childTasks.length} proposed cross-department tasks below before submitting.` : ''));
       setAiTrace({
         provider: data.provider || 'local',
         promptVersion: data.promptVersion || '',
@@ -201,16 +249,21 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
     setError('');
 
     try {
+      const payload: Record<string, unknown> = {
+        departmentId: selectedDept,
+        requestTypeId: selectedType,
+        title,
+        description,
+        priority,
+        ...(macroTasks.length ? { childTasks: macroTasks.map(({ departmentId, requestTypeId, title: childTitle, description: childDescription }) => ({
+          departmentId, requestTypeId, title: childTitle, description: childDescription, priority,
+        })) } : {}),
+      };
+      payload.submissionKey = idempotencyKeyFor(payload);
       const res = await fetch(apiUrl('/requests'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          departmentId: selectedDept,
-          requestTypeId: selectedType,
-          title,
-          description,
-          priority,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -228,6 +281,9 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
       setDupConfirmedFor(null);
       setAiText('');
       clearDraft();
+      try { localStorage.removeItem('request-submission-key-v1'); } catch { /* Optional persistence. */ }
+      setMacroTasks([]);
+      setMacroSummary('');
       onCreated(createdId);
     } catch {
       setError('Cannot reach the server');
@@ -272,6 +328,49 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
           </span>
         </div>
         {aiNote && <p className="muted mt-sm">{aiNote}</p>}
+        {macroTasks.length > 0 && (
+          <section className="macro-proposal" aria-label="Review proposed workflow tasks">
+            <div className="row macro-proposal-heading">
+              <div>
+                <strong>Proposed workflow</strong>
+                <p className="muted mt-sm">{macroSummary} — each task becomes a separate request for its department. Review, edit, or remove tasks before submission.</p>
+              </div>
+              <Button type="button" variant="ghost" small onClick={() => { setMacroTasks([]); setMacroSummary(''); }}>Reject all suggestions</Button>
+            </div>
+            {macroTasks.map((task, index) => {
+              const taskTypes = requestTypes.filter((type) => type.departmentId === task.departmentId);
+              return (
+                <div className="macro-task-editor" key={task.key}>
+                  <div className="row macro-task-heading"><strong>Task {index + 1}</strong>
+                    <Button type="button" variant="ghost" small onClick={() => setMacroTasks((items) => items.filter((item) => item.key !== task.key))}>Remove</Button>
+                  </div>
+                  <Field label="Task title">
+                    <input className="input" maxLength={240} value={task.title} onChange={(event) => setMacroTasks((items) => items.map((item) => item.key === task.key ? { ...item, title: event.target.value } : item))} />
+                  </Field>
+                  <div className="macro-task-routing">
+                    <Field label="Department">
+                      <select className="select" value={task.departmentId} onChange={(event) => {
+                        const departmentId = event.target.value;
+                        const firstType = requestTypes.find((type) => type.departmentId === departmentId);
+                        setMacroTasks((items) => items.map((item) => item.key === task.key ? { ...item, departmentId, requestTypeId: firstType?.id || '' } : item));
+                      }}>
+                        {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Request type">
+                      <select className="select" value={task.requestTypeId} onChange={(event) => setMacroTasks((items) => items.map((item) => item.key === task.key ? { ...item, requestTypeId: event.target.value } : item))}>
+                        {taskTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}
+                      </select>
+                    </Field>
+                  </div>
+                  <Field label="Task details">
+                    <textarea className="textarea" maxLength={400} rows={3} value={task.description} onChange={(event) => setMacroTasks((items) => items.map((item) => item.key === task.key ? { ...item, description: event.target.value } : item))} />
+                  </Field>
+                </div>
+              );
+            })}
+          </section>
+        )}
         {aiTrace && (
           <details className="muted mt-sm" style={{ fontSize: '0.8rem' }}>
             <summary style={{ cursor: 'pointer', fontWeight: 700 }}>

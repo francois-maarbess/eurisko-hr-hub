@@ -511,6 +511,26 @@ a:focus-visible {
 .private-staff-label { display: inline-flex; margin: 0.25rem 0.35rem; padding: 0.12rem 0.42rem; border: 1px solid var(--blue-border); border-radius: 999px; background: var(--blue-pale); color: var(--blue-dark); font-size: 0.7rem; font-weight: 700; }
 .admin-loading-skeleton { display: grid; gap: 0.65rem; margin: 0.75rem 0; padding: 1rem; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
 .admin-loading-skeleton .skeleton-line { height: 1rem; }
+.macro-proposal, .macro-progress { display: grid; gap: 0.7rem; margin-top: 0.8rem; padding: 0.9rem; border: 1px solid var(--blue-border); border-radius: 12px; background: var(--blue-pale); }
+.macro-proposal-heading, .macro-task-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; }
+.macro-task-editor { display: grid; gap: 0.55rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
+.macro-task-routing { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; }
+.macro-progress-list { display: grid; gap: 0.45rem; }
+.macro-progress-item { display: flex; justify-content: space-between; align-items: baseline; gap: 0.7rem; padding: 0.55rem 0; border-top: 1px solid var(--border); }
+.macro-parent-link { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin: 0.65rem 0; padding: 0.65rem 0.75rem; border: 1px solid var(--border); border-radius: 10px; background: #f8fafc; }
+.ai-playbook-actions { align-items: center; flex-wrap: wrap; }
+.claim-draft-btn {
+  background: linear-gradient(135deg, var(--blue), var(--blue-dark));
+  box-shadow: 0 3px 10px rgb(37 99 235 / 22%);
+}
+.claim-draft-btn:hover:not(:disabled) {
+  box-shadow: 0 5px 14px rgb(37 99 235 / 30%);
+  transform: translateY(-1px);
+}
+@media (max-width: 520px) {
+  .macro-proposal-heading, .macro-progress-item, .macro-parent-link { flex-direction: column; align-items: flex-start; }
+  .macro-task-routing { grid-template-columns: 1fr; }
+}
 .admin-empty-result { padding: 1.25rem; text-align: center; }
 .empty-state { display: grid; justify-items: center; gap: 0.45rem; padding: 2rem 1rem; color: var(--muted); text-align: center; }
 .empty-state p { margin: 0; max-width: 32rem; }

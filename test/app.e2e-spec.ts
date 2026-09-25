@@ -4,6 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
 import { join } from 'path';
 import request from 'supertest';
+import { randomUUID } from 'crypto';
 import * as OTPAuth from 'otpauth';
 import { AppModule } from '../src/app.module';
 import { NotificationsService } from '../src/notifications.service';
@@ -131,6 +132,63 @@ describe('Service Request Flow (E2E)', () => {
     expect(res.body.title).toBe('New Laptop Needed');
   });
 
+  it('creates an idempotent macro workflow with department-scoped child tasks and gated parent completion', async () => {
+    const hr = await prisma.department.findFirst({ where: { code: 'HR' } });
+    const it = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const facilities = await prisma.department.findFirst({ where: { code: 'FAC' } });
+    const parentType = await prisma.requestType.findFirst({ where: { departmentId: hr!.id, code: 'ONBOARDING' } });
+    const itType = await prisma.requestType.findFirst({ where: { departmentId: it!.id, code: 'EQUIPMENT' } });
+    const facType = await prisma.requestType.findFirst({ where: { departmentId: facilities!.id, code: 'DESK' } });
+    const submissionKey = randomUUID();
+    const input = {
+      departmentId: hr!.id,
+      requestTypeId: parentType!.id,
+      title: 'New employee onboarding workflow',
+      description: 'Coordinate the operational setup for a new employee joining next week.',
+      priority: 'STANDARD',
+      submissionKey,
+      childTasks: [
+        { departmentId: it!.id, requestTypeId: itType!.id, title: 'Provision laptop and account', description: 'Prepare approved laptop and employee account.', priority: 'STANDARD' },
+        { departmentId: facilities!.id, requestTypeId: facType!.id, title: 'Prepare desk and badge', description: 'Arrange the workstation and building access badge.', priority: 'STANDARD' },
+      ],
+    };
+    const created = await request(app.getHttpServer()).post('/requests').set('Authorization', `Bearer ${employeeToken}`).send(input);
+    expect(created.status).toBe(201);
+    expect(created.body.children).toHaveLength(2);
+    expect(created.body.children.every((child: any) => child.parentRequestId === created.body.id)).toBe(true);
+    const retried = await request(app.getHttpServer()).post('/requests').set('Authorization', `Bearer ${employeeToken}`).send(input);
+    expect(retried.status).toBe(201);
+    expect(retried.body.id).toBe(created.body.id);
+    expect(await prisma.request.count({ where: { parentRequestId: created.body.id } })).toBe(2);
+
+    const employeeView = await request(app.getHttpServer()).get(`/requests/${created.body.id}`).set('Authorization', `Bearer ${employeeToken}`);
+    expect(employeeView.body.children).toHaveLength(2);
+    expect(employeeView.body.macroProgress).toEqual({ completed: 0, total: 2 });
+    const itChild = created.body.children.find((child: any) => child.departmentId === it!.id);
+    const staffChildView = await request(app.getHttpServer()).get(`/requests/${itChild.id}`).set('Authorization', `Bearer ${agentToken}`);
+    expect(staffChildView.status).toBe(200);
+    expect(staffChildView.body.parent).toBeUndefined();
+    const staffCannotSeeParent = await request(app.getHttpServer()).get(`/requests/${created.body.id}`).set('Authorization', `Bearer ${agentToken}`);
+    expect(staffCannotSeeParent.status).toBe(403);
+
+    const parentClaim = await request(app.getHttpServer()).patch(`/requests/${created.body.id}/claim`).set('Authorization', `Bearer ${adminToken}`);
+    expect(parentClaim.status).toBe(200);
+    const blockedParentCompletion = await request(app.getHttpServer()).patch(`/requests/${created.body.id}/status`).set('Authorization', `Bearer ${adminToken}`).send({ status: 'COMPLETED', resolutionNote: 'Workflow should not close before the child tasks.' });
+    expect(blockedParentCompletion.status).toBe(400);
+
+    for (const child of created.body.children) {
+      const claimant = child.departmentId === it!.id ? agentToken : adminToken;
+      const claim = await request(app.getHttpServer()).patch(`/requests/${child.id}/claim`).set('Authorization', `Bearer ${claimant}`);
+      expect(claim.status).toBe(200);
+      const done = await request(app.getHttpServer()).patch(`/requests/${child.id}/status`).set('Authorization', `Bearer ${claimant}`).send({ status: 'COMPLETED', resolutionNote: 'The assigned department completed this setup task.' });
+      expect(done.status).toBe(200);
+    }
+    const completed = await request(app.getHttpServer()).patch(`/requests/${created.body.id}/status`).set('Authorization', `Bearer ${adminToken}`).send({ status: 'COMPLETED', resolutionNote: 'All department setup tasks have been completed.' });
+    expect(completed.status).toBe(200);
+    const finalView = await request(app.getHttpServer()).get(`/requests/${created.body.id}`).set('Authorization', `Bearer ${employeeToken}`);
+    expect(finalView.body.macroProgress).toEqual({ completed: 2, total: 2 });
+  });
+
   it('agent can claim a PENDING request in their department', async () => {
     const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
     const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP' } });
@@ -150,6 +208,10 @@ describe('Service Request Flow (E2E)', () => {
       .set('Authorization', `Bearer ${agentToken}`);
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('IN_PROGRESS');
+    const ownerDraftAttempt = await request(app.getHttpServer())
+      .post(`/requests/${created.body.id}/ai-playbook`)
+      .set('Authorization', `Bearer ${employeeToken}`);
+    expect(ownerDraftAttempt.status).toBe(403);
   });
 
   it('concurrent completions: exactly one wins, the other gets 409', async () => {
