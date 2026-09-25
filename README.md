@@ -10,7 +10,6 @@ An internal service hub for submitting, routing, tracking, and resolving employe
 
 ## Live App
 
-> Replace the two placeholder URLs below with the real Render URLs before submitting.
 
 - **App:** `https://eurisko-hr-hub-frontend.onrender.com`
 - **API health:** `https://eurisko-hr-hub-1.onrender.com/health` (expect `"status":"ok"`)
@@ -26,7 +25,6 @@ An internal service hub for submitting, routing, tracking, and resolving employe
 
 Full click-by-click script: [`DEMO.md`](./DEMO.md) — reset, seed the storyline, and tour employee → agent → admin.
 
-> Visual assets (`docs/demo.gif`, `docs/screenshot-queue.png`, `docs/screenshot-admin.png`) are optional — record them separately and drop them into `docs/`. The demo script needs nothing but the repo itself; missing assets never break the app.
 
 ## Quick Start
 
