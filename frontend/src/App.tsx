@@ -77,8 +77,7 @@ function ChatbotShell({ token }: { token: string }) {
   const [sending, setSending] = useState(false);
   const [confirmation, setConfirmation] = useState<{ id: string; kind: string; summary: string } | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
-    { role: 'assistant', text: 'Hello. I am the Operations Assistant.' },
-    { role: 'assistant', text: 'Ask me for stats, your tickets, or queue help — or tell me what you need, like "my laptop is on fire", and I will draft it for your review.' },
+    { role: 'assistant', text: 'Hello, I\'m the Operations Assistant. Ask me anything. I can pull stats, find tickets, draft requests and completions, and execute admin tasks for you like creating users. I follow your permissions and always confirm before changing anything.' },
   ]);
 
   const sendMessage = async (text: string) => {
@@ -136,7 +135,7 @@ function ChatbotShell({ token }: { token: string }) {
         <BotMark />
       </button>
       {open && (
-          <Modal className="chatbot-modal" title="Operations Assistant" sub="Ask in plain words — I confirm before changing anything" onClose={() => setOpen(false)}>
+          <Modal className="chatbot-modal" title="Operations Assistant" sub="Ask anything — I confirm before changing anything" onClose={() => setOpen(false)}>
           <div className="chatbot-content">
             <div className="chatbot-messages" aria-live="polite">
               {messages.map((message, index) => (
@@ -146,7 +145,7 @@ function ChatbotShell({ token }: { token: string }) {
               ))}
             </div>
             <div className="chatbot-chips" aria-label="Assistant suggestions">
-              {['Urgent today?', 'Show my stats', 'How does the queue work?'].map((chip) => (
+              {["What's overdue?", 'Show my stats', 'Draft a request'].map((chip) => (
                 <button key={chip} type="button" className="filter-button" onClick={() => void sendMessage(chip)} disabled={sending}>{chip}</button>
               ))}
             </div>
@@ -161,7 +160,7 @@ function ChatbotShell({ token }: { token: string }) {
               </div>
             )}
             <form className="chatbot-form" onSubmit={send}>
-              <input className="input" value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask about your work" aria-label="Message Operations Assistant" disabled={sending} />
+              <input className="input" value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask me anything about your work…" aria-label="Message Operations Assistant" disabled={sending} />
               <Button type="submit" small disabled={sending}>{sending ? 'Sending…' : 'Send'}</Button>
             </form>
           </div>
