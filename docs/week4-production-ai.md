@@ -44,8 +44,13 @@ With no `GROQ_API_KEY`, the same window returns an honest local capability
 message and performs no model-backed tool actions. With a key, Groq is called
 through the existing raw `fetch` provider, with bounded structured-answer
 parsing, a bounded six-step tool loop that surfaces partial progress instead of
-failing when multi-step jobs (claim then resolve) need another turn, a ten-second timeout, and a safe
-unavailable response on provider failure. Groq does not allow JSON response mode
+failing when multi-step jobs (claim then resolve) need another turn, a twenty-second
+timeout with one retry on network failure and one backoff retry on rate limits,
+a twelve-message trimmed history so token load stays flat no matter how long the
+chat gets, malformed tool arguments recovered as model data instead of turn
+killers, and every chat failure recorded into provider status so `/ai/health`
+names the true cause within seconds. The client retries once automatically on
+the two transient messages (safe: no write executes without confirmation). Groq does not allow JSON response mode
 and function calling in the same request, so the server validates the returned
 answer shape instead. Keys, prompts, hashes, tokens, private notes, and
 unauthorized ticket data are never returned to the caller.

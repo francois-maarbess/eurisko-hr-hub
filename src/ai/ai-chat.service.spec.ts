@@ -26,6 +26,7 @@ function harness() {
   const audit = { append: jest.fn(async () => undefined) } as any;
   const ai = {
     providerStatus: () => ({ provider: 'local' }),
+    reportChatError: jest.fn(),
     draft: jest.fn(async (text: string) => ({
       departmentId: 'dept-it', requestTypeId: 'type-laptop', title: text.slice(0, 40),
       description: text, priority: 'URGENT', confidence: 'high', provider: 'local',
@@ -280,6 +281,77 @@ describe('AI operations assistant safety', () => {
       const result = await (service as any).runGroq({ id: 'alice', platformRole: 'EMPLOYEE' }, 'session-1', true);
       expect(result.message).toMatch(/first step/i);
       expect(result.confirmation).toBeTruthy();
+    } finally {
+      (global as any).fetch = realFetch;
+    }
+  });
+
+  it('records provider timeouts into provider status instead of hiding them', async () => {
+    const { service, ai } = harness();
+    const realFetch = global.fetch;
+    const realKey = process.env['GROQ_API_KEY'];
+    process.env['GROQ_API_KEY'] = 'test-key';
+    const abort = new Error('The operation was aborted due to timeout');
+    abort.name = 'TimeoutError';
+    (global as any).fetch = jest.fn().mockRejectedValue(abort);
+    try {
+      const result = await service.chat({ id: 'alice', platformRole: 'EMPLOYEE' }, { message: 'hello there friend' });
+      expect(result.message).toMatch(/hiccup/i);
+      expect(ai.reportChatError).toHaveBeenCalledWith(expect.stringMatching(/abort|timeout/i));
+    } finally {
+      (global as any).fetch = realFetch;
+      if (realKey === undefined) delete process.env['GROQ_API_KEY'];
+      else process.env['GROQ_API_KEY'] = realKey;
+    }
+  });
+
+  it('recovers when the model sends malformed tool arguments', async () => {
+    const { service } = harness();
+    const realFetch = global.fetch;
+    (global as any).fetch = jest.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ choices: [{ message: { role: 'assistant', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'my_stats', arguments: '{broken json' } }] } }] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ choices: [{ message: { role: 'assistant', content: JSON.stringify({ answer: 'Recovered after the bad call.' }) } }] }) });
+    try {
+      const result = await (service as any).runGroq({ id: 'alice', platformRole: 'EMPLOYEE' }, 'session-1', true);
+      expect(result.message).toContain('Recovered');
+    } finally {
+      (global as any).fetch = realFetch;
+    }
+  });
+
+  it('summarizes instead of failing when the tool loop caps out empty', async () => {
+    const { service, prisma } = harness();
+    prisma.department.findMany.mockResolvedValue([]);
+    const realFetch = global.fetch;
+    const mkCall = (id: string) => ({ id, type: 'function', function: { name: 'my_stats', arguments: '{}' } });
+    (global as any).fetch = jest.fn(async () => ({ ok: true, json: async () => ({ choices: [{ message: { role: 'assistant', tool_calls: [mkCall('cx')] } }] }) }));
+    try {
+      const result = await (service as any).runGroq({ id: 'alice', platformRole: 'EMPLOYEE' }, 'session-1', true);
+      expect(result.message).toMatch(/needs splitting|first step/i);
+      expect(result.confirmation).toBeUndefined();
+    } finally {
+      (global as any).fetch = realFetch;
+    }
+  });
+
+  it('bounds history payload no matter how long the chat gets', async () => {
+    const { service, prisma } = harness();
+    prisma.department.findMany.mockResolvedValue([]);
+    const longHistory = Array.from({ length: 40 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: 'x'.repeat(5000) }));
+    prisma.chatMessage.findMany.mockImplementation(async (args: any) => longHistory.slice(-(args?.take || 12)));
+    let sentCount = 0;
+    let sentChars = 0;
+    const realFetch = global.fetch;
+    (global as any).fetch = jest.fn(async (_url: string, init: any) => {
+      const body = JSON.parse(init.body);
+      sentCount = body.messages.length;
+      sentChars = JSON.stringify(body.messages).length;
+      return { ok: true, json: async () => ({ choices: [{ message: { role: 'assistant', content: JSON.stringify({ answer: 'Bounded.' }) } }] }) };
+    });
+    try {
+      await (service as any).runGroq({ id: 'alice', platformRole: 'EMPLOYEE' }, 'session-1', true);
+      expect(sentCount).toBeLessThanOrEqual(14);
+      expect(sentChars).toBeLessThan(12 * 1500 + 20000);
     } finally {
       (global as any).fetch = realFetch;
     }

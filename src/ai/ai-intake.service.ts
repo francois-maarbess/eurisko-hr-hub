@@ -336,6 +336,12 @@ export class AiIntakeService {
     this.lastErrorMessage = message.slice(0, 200);
   }
 
+  /** Public reporter so chat-turn failures are visible on /health + /ai/health
+   * within seconds instead of hiding in server logs. */
+  reportChatError(message: string) {
+    this.recordProviderError(`chat: ${message}`);
+  }
+
   /** Surfaced on /health + GET /ai/health: which provider is live and when it last failed. */
   providerStatus() {
     const configured = !!process.env['GROQ_API_KEY'];

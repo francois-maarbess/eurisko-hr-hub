@@ -80,11 +80,13 @@ function ChatbotShell({ token }: { token: string }) {
     { role: 'assistant', text: 'Hello, I\'m the Operations Assistant. Ask me anything. I can pull stats, find tickets, draft requests and completions, and execute admin tasks for you like creating users. I follow your permissions and always confirm before changing anything.' },
   ]);
 
-  const sendMessage = async (text: string) => {
+  const sendMessage = async (text: string, retried = false) => {
     if (!text.trim() || sending) return;
     const clean = text.trim();
-    setMessages((current) => [...current, { role: 'user', text: clean }]);
-    setInput('');
+    if (!retried) {
+      setMessages((current) => [...current, { role: 'user', text: clean }]);
+      setInput('');
+    }
     setSending(true);
     try {
       const response = await fetch(apiUrl('/ai/chat'), {
@@ -95,6 +97,16 @@ function ChatbotShell({ token }: { token: string }) {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.message || 'Assistant is unavailable.');
       if (typeof data.sessionId === 'string') setSessionId(data.sessionId);
+      // Transient provider failures are retried once automatically: chat
+      // turns never mutate without an explicit confirmation, so resending
+      // the same message cannot double-apply anything.
+      if (!retried && typeof data.message === 'string' && /hiccup|a bit fast/i.test(data.message)) {
+        setMessages((current) => [...current, { role: 'assistant', text: 'Retrying…' }]);
+        setSending(false);
+        await new Promise((r) => setTimeout(r, 3000));
+        await sendMessage(clean, true);
+        return;
+      }
       setMessages((current) => [...current, { role: 'assistant', text: data.message || 'I could not produce an answer.' }]);
       setConfirmation(data.confirmation || null);
     } catch (error) {
