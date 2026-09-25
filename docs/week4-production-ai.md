@@ -27,12 +27,16 @@ entered by the user in Security settings.
 
 Create-request, claim, reroute, and admin create-user actions are proposal-only
 until the UI returns the confirmation card and the caller explicitly confirms
-with its confirmation ID. The server repeats authorization and validation when
-executing and writes an audit event. The full pending payload persists in the
-chat session row, so a restart rehydrates (never silently drops) a proposal;
-confirmation IDs stay valid only for their own session. Departments and request
-types are matched server-side from human words against the active catalog at
-propose time — bad proposals fail once with the valid options, never in a loop.
+with its confirmation ID. The full pending payload persists in the chat
+session row, so a restart rehydrates (never silently drops) a proposal, and
+confirmation IDs stay valid only for their own session. Departments, roles, emails, and passwords are
+resolved and validated at propose time (codes never come from the user), and
+the server repeats authorization and validation when executing, then writes an
+audit event. If execution fails, the proposal stays alive and the assistant
+explains the problem so one detail can be corrected — only success or explicit
+cancel clears it. Permission denials stay denials (403), never chat messages.
+Rate limits get one backoff retry, then an honest slow-down message instead of
+a generic hiccup.
 Tool results shown to the model carry no confirmation or database IDs, and
 assistant messages render as plain text (no markdown, no raw ids).
 

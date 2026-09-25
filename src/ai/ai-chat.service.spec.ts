@@ -182,4 +182,69 @@ describe('AI operations assistant safety', () => {
       (global as any).fetch = realFetch;
     }
   });
+
+  it('resolves user-creation department words to ids at propose time', async () => {
+    const { service, prisma } = harness();
+    prisma.department.findMany.mockResolvedValue(CATALOG);
+    const admin = { id: 'admin', platformRole: 'SYSTEM_ADMIN' };
+    const result = await (service as any).proposeCreateUser(admin, 'session-1', {
+      email: 'george@acme.com', displayName: 'George', platformRole: 'EMPLOYEE',
+      department: 'it', departmentRole: 'manager', password: 'hihihi123',
+    });
+    expect(result.requiresConfirmation).toBe(true);
+    const stored = JSON.parse(prisma.chatSession.update.mock.calls[0][0].data.pendingConfirmation);
+    expect(stored.payload.departmentId).toBe('dept-it');
+    expect(stored.payload.departmentRole).toBe('MANAGER');
+    expect(stored.summary).toContain('george@acme.com');
+  });
+
+  it('rejects user-creation with an unknown department naming valid options', async () => {
+    const { service, prisma } = harness();
+    prisma.department.findMany.mockResolvedValue(CATALOG);
+    const admin = { id: 'admin', platformRole: 'SYSTEM_ADMIN' };
+    await expect((service as any).proposeCreateUser(admin, 'session-1', {
+      email: 'george@acme.com', displayName: 'George', platformRole: 'EMPLOYEE',
+      department: 'plumbing', password: 'hihihi123',
+    })).rejects.toThrow(/IT.*HR|HR.*IT/);
+  });
+
+  it('keeps the proposal alive when confirm execution fails', async () => {
+    const { service, prisma, requests } = harness();
+    requests.create.mockRejectedValue(new Error('Selected department was not found.'));
+    await (service as any).storeProposal('session-1', {
+      kind: 'create-request', summary: 'Create this service request',
+      payload: { departmentId: 'dept-it', requestTypeId: 'type-laptop', title: 'Typed title here', description: 'A long enough description body.', priority: 'STANDARD' },
+    });
+    const stored = JSON.parse(prisma.chatSession.update.mock.calls[0][0].data.pendingConfirmation);
+    const session = { id: 'session-1', userId: 'alice', pendingConfirmation: JSON.stringify(stored) };
+    prisma.chatSession.findFirst.mockResolvedValue(session);
+    const result = await service.chat({ id: 'alice', platformRole: 'EMPLOYEE' }, { sessionId: 'session-1', confirmationId: stored.id, confirmationAction: 'confirm' });
+    expect(result.message).toMatch(/did not go through.*corrected detail/i);
+    expect(requests.create).toHaveBeenCalled();
+  });
+
+  it('names rate limits distinctly from generic hiccups', async () => {
+    const { service } = harness();
+    const realFetch = global.fetch;
+    const realKey = process.env['GROQ_API_KEY'];
+    process.env['GROQ_API_KEY'] = 'test-key';
+    const rateLimited = { ok: false, status: 429, text: async () => 'Rate limit reached' };
+    (global as any).fetch = jest.fn().mockResolvedValue(rateLimited);
+    try {
+      await expect((service as any).callModel([{ role: 'user', content: 'hi' }], false)).rejects.toThrow(/429/);
+    } finally {
+      (global as any).fetch = realFetch;
+    }
+    const err: any = new Error('Groq chat HTTP 429: Rate limit reached');
+    err.groqStatus = 429;
+    const spy = jest.spyOn(service as any, 'runGroq').mockRejectedValue(err);
+    try {
+      const result = await service.chat({ id: 'alice', platformRole: 'EMPLOYEE' }, { message: 'hello there friend' });
+      expect(result.message).toMatch(/fast.*few seconds/i);
+    } finally {
+      spy.mockRestore();
+      if (realKey === undefined) delete process.env['GROQ_API_KEY'];
+      else process.env['GROQ_API_KEY'] = realKey;
+    }
+  });
 });

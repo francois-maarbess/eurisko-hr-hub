@@ -23,7 +23,7 @@ const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'department_stats', description: 'Totals, open/closed counts, urgent-today, and overdue per department. Admins see every department; others see only their own departments (employees: their own stats wording).', parameters: { type: 'object', properties: {}, additionalProperties: false } } },
   { type: 'function', function: { name: 'propose_claim', description: 'Propose claiming a visible pending request. Never execute without confirmation.', parameters: { type: 'object', properties: { requestId: { type: 'string' } }, required: ['requestId'], additionalProperties: false } } },
   { type: 'function', function: { name: 'propose_reroute', description: 'Propose rerouting a visible request to another catalog department/type given as human words or codes. Never execute without confirmation.', parameters: { type: 'object', properties: { requestId: { type: 'string' }, newDepartment: { type: 'string' }, newRequestType: { type: 'string' }, reason: { type: 'string' } }, required: ['requestId', 'newDepartment', 'newRequestType', 'reason'], additionalProperties: false } } },
-  { type: 'function', function: { name: 'propose_create_user', description: 'Propose creating a user. Admin only and never execute without confirmation.', parameters: { type: 'object', properties: { email: { type: 'string' }, displayName: { type: 'string' }, platformRole: { type: 'string', enum: ['EMPLOYEE', 'SYSTEM_ADMIN'] }, departmentId: { type: 'string' }, departmentRole: { type: 'string', enum: ['AGENT', 'MANAGER'] }, password: { type: 'string' } }, required: ['email', 'displayName', 'platformRole', 'password'], additionalProperties: false } } },
+  { type: 'function', function: { name: 'propose_create_user', description: 'Propose creating a user. Pass department and department role as human words (e.g. "IT", "manager") or omit department for no membership. Admin only and never execute without confirmation.', parameters: { type: 'object', properties: { email: { type: 'string' }, displayName: { type: 'string' }, platformRole: { type: 'string', enum: ['EMPLOYEE', 'SYSTEM_ADMIN'] }, department: { type: 'string' }, departmentRole: { type: 'string', enum: ['AGENT', 'MANAGER'] }, password: { type: 'string' } }, required: ['email', 'displayName', 'platformRole', 'password'], additionalProperties: false } } },
 ] as const;
 
 @Injectable()
@@ -64,7 +64,11 @@ export class AiChatService {
       // Named failures stay named: validation/permission problems already
       // carry a helpful message, so only unexpected provider errors degrade.
       if (error instanceof HttpException) throw error;
+      const status = (error as any)?.groqStatus;
       this.logger.warn(`AI chat degraded for user ${user.id}: ${(error as Error).message}`);
+      if (status === 429) {
+        return this.answer(session.id, 'We are talking a bit fast for the AI service — wait a few seconds and send that again. Your queues, requests, and admin controls are unaffected.');
+      }
       return this.answer(session.id, 'The AI service had a hiccup — please try again. Your queues, requests, and admin controls are unaffected.');
     }
   }
@@ -141,7 +145,8 @@ export class AiChatService {
       body.response_format = { type: 'json_object' };
     }
     // One retry on network-level failure only (never on Groq 4xx/5xx —
-    // retrying a rejected request just burns quota and latency).
+    // retrying a rejected request just burns quota and latency), plus one
+    // backoff retry on 429 rate limits, which are transient by definition.
     let lastError: unknown = null;
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
@@ -150,9 +155,16 @@ export class AiChatService {
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(10000),
         });
+        if (response.status === 429 && attempt === 0) {
+          this.logger.warn('AI chat Groq rate-limited (429), backing off once before retrying.');
+          await new Promise((r) => setTimeout(r, 2500));
+          continue;
+        }
         if (!response.ok) {
           const detail = (await response.text()).replace(process.env['GROQ_API_KEY'] || '', '[redacted]').slice(0, 400);
-          throw new Error(`Groq chat HTTP ${response.status}: ${detail}`);
+          const err = new Error(`Groq chat HTTP ${response.status}: ${detail}`);
+          (err as any).groqStatus = response.status;
+          throw err;
         }
         return response.json();
       } catch (error) {
@@ -341,8 +353,32 @@ export class AiChatService {
 
   private async proposeCreateUser(user: ChatUser, sessionId: string, args: Record<string, unknown>) {
     if (user.platformRole !== 'SYSTEM_ADMIN') throw new ForbiddenException('Only system administrators can create users.');
-    if (!String(args.email || '').includes('@') || String(args.password || '').length < 8) throw new BadRequestException('A valid email and password of at least eight characters are required.');
-    return this.storeProposal(sessionId, { kind: 'create-user', summary: `Create user ${String(args.email)}`, payload: args });
+    const email = String(args.email || '').trim().toLowerCase();
+    if (!email.includes('@')) throw new BadRequestException('Give me a valid email address for the new account.');
+    if (String(args.password || '').length < 8) throw new BadRequestException('The password must be at least 8 characters.');
+    const platformRole = String(args.platformRole || 'EMPLOYEE');
+    if (!['EMPLOYEE', 'SYSTEM_ADMIN'].includes(platformRole)) {
+      throw new BadRequestException('Platform role must be EMPLOYEE (regular user) or SYSTEM_ADMIN (full admin).');
+    }
+    // Department is human words, resolved now — never a raw id from the model.
+    let departmentId: string | undefined;
+    let departmentRole = 'AGENT';
+    const deptText = String(args.department ?? args.departmentId ?? '').trim();
+    if (deptText) {
+      const departments = await this.catalogList();
+      const dept = this.resolveDept(departments, deptText);
+      departmentId = dept.id;
+      departmentRole = String(args.departmentRole || 'AGENT').trim().toUpperCase();
+      if (!['AGENT', 'MANAGER'].includes(departmentRole)) {
+        throw new BadRequestException('Department role must be AGENT (works tickets) or MANAGER (runs the department).');
+      }
+    }
+    const displayName = String(args.displayName || '').trim() || email.split('@')[0];
+    return this.storeProposal(sessionId, {
+      kind: 'create-user',
+      summary: `Create user ${email} (${platformRole}${departmentId ? `, ${departmentRole} of ${deptText.toUpperCase()}` : ', no department'})`,
+      payload: { email, displayName, platformRole, password: String(args.password), ...(departmentId ? { departmentId, departmentRole } : {}) },
+    });
   }
 
   private async storeProposal(sessionId: string, action: Omit<PendingAction, 'id'>) {
@@ -422,23 +458,38 @@ export class AiChatService {
       await this.prisma.chatSession.update({ where: { id: sessionId }, data: { pendingConfirmation: null } });
       return this.answer(sessionId, 'Cancelled. No change was made.');
     }
-    const result = await this.executeConfirmed(user, pending);
+    let result: unknown;
+    try {
+      result = await this.executeConfirmed(user, pending);
+    } catch (error) {
+      // Authorization denials stay denials (proper status codes), never
+      // chat messages — a refusal is a decision, not a recoverable failure.
+      if (error instanceof ForbiddenException) throw error;
+      // Execution failed: keep the proposal alive so the user can correct
+      // one detail instead of restarting the whole conversation. Only a
+      // successful execution or an explicit cancel clears it.
+      const reason = error instanceof Error ? error.message : 'Execution failed.';
+      this.logger.warn(`AI chat confirm failed for user ${user.id} (${pending.kind}): ${reason}`);
+      return this.answer(sessionId, `That did not go through: ${reason} Tell me the corrected detail and I will re-propose it. Nothing was changed.`);
+    }
+    const requestId = pending.kind === 'create-request' ? (result as any)?.id : (pending.payload.requestId as string | undefined);
+    await this.audit.append({ actorId: user.id, requestId, action: 'AI_CHAT_ACTION_CONFIRMED', newValue: pending.kind, metadata: JSON.stringify({ confirmationId: pending.id }) });
+    const completed = requestId ? { reference: this.shortRef(requestId) } : { completed: true };
     this.pendingActions.delete(sessionId);
     await this.prisma.chatSession.update({ where: { id: sessionId }, data: { pendingConfirmation: null } });
-    return this.answer(sessionId, `Confirmed. Completed ${pending.summary}.`, { result });
+    return this.answer(sessionId, `Confirmed. Completed ${pending.summary}.`, { result: completed });
   }
 
   private async executeConfirmed(user: ChatUser, action: PendingAction) {
-    let result: unknown;
-    if (action.kind === 'create-request') result = await this.requests.create(action.payload as any, user.id);
-    else if (action.kind === 'claim') result = await this.requests.claim(String(action.payload.requestId), user.id);
-    else if (action.kind === 'reroute') result = await this.requests.reroute(String(action.payload.requestId), action.payload as any, user.id);
-    else if (action.kind === 'create-user') {
+    // Executes the mutation only. Audit + confirmation shaping happen in
+    // confirm() after success, so a failure never records a completion.
+    if (action.kind === 'create-request') return this.requests.create(action.payload as any, user.id);
+    if (action.kind === 'claim') return this.requests.claim(String(action.payload.requestId), user.id);
+    if (action.kind === 'reroute') return this.requests.reroute(String(action.payload.requestId), action.payload as any, user.id);
+    if (action.kind === 'create-user') {
       if (user.platformRole !== 'SYSTEM_ADMIN') throw new ForbiddenException('Only system administrators can create users.');
-      result = await this.auth.createUser(action.payload as any);
-    } else throw new BadRequestException('Unsupported confirmation.');
-    const requestId = action.kind === 'create-request' ? (result as any)?.id : action.payload.requestId as string | undefined;
-    await this.audit.append({ actorId: user.id, requestId, action: 'AI_CHAT_ACTION_CONFIRMED', newValue: action.kind, metadata: JSON.stringify({ confirmationId: action.id }) });
-    return requestId ? { reference: `REQ-${requestId}` } : { completed: true };
+      return this.auth.createUser(action.payload as any);
+    }
+    throw new BadRequestException('Unsupported confirmation.');
   }
 }

@@ -702,6 +702,32 @@ describe('Service Request Flow (E2E)', () => {
     expect(await prisma.user.findFirst({ where: { email: 'evil@acme.com' } })).toBeNull();
   });
 
+  it('operations assistant admin user-creation confirm executes with resolved ids', async () => {
+    const admin = await prisma.user.findFirst({ where: { email: 'admin@acme.com' } });
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const session = await (prisma as any).chatSession.create({ data: { userId: admin!.id } });
+    await (prisma as any).chatSession.update({
+      where: { id: session.id },
+      data: {
+        pendingConfirmation: JSON.stringify({
+          id: 'hypothesis-hire-action', kind: 'create-user', summary: 'Create user george-chat@acme.com',
+          payload: { email: 'george-chat@acme.com', displayName: 'George', platformRole: 'EMPLOYEE', departmentId: dept!.id, departmentRole: 'AGENT', password: 'Password123!' },
+        }),
+      },
+    });
+    const res = await request(app.getHttpServer())
+      .post('/ai/chat')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ sessionId: session.id, confirmationId: 'hypothesis-hire-action', confirmationAction: 'confirm' });
+    expect(res.status).toBe(201);
+    expect(res.body.message).toMatch(/confirmed/i);
+    const created = await prisma.user.findFirst({ where: { email: 'george-chat@acme.com' } });
+    expect(created).toBeTruthy();
+    expect(await prisma.departmentMember.findFirst({ where: { userId: created!.id, departmentId: dept!.id } })).toBeTruthy();
+    await prisma.departmentMember.deleteMany({ where: { userId: created!.id } });
+    await prisma.user.delete({ where: { id: created!.id } });
+  });
+
   it('catalog lists departments and filters types without duplicates', async () => {
     const depts = await request(app.getHttpServer())
       .get('/catalog/departments')
