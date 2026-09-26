@@ -33,13 +33,17 @@ Principles:
 
 ## 2. Components
 
-* **Web/mobile client:** Catalog, request forms, employee history, department queue, and resolution views.
-* **API service:** credential validation (SSO in production, passwords per ADR-002 in Academy), RBAC, request routing, validation, lifecycle transitions, document brokering, rate limiting, and audit writes.
-* **Relational database:** Users, departments, memberships, catalog, requests, documents, and append-only audit logs.
-* **Private object storage:** Document payloads with encryption, lifecycle rules, checksums, and no public access.
-* **Notification worker:** Sends Firebase notifications from durable events without blocking request transactions.
-* **Scheduled maintenance worker:** Purges expired documents, reconciles storage/database state, and reports failures.
-* **Observability:** Structured logs, metrics, traces, health checks, and security alerts without sensitive payloads.
+Status key: **[shipped]** = implemented in this repo · **[Academy substitute]** =
+deliberate Academy-scoped equivalent · **[production target]** = deferred,
+not delivered.
+
+* **Web/mobile client** [shipped]: Catalog, request forms, employee history, department queue, and resolution views.
+* **API service** [shipped]: credential validation (SSO in production, passwords per ADR-002 in Academy), RBAC, request routing, validation, lifecycle transitions, document brokering, rate limiting, and audit writes.
+* **Relational database** [shipped]: Users, departments, memberships, catalog, requests, documents, and append-only audit logs.
+* **Private object storage** [Academy substitute]: SQLite `Bytes` payloads with checksums, lifecycle rules, and no public access (S3 seam documented in ADR-003).
+* **Notification worker** [Academy substitute]: durable outbox events with an in-process sweep instead of Firebase; optional webhook delivery instead of FCM.
+* **Scheduled maintenance worker** [Academy substitute]: in-process retention sweep with logged success/failure instead of a separate worker.
+* **Observability** [Academy substitute]: one-line request logs with correlation IDs, `/health`, and CI instead of metrics/traces/APM.
 
 ## 3. Request flow
 
@@ -87,11 +91,11 @@ flowchart TD
 ## 6. Operational controls
 
 * Health endpoint checks API dependencies without exposing internals.
-* Metrics cover request volume, queue age, status transitions, failed uploads, notification retries, and purge failures.
+* Metrics cover request volume, queue age, status transitions, failed uploads, notification retries, and purge failures [production target — Academy substitute: one-line logs with correlation IDs, `/health` counts, CI].
 * Structured audit/security logs include actor, action, resource, result, correlation ID, and timestamp.
-* Backups are encrypted and tested through regular restore exercises.
+* Backups are encrypted and tested through regular restore exercises [production target — Academy substitute: ephemeral SQLite with boot reseed; no backup/restore to demonstrate].
 * Deployments use migrations with rollback guidance and preserve audit history.
-* Retention and deletion jobs produce durable success/failure metrics.
+* Retention and deletion jobs produce durable success/failure metrics [production target — Academy substitute: in-process sweep with logged results surfaced on `/health`].
 
 ## 7. Technology decisions
 

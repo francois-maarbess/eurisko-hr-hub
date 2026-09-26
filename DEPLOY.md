@@ -25,9 +25,13 @@ both describe the same configuration.
 
 Backend web service (Node, Oregon, Free): build
 `npm install --include=dev; npx prisma generate; npm run build`, start
-`npx prisma migrate deploy && npx tsx prisma/seed.ts && npm run start`,
-health check `/health`, env as in `render.yaml` (`NODE_VERSION 22.12.0`,
-`NODE_ENV production`, generated `JWT_SECRET`, …).
+`npx tsx prisma/seed.ts && npm run start`, health check `/health`, env as in
+`render.yaml` (`NODE_VERSION 22.12.0`, `NODE_ENV production`, generated
+`JWT_SECRET`, …). Migrations run as the `preDeployCommand`
+(`npx prisma migrate deploy`) — the blueprint owns this; a manually
+configured service that copies only `startCommand` must add the migrate step
+or it can boot against a stale schema. Check `/health`
+(`migrations.pending: 0`) after every deploy.
 Frontend static site: root directory `frontend`, build
 `npm install; npm run build`, publish directory `dist`, env `VITE_API_BASE`.
 
@@ -39,8 +43,12 @@ Frontend static site: root directory `frontend`, build
   rebuilds exactly the 3 demo users + catalog and zero tickets. Anything an
   evaluator creates can vanish on redeploy — that is the documented $0 trade,
   not a bug. `DEMO.md` always works from a fresh boot.
-- **Change the admin password** after first login if the deployment is
-  shared — the seed password is public by design.
+- **Demo credentials are disposable by design.** The seed password
+  (`Password123!`) is public and is re-applied on every boot, so changing it
+  on the live deployment does not stick — do not present the live admin
+  account as secured. Treat all three demo accounts as shared, disposable
+  evaluation logins. Real credential hygiene (unique passwords, rotation) is
+  fully supported by the app and applies to any non-seeded account.
 
 ## Troubleshooting
 

@@ -60,7 +60,7 @@ jobs:
       - name: Verify README test counts
         run: npm run test:count -- --check
 
-      - name: AI evals (9, offline)
+      - name: AI evals (14, offline)
         run: npm run eval:ai
 
       - name: Build backend

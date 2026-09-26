@@ -32,11 +32,15 @@ async function bootstrap() {
   }
 
   // Production CORS: allow-list via CORS_ORIGINS (comma-separated).
-  // Empty = reflect request origin (local dev convenience only).
+  // Empty = reflect request origin (local dev convenience only). In
+  // production an empty allow-list is a misconfiguration, so say so loudly.
   const corsOrigins = (process.env['CORS_ORIGINS'] || '')
     .split(',')
     .map((o) => o.trim())
     .filter(Boolean);
+  if (process.env['NODE_ENV'] === 'production' && corsOrigins.length === 0) {
+    console.warn('[cors] CORS_ORIGINS is empty in production — reflecting any origin. Set it to the frontend URL.');
+  }
   app.enableCors({
     origin: corsOrigins.length > 0 ? corsOrigins : true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

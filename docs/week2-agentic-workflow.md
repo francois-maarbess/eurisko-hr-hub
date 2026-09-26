@@ -1,5 +1,10 @@
 # Week 2 Agentic Workflow
 
+> Preserved Week 2 evidence, not the current API contract. It describes an
+> in-memory model with hardcoded IDs (`req-1`) and `snake_case` fields; the
+> shipped system uses Prisma + SQLite, generated IDs, and camelCase DTOs.
+> Read it for workflow history, not implementation guidance.
+
 ## Understand
 - The Week 1 data model supports a bounded slice of request transitions for the demo:
   - `PENDING -> IN_PROGRESS`

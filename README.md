@@ -82,8 +82,9 @@ npm run db:reset
 > Port busy? Backend honors `PORT`, frontend auto-picks the next free port
 > and prints it — just open the URL Vite shows.
 
-> The real `.env` is gitignored and never committed — only `.env.example`
-> is in the repo. Optional: set `GROQ_API_KEY` in `.env` (free key from
+> The real `.env` is gitignored and not tracked — only `.env.example`
+> is in the repo. (One early commit briefly contained a local-only `.env`
+> holding nothing but a SQLite path; no secret was ever committed.) Optional: set `GROQ_API_KEY` in `.env` (free key from
 > https://console.groq.com) to enable the LLM provider for AI intake.
 > Without it, the built-in offline extractor handles everything.
 

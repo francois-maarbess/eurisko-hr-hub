@@ -29,14 +29,16 @@ exists and is verified — not aspirations.
 | `VITE_API_BASE` | frontend build env | yes | Backend URL, baked into the bundle at build time |
 | `PORT` / `VITE_PORT` | platform / local | platform | Backend honors `PORT`; frontend dev auto-picks a free port |
 
-The real `.env` is gitignored and has never been committed. `.env.example`
+The real `.env` is gitignored and not tracked. (One early commit briefly
+contained a local-only `.env` holding nothing but a SQLite path; no secret
+was ever committed.) `.env.example`
 documents every variable above. Throttle, quota, TTL, and retention knobs are
 all env-overridable with safe local defaults (see `.env.example`).
 
 ## 3. Release gate (must ALL pass before any submit or deploy)
 
 1. `npm run verify` exits 0 (typecheck, both lints with zero warnings,
-    137 backend tests, 13 AI evals, both builds).
+    147 backend tests, 14 AI evals, both builds).
 2. `cd frontend && npm test` — 10 vitest suites green.
 3. `npm run test:count -- --check` passes with README counts synced.
 4. CI on the pushed branch is green (typecheck, lint ×2, tests, evals,
@@ -85,3 +87,13 @@ Recovery proof procedure (run before every submit, keep the log):
 
 If any step fails, the release is NO-GO: fix, re-verify, re-smoke. Do not
 submit a known-red build.
+
+## 7. Evidence limits (stated plainly)
+
+- Backend proof is automated HTTP E2E (`test/app.e2e-spec.ts`) plus frontend
+  unit tests (vitest). There is no committed browser-automation suite
+  (Playwright/Cypress); browser interaction is verified live/manually, not
+  by committed automation.
+- The three-stranger handoff (user/engineer/operator) is documented and
+  exercised by the author, not independently witnessed — the repo records
+  intended handoff plus the procedures above, not third-party attestations.
