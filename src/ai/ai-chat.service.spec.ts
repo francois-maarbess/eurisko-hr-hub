@@ -29,6 +29,7 @@ function harness() {
     findDuplicates: jest.fn(async () => []),
     updateStatus: jest.fn(async () => ({ id: 't1', status: 'CANCELLED' })),
     claim: jest.fn(async (id: string) => ({ id })),
+    getReport: jest.fn(async () => ({ byStatus: { PENDING: 1 }, departments: [], csatAverage: null, csatCount: 0 })),
   };
   const audit = { append: jest.fn(async () => undefined) } as any;
   const ai = {
@@ -438,5 +439,79 @@ describe('AI operations assistant safety', () => {
     );
     expect(result.message).toMatch(/confirmed/i);
     expect((result as any).confirmation).toBeUndefined();
+  });
+
+  it('routes queue views through caller scoping without adding visibility', async () => {
+    const { service } = harness();
+    const res = await (service as any).queueView({ id: 'alice', platformRole: 'EMPLOYEE' }, { view: 'unassigned', limit: 5 });
+    expect(res.view).toBe('unassigned');
+    expect(Array.isArray(res.tickets)).toBe(true);
+    await expect((service as any).queueView({ id: 'alice', platformRole: 'EMPLOYEE' }, { view: 'everything' })).rejects.toThrow(/queue, unassigned, mywork, or claimed/);
+  });
+
+  it('shows claimed history including terminal tickets', async () => {
+    const { service, requests } = harness();
+    requests.findAll.mockResolvedValueOnce([
+      { id: 'done-1', status: 'COMPLETED', priority: 'STANDARD', createdAt: new Date() },
+    ]);
+    const res = await (service as any).claimedHistory('alice', {});
+    expect(res.total).toBe(1);
+    expect(res.tickets[0].reference).toMatch(/^REQ-/);
+  });
+
+  it('keeps staff notes and analytics behind their gates', async () => {
+    const { service, requests } = harness();
+    requests.findOne.mockResolvedValue({ id: 't1' });
+    requests.listStaffNotes = jest.fn(async () => [{ author: { displayName: 'Bob' }, content: 'secret', createdAt: new Date() }]);
+    const notes = await (service as any).staffNotes({ id: 'bob', platformRole: 'EMPLOYEE' }, 't1');
+    expect(notes).toHaveLength(1);
+    requests.listStaffNotes.mockRejectedValueOnce(new ForbiddenException('Requesters cannot read internal staff notes.'));
+    await expect((service as any).staffNotes({ id: 'alice', platformRole: 'EMPLOYEE' }, 't1')).rejects.toBeInstanceOf(ForbiddenException);
+    await expect((service as any).analyticsReport({ id: 'alice', platformRole: 'EMPLOYEE' })).rejects.toBeInstanceOf(ForbiddenException);
+    const report = await (service as any).analyticsReport({ id: 'admin', platformRole: 'SYSTEM_ADMIN' });
+    expect(report).toHaveProperty('byStatus');
+  });
+
+  it('validates takeover/reject/note/rating proposals before storing', async () => {
+    const { service, requests } = harness();
+    const claimed = { id: 't1', status: 'IN_PROGRESS', claimedById: 'bob', title: 'T', department: { name: 'IT' }, requestType: { name: 'L' }, claimant: null };
+    requests.findOne.mockResolvedValue(claimed);
+    const take = await (service as any).proposeTakeover({ id: 'admin', platformRole: 'SYSTEM_ADMIN' }, 'session-1', { requestId: 't1', reason: 'Bob is out' });
+    expect(take.requiresConfirmation).toBe(true);
+    await expect((service as any).proposeTakeover({ id: 'admin', platformRole: 'SYSTEM_ADMIN' }, 'session-1', { requestId: 't1', reason: '  ' })).rejects.toThrow(/reason is required/);
+    const rej = await (service as any).proposeReject({ id: 'bob', platformRole: 'EMPLOYEE' }, 'session-1', { requestId: 't1', reason: 'Duplicate' });
+    expect(rej.requiresConfirmation).toBe(true);
+    await expect((service as any).proposeReject({ id: 'bob', platformRole: 'EMPLOYEE' }, 'session-1', { requestId: 't1', reason: '' })).rejects.toThrow(/reason is required/);
+    const note = await (service as any).proposeNote({ id: 'bob', platformRole: 'EMPLOYEE' }, 'session-1', { requestId: 't1', content: 'Called vendor' });
+    expect(note.requiresConfirmation).toBe(true);
+    await expect((service as any).proposeRating({ id: 'alice', platformRole: 'EMPLOYEE' }, 'session-1', { requestId: 't1', rating: 9 })).rejects.toThrow(/1 to 5/);
+  });
+
+  it('resolves membership targets by email and executes add/remove', async () => {
+    const { service, prisma } = harness();
+    prisma.department.findMany.mockResolvedValue(CATALOG);
+    prisma.user.findUnique.mockResolvedValue({ id: 'u9', email: 'n@acme.com', displayName: 'N', active: true });
+    const admin = { id: 'admin', platformRole: 'SYSTEM_ADMIN' };
+    const add = await (service as any).proposeMembership(admin, 'session-1', { email: 'n@acme.com', department: 'it', departmentRole: 'manager', action: 'add' });
+    expect(add.requiresConfirmation).toBe(true);
+    await expect((service as any).proposeMembership({ id: 'bob', platformRole: 'EMPLOYEE' }, 'session-1', { email: 'n@acme.com', department: 'it', action: 'add' })).rejects.toBeInstanceOf(ForbiddenException);
+    await expect((service as any).proposeMembership(admin, 'session-1', { email: 'n@acme.com', department: 'plumbing', action: 'add' })).rejects.toThrow(/Valid options/);
+  });
+
+  it('proposes workflows only when the draft actually contains children', async () => {
+    const { service, prisma, ai } = harness();
+    prisma.department.findMany.mockResolvedValue(CATALOG);
+    ai.draft.mockResolvedValueOnce({
+      departmentId: 'dept-it', requestTypeId: 'type-laptop', title: 'Onboard designer', description: 'laptop plus accounts', priority: 'STANDARD', confidence: 'high', provider: 'local',
+      macro: { summary: 'Onboarding', childTasks: [{ departmentId: 'dept-it', requestTypeId: 'type-laptop', task: 'Laptop', reason: 'needs one' }] },
+    });
+    const res = await (service as any).proposeWorkflow({ id: 'alice', platformRole: 'EMPLOYEE' }, 'session-1', {
+      department: 'IT', requestType: 'laptop', title: 'Onboard designer', description: 'Laptop plus accounts setup now.', priority: 'STANDARD',
+    });
+    expect(res.requiresConfirmation).toBe(true);
+    ai.draft.mockResolvedValueOnce({ departmentId: 'dept-it', requestTypeId: 'type-laptop', title: 'Solo', description: 'Just one thing here yes.', priority: 'STANDARD', confidence: 'high', provider: 'local', macro: null });
+    await expect((service as any).proposeWorkflow({ id: 'alice', platformRole: 'EMPLOYEE' }, 'session-1', {
+      department: 'IT', requestType: 'laptop', title: 'Solo', description: 'Just one thing here yes.', priority: 'STANDARD',
+    })).rejects.toThrow(/single-department/);
   });
 });

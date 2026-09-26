@@ -20,12 +20,14 @@ Authenticated users can call `POST /ai/chat` with `{ message, sessionId? }`.
 The assistant uses the caller's JWT identity and active department memberships
 for every read. It can report caller-scoped statistics (including per-department
 numbers for admins and department members), list/search authorized
-tickets, show authorized ticket details, classify vague free text into catalog
+tickets, queue views (queue/unassigned/my-work/claim-history, caller-scoped),
+claimed history, ticket children with workflow progress, staff notes (staff
+only), analytics reports (admin only), audit search (admin only), classify vague free text into catalog
 department/type/priority before proposing, report non-secret AI health, and start
 MFA setup for the caller's own account. The authenticator code must still be
 entered by the user in Security settings.
 
-Create-request, claim, complete (with an AI-drafted, human-verified resolution note), cancel (owner's own pending only), reroute, workload and inbox reads, and admin create-user actions are proposal-only
+Create-request, claim, complete (with an AI-drafted, human-verified resolution note), cancel (owner's own pending only), takeover, reassign, reject, staff notes, ratings, membership changes, exports, multi-department workflow creation, reroute, workload and inbox reads, and admin create-user actions are proposal-only
 until the UI returns the confirmation card and the caller explicitly confirms
 with its confirmation ID. The full pending payload persists in the chat
 session row, so a restart rehydrates (never silently drops) a proposal, and

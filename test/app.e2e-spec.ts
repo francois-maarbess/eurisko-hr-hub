@@ -763,6 +763,71 @@ describe('Service Request Flow (E2E)', () => {
     await prisma.request.delete({ where: { id: made.body.id } });
   });
 
+  it('operations assistant admin takeover-confirm moves another agent’s claim', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP', departmentId: dept!.id } });
+    const admin = await prisma.user.findFirst({ where: { email: 'admin@acme.com' } });
+    const made = await request(app.getHttpServer())
+      .post('/requests')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ departmentId: dept!.id, requestTypeId: rt!.id, title: 'E2E chat-takeover probe ticket', description: 'Takeover through the assistant confirm path.', priority: 'STANDARD' });
+    expect(made.status).toBe(201);
+    expect((await request(app.getHttpServer()).patch(`/requests/${made.body.id}/claim`).set('Authorization', `Bearer ${agentToken}`)).status).toBe(200);
+    const session = await (prisma as any).chatSession.create({ data: { userId: admin!.id } });
+    await (prisma as any).chatSession.update({
+      where: { id: session.id },
+      data: {
+        pendingConfirmation: JSON.stringify({
+          id: 'hypothesis-takeover-action', kind: 'takeover', summary: 'Take over for the admin',
+          payload: { requestId: made.body.id, reason: 'Bob is out today' },
+        }),
+      },
+    });
+    const res = await request(app.getHttpServer())
+      .post('/ai/chat')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ sessionId: session.id, confirmationId: 'hypothesis-takeover-action', confirmationAction: 'confirm' });
+    expect(res.status).toBe(201);
+    const moved = await prisma.request.findUnique({ where: { id: made.body.id } });
+    expect(moved!.claimedById).toBe(admin!.id);
+    await prisma.auditLog.deleteMany({ where: { requestId: made.body.id } });
+    await prisma.request.delete({ where: { id: made.body.id } });
+  });
+
+  it('operations assistant workflow-confirm creates parent plus children', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP', departmentId: dept!.id } });
+    const hr = await prisma.department.findFirst({ where: { code: 'HR' } });
+    const letter = await prisma.requestType.findFirst({ where: { departmentId: hr!.id } });
+    const emp = await prisma.user.findFirst({ where: { email: 'alice@acme.com' } });
+    const session = await (prisma as any).chatSession.create({ data: { userId: emp!.id } });
+    await (prisma as any).chatSession.update({
+      where: { id: session.id },
+      data: {
+        pendingConfirmation: JSON.stringify({
+          id: 'hypothesis-workflow-action', kind: 'workflow', summary: 'Create onboarding workflow',
+          payload: {
+            departmentId: dept!.id, requestTypeId: rt!.id, title: 'E2E chat-workflow probe parent', description: 'Parent created through the assistant.', priority: 'STANDARD',
+            childTasks: [{ departmentId: hr!.id, requestTypeId: letter!.id, title: 'E2E workflow child letter', description: 'Child created through the assistant.', priority: 'STANDARD' }],
+          },
+        }),
+      },
+    });
+    const res = await request(app.getHttpServer())
+      .post('/ai/chat')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ sessionId: session.id, confirmationId: 'hypothesis-workflow-action', confirmationAction: 'confirm' });
+    expect(res.status).toBe(201);
+    const parent = await prisma.request.findFirst({ where: { title: 'E2E chat-workflow probe parent' } });
+    expect(parent).toBeTruthy();
+    const kids = await prisma.request.findMany({ where: { parentRequestId: parent!.id } });
+    expect(kids).toHaveLength(1);
+    expect(kids[0].departmentId).toBe(hr!.id);
+    await prisma.auditLog.deleteMany({ where: { requestId: { in: [parent!.id, kids[0].id] } } });
+    await prisma.request.delete({ where: { id: kids[0].id } });
+    await prisma.request.delete({ where: { id: parent!.id } });
+  });
+
   it('catalog lists departments and filters types without duplicates', async () => {
     const depts = await request(app.getHttpServer())
       .get('/catalog/departments')
