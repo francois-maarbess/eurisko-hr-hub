@@ -78,14 +78,6 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditSearched, setAuditSearched] = useState(false);
   const [auditError, setAuditError] = useState('');
-  const [sysHealth, setSysHealth] = useState<{
-    status: string;
-    database: string;
-    uptimeSeconds: number;
-    migrations: { applied: number; pending: number };
-    outbox: { pending: number; failed: number };
-    ai: { provider: string; model: string };
-  } | null>(null);
 
   const exportCsv = async () => {
     setExporting(true);
@@ -198,12 +190,6 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
       load();
       void loadAnalytics();
     });
-    fetch(apiUrl('/health'))
-      .then((r) => r.json())
-      .then((h) => {
-        if (h && typeof h.status === 'string') setSysHealth(h);
-      })
-      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -492,21 +478,6 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
               <strong>Active</strong> = requests currently pending or in-progress and requiring staff attention. <strong>Total</strong> = all requests ever created in that department, including completed, rejected, and cancelled ones.
             </p>
           )}
-          {sysHealth && (
-            <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-              <span title={`Uptime ${Math.floor(sysHealth.uptimeSeconds / 60)}m · migrations applied ${sysHealth.migrations.applied}, pending ${sysHealth.migrations.pending}`}>
-              <Badge bg={sysHealth.status === 'ok' ? 'var(--success-bg)' : 'var(--danger-bg)'} color={sysHealth.status === 'ok' ? 'var(--success)' : 'var(--danger)'}>
-                System {sysHealth.status === 'ok' ? 'healthy' : sysHealth.status} · DB {sysHealth.database}
-              </Badge>
-              </span>
-              <span title="Notification outbox backlog"><Badge bg="var(--surface-2)" color="var(--muted)">
-                Outbox {sysHealth.outbox.pending} pending{sysHealth.outbox.failed > 0 ? ` · ${sysHealth.outbox.failed} failed` : ''}
-              </Badge></span>
-              <span title={`AI model: ${sysHealth.ai.model}`}><Badge bg="var(--surface-2)" color="var(--muted)">
-                AI: {sysHealth.ai.provider}
-              </Badge></span>
-            </div>
-          )}
           <div className="admin-overview">
           <div className="pill-group mb-md">
             {Object.entries(report.byStatus).map(([status, count]) => (
@@ -568,9 +539,9 @@ export default function AdminPanel({ token, onCatalogChange }: AdminPanelProps) 
             <Badge bg="var(--surface-2)" color="var(--muted)">
               Rejected {analytics.rejectionRate}% · Rerouted {analytics.rerouteRate}% ({analytics.rerouteCount})
             </Badge>
-            <Badge bg="var(--surface-2)" color="var(--muted)">
+            <span title="Age of currently open tickets — how long they have been waiting, not SLA breach"><Badge bg="var(--surface-2)" color="var(--muted)">
               Aging &lt;1d {analytics.aging.under1d} · 1–3d {analytics.aging.d1to3} · 3–7d {analytics.aging.d3to7} · &gt;7d {analytics.aging.over7d}
-            </Badge>
+            </Badge></span>
           </div>
           {analytics.workloadByAgent.length > 0 && (
             <div className="admin-overview-list">
