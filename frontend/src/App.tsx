@@ -73,7 +73,7 @@ interface ChatMessage {
   text: string;
 }
 
-function ChatbotShell({ token }: { token: string }) {
+export function ChatbotShell({ token }: { token: string }) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   // Session survives SPA navigation (the shell never unmounts while signed
@@ -104,13 +104,19 @@ function ChatbotShell({ token }: { token: string }) {
   // could pass the `sending` check twice before it flips. The ref flips
   // synchronously, making double-execution impossible.
   const confirmInFlight = React.useRef<string | null>(null);
-  useEffect(() => {
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    bottomRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'end' });
-  }, [messages, confirmation, open]);
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
     { role: 'assistant', text: 'Hello, I\'m the Operations Assistant. Ask me anything. I can pull stats, find tickets, draft requests and completions, and execute admin tasks for you like creating users. I follow your permissions and always confirm before changing anything.' },
   ]);
+  // Auto-scroll anchor: declared AFTER the state it depends on. The deps
+  // array ([messages, ...]) is evaluated when this call runs, so every
+  // binding it names must already be initialized — otherwise React dies
+  // with "Cannot access before initialization" (white screen, App.tsx:110).
+  useEffect(() => {
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false;
+    // scrollIntoView may not exist in minimal DOMs — the anchor is a
+    // convenience, never a requirement.
+    bottomRef.current?.scrollIntoView?.({ behavior: reduce ? 'auto' : 'smooth', block: 'end' });
+  }, [messages, confirmation, open]);
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || sending || cooldownSecs > 0) return;
