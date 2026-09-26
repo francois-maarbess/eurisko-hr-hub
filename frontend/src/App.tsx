@@ -118,9 +118,25 @@ export function ChatbotShell({ token }: { token: string }) {
     bottomRef.current?.scrollIntoView?.({ behavior: reduce ? 'auto' : 'smooth', block: 'end' });
   }, [messages, confirmation, open]);
 
+  const isConfirmText = (t: string) =>
+    /^(yes|yeah|yep|yup|confirm|confirmed|do it|go ahead|proceed|ok|okay|sure|looks good|approved)(\W.*)?$/i.test(t.trim()) &&
+    t.trim().length <= 40;
+  const isCancelText = (t: string) =>
+    /^(no|nope|cancel|stop|never ?mind|abort|discard)(\W.*)?$/i.test(t.trim()) && t.trim().length <= 40;
+
   const sendMessage = async (text: string) => {
     if (!text.trim() || sending || cooldownSecs > 0) return;
     const clean = text.trim();
+    // Natural-language confirm: typing "yes" with exactly one pending
+    // action confirms it (same as the Confirm button) instead of starting
+    // a new AI turn. The server enforces the same rule deterministically,
+    // so this is a fast path, not the authority.
+    if (confirmation && sessionId && (isConfirmText(clean) || isCancelText(clean))) {
+      setMessages((current) => [...current, { role: 'user', text: clean }]);
+      setInput('');
+      await confirmAction(isConfirmText(clean) ? 'confirm' : 'cancel');
+      return;
+    }
     setMessages((current) => [...current, { role: 'user', text: clean }]);
     setInput('');
     setSending(true);
