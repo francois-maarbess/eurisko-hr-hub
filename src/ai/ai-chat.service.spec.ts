@@ -15,7 +15,8 @@ function harness() {
     chatMessage: { create: jest.fn(async () => ({})), findMany: jest.fn(async () => []) },
     user: { findUnique: jest.fn(async () => ({ id: 'alice', email: 'alice@acme.com', displayName: 'Alice', platformRole: 'EMPLOYEE', departmentMemberships: [] })) },
     departmentMember: { findMany: jest.fn(async () => []) },
-    department: { findMany: jest.fn(async () => []) },
+    department: { findMany: jest.fn(async () => []), findUnique: jest.fn(async () => null) },
+    requestType: { findUnique: jest.fn(async () => null) },
     request: { findMany: jest.fn(async () => []), count: jest.fn(async () => 0) },
     notification: notificationModel,
   };
@@ -513,5 +514,35 @@ describe('AI operations assistant safety', () => {
     await expect((service as any).proposeWorkflow({ id: 'alice', platformRole: 'EMPLOYEE' }, 'session-1', {
       department: 'IT', requestType: 'laptop', title: 'Solo', description: 'Just one thing here yes.', priority: 'STANDARD',
     })).rejects.toThrow(/single-department/);
+  });
+
+  it('creates departments and types from human words with duplicate guards', async () => {
+    const { service, prisma } = harness();
+    prisma.department.findMany.mockResolvedValue([]);
+    const dept = await (service as any).proposeDepartment({ id: 'admin', platformRole: 'SYSTEM_ADMIN' }, 'session-1', { name: 'Legal' });
+    expect(dept.requiresConfirmation).toBe(true);
+    const storedDept = JSON.parse(prisma.chatSession.update.mock.calls[0][0].data.pendingConfirmation)[0];
+    expect(storedDept.payload.code).toBe('LEGAL');
+    await expect((service as any).proposeDepartment({ id: 'bob', platformRole: 'EMPLOYEE' }, 'session-1', { name: 'Legal' })).rejects.toBeInstanceOf(ForbiddenException);
+
+    prisma.department.findMany.mockResolvedValue([{ id: 'dept-legal', code: 'LEGAL', name: 'Legal', requestTypes: [{ id: 'type-x', code: 'CONTRACT', name: 'Contract', active: true }] }]);
+    const type = await (service as any).proposeRequestType({ id: 'admin', platformRole: 'SYSTEM_ADMIN' }, 'session-1', { department: 'legal', name: 'Contract Review' });
+    expect(type.requiresConfirmation).toBe(true);
+    const storedType = JSON.parse(prisma.chatSession.update.mock.calls[1][0].data.pendingConfirmation).at(-1);
+    expect(storedType.payload.code).toBe('CONTRACT_REVIEW');
+    (prisma.requestType as any) = { findUnique: jest.fn(async () => ({ id: 't1' })) };
+    await expect((service as any).proposeRequestType({ id: 'admin', platformRole: 'SYSTEM_ADMIN' }, 'session-1', { department: 'legal', name: 'Contract Review' })).rejects.toThrow(/already exists/);
+  });
+
+  it('gates user-status changes to admins and blocks self-changes', async () => {
+    const { service, prisma } = harness();
+    prisma.user.findUnique.mockResolvedValue({ id: 'u9', email: 'bob@acme.com', displayName: 'Bob', active: true });
+    const ok = await (service as any).proposeUserStatus({ id: 'admin', platformRole: 'SYSTEM_ADMIN' }, 'session-1', { email: 'bob@acme.com', action: 'deactivate' });
+    expect(ok.requiresConfirmation).toBe(true);
+    await expect((service as any).proposeUserStatus({ id: 'bob', platformRole: 'EMPLOYEE' }, 'session-1', { email: 'alice@acme.com', action: 'deactivate' })).rejects.toBeInstanceOf(ForbiddenException);
+    prisma.user.findUnique.mockResolvedValueOnce({ id: 'admin', email: 'admin@acme.com', displayName: 'Admin', active: true });
+    await expect((service as any).proposeUserStatus({ id: 'admin', platformRole: 'SYSTEM_ADMIN' }, 'session-1', { email: 'admin@acme.com', action: 'deactivate' })).rejects.toThrow(/own account/);
+    prisma.user.findUnique.mockResolvedValueOnce(null);
+    await expect((service as any).proposeUserStatus({ id: 'admin', platformRole: 'SYSTEM_ADMIN' }, 'session-1', { email: 'ghost@acme.com', action: 'deactivate' })).rejects.toThrow(/not found/i);
   });
 });

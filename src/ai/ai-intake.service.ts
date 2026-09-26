@@ -293,9 +293,14 @@ export class AiIntakeService {
   }) {
     const localTemplate = () => ({
       resolutionNote: [
-        `[Confirm] Review the reported ${input.requestType.toLowerCase()} issue: ${input.title.trim()}.`,
-        `[Confirm] Reproduce the issue using only the information provided: ${input.description.trim().slice(0, 360)}.`,
-        '[Confirm] Record the verified action taken, the observed result, and any remaining follow-up before completing the request.',
+        `Review the reported ${input.requestType.toLowerCase()} issue: ${input.title.trim()}.`,
+        'Reproduce the issue using only the information provided.',
+        'Record the verified action taken, the observed result, and any remaining follow-up before completing the request.',
+        '',
+        'Please confirm:',
+        `- The reported details match: ${input.description.trim().slice(0, 360)}.`,
+        `- The ${input.department} team owns this ${input.requestType.toLowerCase()} request.`,
+        '- The issue and outcome were independently verified before completion.',
       ].join('\n'),
       assumptions: [
         `[Confirm] The ${input.department} team owns this ${input.requestType.toLowerCase()} request.`,

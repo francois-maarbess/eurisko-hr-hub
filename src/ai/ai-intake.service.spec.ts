@@ -182,7 +182,8 @@ describe('AI-assisted intake (Week 4)', () => {
     });
     expect(draft.provider).toBe('local-template');
     expect(draft.confidence).toBe('low');
-    expect(draft.resolutionNote).toContain('[Confirm]');
+    expect(draft.resolutionNote).toContain('Please confirm:');
+    expect(draft.resolutionNote).not.toMatch(/\[\s*confirm/i);
     expect(draft.assumptions.every((item) => item.startsWith('[Confirm]'))).toBe(true);
     expect(draft.degraded).toBe(true);
   });
@@ -197,6 +198,6 @@ describe('AI-assisted intake (Week 4)', () => {
     delete process.env['GROQ_API_KEY'];
     expect(draft.provider).toBe('local-template');
     expect(draft.degraded).toBe(true);
-    expect(draft.resolutionNote).toContain('[Confirm]');
+    expect(draft.resolutionNote).toContain('Please confirm:');
   });
 });

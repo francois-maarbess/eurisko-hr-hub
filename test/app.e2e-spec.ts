@@ -218,7 +218,7 @@ describe('Service Request Flow (E2E)', () => {
     expect(agentDraft.status).toBe(200);
     expect(agentDraft.body.provider).toBe('local-template');
     expect(agentDraft.body.confidence).toBe('low');
-    expect(agentDraft.body.resolutionNote).toContain('[Confirm]');
+    expect(agentDraft.body.resolutionNote).toContain('Please confirm:');
     expect(agentDraft.body.degraded).toBe(true);
   });
 
@@ -792,6 +792,34 @@ describe('Service Request Flow (E2E)', () => {
     expect(moved!.claimedById).toBe(admin!.id);
     await prisma.auditLog.deleteMany({ where: { requestId: made.body.id } });
     await prisma.request.delete({ where: { id: made.body.id } });
+  });
+
+  it('operations assistant double-confirm creates exactly one ticket', async () => {
+    const dept = await prisma.department.findFirst({ where: { code: 'IT' } });
+    const rt = await prisma.requestType.findFirst({ where: { code: 'LAPTOP', departmentId: dept!.id } });
+    const emp = await prisma.user.findFirst({ where: { email: 'alice@acme.com' } });
+    const title = `E2E chat-double-confirm probe ${Date.now()}`;
+    const session = await (prisma as any).chatSession.create({ data: { userId: emp!.id } });
+    await (prisma as any).chatSession.update({
+      where: { id: session.id },
+      data: {
+        pendingConfirmation: JSON.stringify([{
+          id: 'hypothesis-double-action', kind: 'create-request', summary: 'Create double-tap probe',
+          payload: { departmentId: dept!.id, requestTypeId: rt!.id, title, description: 'Double confirmation must not duplicate.', priority: 'STANDARD', submissionKey: 'hypothesis-double-action' },
+        }]),
+      },
+    });
+    const attempt = () =>
+      request(app.getHttpServer())
+        .post('/ai/chat')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({ sessionId: session.id, confirmationId: 'hypothesis-double-action', confirmationAction: 'confirm' });
+    const [a, b] = await Promise.all([attempt(), attempt()]);
+    expect([a.status, b.status].every((s) => s === 201)).toBe(true);
+    const rows = await prisma.request.findMany({ where: { title } });
+    expect(rows).toHaveLength(1);
+    await prisma.auditLog.deleteMany({ where: { requestId: rows[0].id } });
+    await prisma.request.delete({ where: { id: rows[0].id } });
   });
 
   it('operations assistant workflow-confirm creates parent plus children', async () => {

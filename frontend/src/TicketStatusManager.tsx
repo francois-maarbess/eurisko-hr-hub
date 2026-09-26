@@ -767,7 +767,11 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
   };
 
   // Catalog and Re-routing handlers
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(false);
   const loadCatalog = async () => {
+    setCatalogLoading(true);
+    setCatalogError(null);
     try {
       const [dRes, tRes] = await Promise.all([
         fetch(apiUrl('/catalog/departments'), { headers: { Authorization: `Bearer ${token}` } }),
@@ -775,8 +779,13 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
       ]);
       if (dRes.ok) setDepartments(await dRes.json());
       if (tRes.ok) setAllTypes(await tRes.json());
+      if (!dRes.ok || !tRes.ok) {
+        setCatalogError('Could not load departments. Check your connection and retry.');
+      }
     } catch {
-      // Best-effort
+      setCatalogError('Could not load departments. Check your connection and retry.');
+    } finally {
+      setCatalogLoading(false);
     }
   };
 
@@ -785,7 +794,9 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
     setRerouteDept('');
     setRerouteType('');
     setRerouteReason('');
-    if (departments.length === 0) void loadCatalog();
+    // Eager load: the destination dropdowns must be populated before the
+    // user touches them — never an empty select with a dead confirm.
+    void loadCatalog();
   };
 
   const submitReroute = async (ticket: TicketState) => {
@@ -1780,6 +1791,15 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
               <Modal title="Re-route request" sub="Choose the destination and provide an audit reason before confirming." onClose={() => setRerouteFor(null)}>
               <div style={{ display: 'grid', gap: '0.5rem' }}>
                 <strong style={{ fontSize: '0.9rem', color: 'var(--navy)' }}>Re-route to another department</strong>
+                {catalogLoading && <p className="muted">Loading departments…</p>}
+                {catalogError && !catalogLoading && (
+                  <div className="alert-error" role="alert">
+                    {catalogError}{' '}
+                    <button type="button" className="filter-clear" onClick={() => void loadCatalog()}>
+                      Retry
+                    </button>
+                  </div>
+                )}
                 <div className="row" style={{ gap: '0.5rem' }}>
                   <select
                     className="select"

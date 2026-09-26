@@ -6,7 +6,7 @@
 
 An internal service hub for submitting, routing, tracking, and resolving employee requests.
 
-**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 147 backend tests + 10 frontend tests, 14 offline AI evals (`npm run test:count`).
+**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 150 backend tests + 10 frontend tests, 14 offline AI evals (`npm run test:count`).
 
 ## Live App
 
@@ -121,7 +121,7 @@ bypasses normal authorization or completion rules.
 ## Running Tests
 
 ```bash
-npm test      # 147 backend tests (all deterministic, SQLite)
+npm test      # 150 backend tests (all deterministic, SQLite)
 npm run eval:ai  # 14 AI eval cases (offline, no key, no DB)
 cd frontend && npm test  # 10 frontend unit tests (vitest)
 npm run test:count      # verify README counts match reality
@@ -130,10 +130,10 @@ npm run test:count      # verify README counts match reality
 The exact test counts are checked by `npm run test:count -- --check` and are
 kept synchronized here automatically.
 
-157 tests covering:
-- **Unit (76)**: Status transitions (10) + AI intake/extractor/validation/fallback/sensitive/off-topic/SLA/provider (21) + password accounts incl. session revoke (9) + purge & duplicate scoring (3) + production secret guard (4) + chat assistant safety incl. cancel/work/inbox/queue/ownership/lifecycle/membership/workflow (35)
+160 tests covering:
+- **Unit (76)**: Status transitions (10) + AI intake/extractor/validation/fallback/sensitive/off-topic/SLA/provider (21) + password accounts incl. session revoke (9) + purge & duplicate scoring (3) + production secret guard (4) + chat assistant safety incl. cancel/work/inbox/queue/ownership/lifecycle/membership/workflow/catalog (37)
 - **Integration (3)**: Prisma ↔ SQLite database lifecycle (3)
-- **E2E (62)**: Full HTTP flow with auth, scoped views, create, claim, takeover, complete, concurrent-completion race, documents lifecycle, notifications, overdue inbox dedupe, duplicates (scoped), report + analytics, manager memberships, owner-cancel/admin-claim rules, validation, regression + AI draft/correction/health/chat-confirm/complete/takeover/workflow endpoints + catalog + admin user lifecycle + audit search + filtered export + SLA deadlines + breach center + rate limiting + TOTP two-factor + logout revocation + deactivation + correlation IDs + queue pagination/claimedBy filters + timeline privacy
+- **E2E (63)**: Full HTTP flow with auth, scoped views, create, claim, takeover, complete, concurrent-completion race, documents lifecycle, notifications, overdue inbox dedupe, duplicates (scoped), report + analytics, manager memberships, owner-cancel/admin-claim rules, validation, regression + AI draft/correction/health/chat-confirm/complete/takeover/workflow endpoints + catalog + admin user lifecycle + audit search + filtered export + SLA deadlines + breach center + rate limiting + TOTP two-factor + logout revocation + deactivation + correlation IDs + queue pagination/claimedBy filters + timeline privacy
 
 ## Operations
 

@@ -79,7 +79,7 @@ describe('GroqAiProvider confidence (Week 4 follow-up)', () => {
 
   it('generates a strict resolution-note draft that requires verification', async () => {
     const payload = {
-      resolutionNote: 'Suggested checks: verify the laptop display connection and test with an approved external monitor. [Confirm the exact device and observed result before completing.]',
+      resolutionNote: 'Suggested checks:\n1. Verify the laptop display connection.\n2. Test with an approved external monitor.\n\nPlease confirm:\n- The exact device and observed result.',
       assumptions: ['Confirm the device model and reproduce the reported display fault.'],
     };
     const fetchMock = jest.fn(async (_url: string, init: any) => ({
@@ -92,7 +92,7 @@ describe('GroqAiProvider confidence (Week 4 follow-up)', () => {
       title: 'Laptop display issue', description: 'Laptop display flickers after wake.',
       department: 'IT', requestType: 'Laptop Request',
     });
-    expect(draft.resolutionNote).toContain('[Confirm');
+    expect(draft.resolutionNote).toContain('Please confirm:');
     expect(draft.assumptions).toHaveLength(1);
     expect(JSON.stringify(fetchMock.mock.calls[0][1].body)).toBeDefined();
     const sent = JSON.parse(fetchMock.mock.calls[0][1].body as string);

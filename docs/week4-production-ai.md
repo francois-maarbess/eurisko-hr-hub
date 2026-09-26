@@ -27,7 +27,7 @@ department/type/priority before proposing, report non-secret AI health, and star
 MFA setup for the caller's own account. The authenticator code must still be
 entered by the user in Security settings.
 
-Create-request, claim, complete (with an AI-drafted, human-verified resolution note), cancel (owner's own pending only), takeover, reassign, reject, staff notes, ratings, membership changes, exports, multi-department workflow creation, reroute, workload and inbox reads, and admin create-user actions are proposal-only
+Create-request, claim, complete (with an AI-drafted, human-verified resolution note), cancel (owner's own pending only), takeover, reassign, reject, staff notes, ratings, membership changes, department and request-type creation, user activation/role changes, exports, multi-department workflow creation, reroute, workload and inbox reads, and admin create-user actions are proposal-only
 until the UI returns the confirmation card and the caller explicitly confirms
 with its confirmation ID. The full pending payload persists in the chat
 session row, so a restart rehydrates (never silently drops) a proposal, and

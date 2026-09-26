@@ -88,12 +88,32 @@ function ChatbotShell({ token }: { token: string }) {
   });
   const [sending, setSending] = useState(false);
   const [confirmation, setConfirmation] = useState<{ id: string; kind: string; summary: string } | null>(null);
+  // Provider cooldown: after a rate-limit reply, sending pauses with a
+  // visible countdown. Hammering resend is what causes 429 storms, so the
+  // UI enforces the pause the message asks for.
+  const [cooldownSecs, setCooldownSecs] = useState(0);
+  useEffect(() => {
+    if (cooldownSecs <= 0) return;
+    const timer = window.setTimeout(() => setCooldownSecs((s) => Math.max(0, s - 1)), 1000);
+    return () => window.clearTimeout(timer);
+  }, [cooldownSecs]);
+  // Auto-scroll anchor: keeps the newest message / confirmation in view
+  // without the user scrolling. Instant when reduced-motion is preferred.
+  const bottomRef = React.useRef<HTMLDivElement>(null);
+  // In-flight confirm guard: React state updates are async, so rapid taps
+  // could pass the `sending` check twice before it flips. The ref flips
+  // synchronously, making double-execution impossible.
+  const confirmInFlight = React.useRef<string | null>(null);
+  useEffect(() => {
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    bottomRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'end' });
+  }, [messages, confirmation, open]);
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
     { role: 'assistant', text: 'Hello, I\'m the Operations Assistant. Ask me anything. I can pull stats, find tickets, draft requests and completions, and execute admin tasks for you like creating users. I follow your permissions and always confirm before changing anything.' },
   ]);
 
   const sendMessage = async (text: string) => {
-    if (!text.trim() || sending) return;
+    if (!text.trim() || sending || cooldownSecs > 0) return;
     const clean = text.trim();
     setMessages((current) => [...current, { role: 'user', text: clean }]);
     setInput('');
@@ -119,6 +139,11 @@ function ChatbotShell({ token }: { token: string }) {
       // user resends deliberately instead of the UI doubling traffic.
       setMessages((current) => [...current, { role: 'assistant', text: data.message || 'I could not produce an answer.' }]);
       setConfirmation(data.confirmation || null);
+      // Rate-limit replies start the visible cooldown so the next send
+      // waits out the provider instead of stacking another 429.
+      if (typeof data.message === 'string' && /too fast|slow down|rate limit|429/i.test(data.message)) {
+        setCooldownSecs(20);
+      }
     } catch (error) {
       setMessages((current) => [...current, { role: 'assistant', text: error instanceof Error ? error.message : 'Assistant is unavailable.' }]);
     } finally {
@@ -128,6 +153,8 @@ function ChatbotShell({ token }: { token: string }) {
 
   const confirmAction = async (action: 'confirm' | 'cancel') => {
     if (!confirmation || !sessionId || sending) return;
+    if (confirmInFlight.current === `${confirmation.id}:${action}`) return;
+    confirmInFlight.current = `${confirmation.id}:${action}`;
     setSending(true);
     try {
       const response = await fetch(apiUrl('/ai/chat'), {
@@ -144,6 +171,7 @@ function ChatbotShell({ token }: { token: string }) {
     } catch (error) {
       setMessages((current) => [...current, { role: 'assistant', text: error instanceof Error ? error.message : 'Confirmation failed.' }]);
     } finally {
+      confirmInFlight.current = null;
       setSending(false);
     }
   };
@@ -167,10 +195,11 @@ function ChatbotShell({ token }: { token: string }) {
                   {message.text}
                 </div>
               ))}
+              <div ref={bottomRef} aria-hidden="true" />
             </div>
             <div className="chatbot-chips" aria-label="Assistant suggestions">
               {["What's overdue?", 'Show my stats', 'Draft a request'].map((chip) => (
-                <button key={chip} type="button" className="filter-button" onClick={() => void sendMessage(chip)} disabled={sending}>{chip}</button>
+                <button key={chip} type="button" className="filter-button" onClick={() => void sendMessage(chip)} disabled={sending || cooldownSecs > 0}>{chip}</button>
               ))}
             </div>
             {confirmation && (
@@ -184,8 +213,8 @@ function ChatbotShell({ token }: { token: string }) {
               </div>
             )}
             <form className="chatbot-form" onSubmit={send}>
-              <input className="input" value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask me anything about your work…" aria-label="Message Operations Assistant" disabled={sending} />
-              <Button type="submit" small disabled={sending}>{sending ? 'Sending…' : 'Send'}</Button>
+              <input className="input" value={input} onChange={(event) => setInput(event.target.value)} placeholder={cooldownSecs > 0 ? `Cooling down… ${cooldownSecs}s` : 'Ask me anything about your work…'} aria-label="Message Operations Assistant" disabled={sending || cooldownSecs > 0} />
+              <Button type="submit" small disabled={sending || cooldownSecs > 0}>{sending ? 'Sending…' : cooldownSecs > 0 ? `Wait ${cooldownSecs}s` : 'Send'}</Button>
             </form>
           </div>
         </Modal>
