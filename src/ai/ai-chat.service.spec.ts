@@ -28,6 +28,7 @@ function harness() {
     findOne: jest.fn(),
     findDuplicates: jest.fn(async () => []),
     updateStatus: jest.fn(async () => ({ id: 't1', status: 'CANCELLED' })),
+    claim: jest.fn(async (id: string) => ({ id })),
   };
   const audit = { append: jest.fn(async () => undefined) } as any;
   const ai = {
@@ -109,8 +110,9 @@ describe('AI operations assistant safety', () => {
     );
     expect(result.requiresConfirmation).toBe(true);
     const stored = JSON.parse(prisma.chatSession.update.mock.calls[0][0].data.pendingConfirmation);
-    expect(stored.payload.departmentId).toBe('dept-it');
-    expect(stored.payload.requestTypeId).toBe('type-laptop');
+    const head = Array.isArray(stored) ? stored[0] : stored;
+    expect(head.payload.departmentId).toBe('dept-it');
+    expect(head.payload.requestTypeId).toBe('type-laptop');
     expect(requests.findDuplicates).toHaveBeenCalledWith(expect.objectContaining({ departmentId: 'dept-it' }));
   });
 
@@ -130,11 +132,12 @@ describe('AI operations assistant safety', () => {
       payload: { departmentId: 'dept-it', requestTypeId: 'type-laptop', title: 'Typed title here', description: 'A long enough description body.', priority: 'STANDARD' },
     });
     const stored = JSON.parse(prisma.chatSession.update.mock.calls[0][0].data.pendingConfirmation);
+    const head = Array.isArray(stored) ? stored[0] : stored;
     // Simulate a restart: memory cache gone, database row remains.
     (service as any).pendingActions.clear();
-    const session = { id: 'session-1', userId: 'alice', pendingConfirmation: JSON.stringify(stored) };
+    const session = { id: 'session-1', userId: 'alice', pendingConfirmation: JSON.stringify(head) };
     prisma.chatSession.findFirst.mockResolvedValue(session);
-    const result = await service.chat({ id: 'alice', platformRole: 'EMPLOYEE' }, { sessionId: 'session-1', confirmationId: stored.id, confirmationAction: 'confirm' });
+    const result = await service.chat({ id: 'alice', platformRole: 'EMPLOYEE' }, { sessionId: 'session-1', confirmationId: head.id, confirmationAction: 'confirm' });
     expect(requests.create).toHaveBeenCalledWith(expect.objectContaining({ departmentId: 'dept-it' }), 'alice');
     expect(result.message).toMatch(/confirmed/i);
   });
@@ -200,9 +203,10 @@ describe('AI operations assistant safety', () => {
     });
     expect(result.requiresConfirmation).toBe(true);
     const stored = JSON.parse(prisma.chatSession.update.mock.calls[0][0].data.pendingConfirmation);
-    expect(stored.payload.departmentId).toBe('dept-it');
-    expect(stored.payload.departmentRole).toBe('MANAGER');
-    expect(stored.summary).toContain('george@acme.com');
+    const head = Array.isArray(stored) ? stored[0] : stored;
+    expect(head.payload.departmentId).toBe('dept-it');
+    expect(head.payload.departmentRole).toBe('MANAGER');
+    expect(head.summary).toContain('george@acme.com');
   });
 
   it('rejects user-creation with an unknown department naming valid options', async () => {
@@ -223,9 +227,10 @@ describe('AI operations assistant safety', () => {
       payload: { departmentId: 'dept-it', requestTypeId: 'type-laptop', title: 'Typed title here', description: 'A long enough description body.', priority: 'STANDARD' },
     });
     const stored = JSON.parse(prisma.chatSession.update.mock.calls[0][0].data.pendingConfirmation);
-    const session = { id: 'session-1', userId: 'alice', pendingConfirmation: JSON.stringify(stored) };
+    const head = Array.isArray(stored) ? stored[0] : stored;
+    const session = { id: 'session-1', userId: 'alice', pendingConfirmation: JSON.stringify(head) };
     prisma.chatSession.findFirst.mockResolvedValue(session);
-    const result = await service.chat({ id: 'alice', platformRole: 'EMPLOYEE' }, { sessionId: 'session-1', confirmationId: stored.id, confirmationAction: 'confirm' });
+    const result = await service.chat({ id: 'alice', platformRole: 'EMPLOYEE' }, { sessionId: 'session-1', confirmationId: head.id, confirmationAction: 'confirm' });
     expect(result.message).toMatch(/did not go through.*corrected detail/i);
     expect(requests.create).toHaveBeenCalled();
   });
@@ -263,8 +268,9 @@ describe('AI operations assistant safety', () => {
     const result = await (service as any).proposeComplete({ id: 'alice', platformRole: 'EMPLOYEE' }, 'session-1', { requestId: 't1' });
     expect(result.requiresConfirmation).toBe(true);
     const stored = JSON.parse(prisma.chatSession.update.mock.calls[0][0].data.pendingConfirmation);
-    expect(stored.kind).toBe('complete');
-    expect(stored.payload.resolutionNote).toContain('Verified fix');
+    const head = Array.isArray(stored) ? stored[0] : stored;
+    expect(head.kind).toBe('complete');
+    expect(head.payload.resolutionNote).toContain('Verified fix');
   });
 
   it('refuses completion proposals for tickets the caller did not claim', async () => {
@@ -398,5 +404,39 @@ describe('AI operations assistant safety', () => {
     const result = await (service as any).notificationsSummary('alice');
     expect(result.unread).toBe(2);
     expect(result.latest[0].reference).toMatch(/^REQ-/);
+  });
+
+  it('queues two proposals and advances to the next on confirm', async () => {
+    const { service, prisma } = harness();
+    const first = await (service as any).storeProposal('session-1', { kind: 'claim', summary: 'Claim REQ-one', payload: { requestId: 'one' } });
+    const second = await (service as any).storeProposal('session-1', { kind: 'claim', summary: 'Claim REQ-two', payload: { requestId: 'two' } });
+    const queue = JSON.parse(prisma.chatSession.update.mock.calls[1][0].data.pendingConfirmation);
+    expect(queue).toHaveLength(2);
+    // Confirming the head executes it and presents the next automatically.
+    const session = { id: 'session-1', userId: 'alice', pendingConfirmation: JSON.stringify(queue) };
+    prisma.chatSession.findFirst.mockResolvedValue(session);
+    const result = await service.chat(
+      { id: 'alice', platformRole: 'EMPLOYEE' },
+      { sessionId: 'session-1', confirmationId: first.confirmation.id, confirmationAction: 'confirm' },
+    );
+    expect(result.message).toMatch(/next up/i);
+    expect((result as any).confirmation.id).toBe(second.confirmation.id);
+  });
+
+  it('still confirms legacy single-object rows seeded before the queue', async () => {
+    const { service, prisma, requests } = harness();
+    requests.create.mockResolvedValue({ id: 'c'.repeat(25) });
+    const legacy = {
+      id: 'legacy-action', kind: 'create-request', summary: 'Create this service request',
+      payload: { departmentId: 'dept-it', requestTypeId: 'type-laptop', title: 'Legacy row ticket', description: 'Seeded before queues existed.', priority: 'STANDARD' },
+    };
+    const session = { id: 'session-1', userId: 'alice', pendingConfirmation: JSON.stringify(legacy) };
+    prisma.chatSession.findFirst.mockResolvedValue(session);
+    const result = await service.chat(
+      { id: 'alice', platformRole: 'EMPLOYEE' },
+      { sessionId: 'session-1', confirmationId: 'legacy-action', confirmationAction: 'confirm' },
+    );
+    expect(result.message).toMatch(/confirmed/i);
+    expect((result as any).confirmation).toBeUndefined();
   });
 });

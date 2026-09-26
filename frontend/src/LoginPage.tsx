@@ -109,7 +109,7 @@ export default function LoginPage({ onLogin, themeMode, isDark, onToggleTheme, n
             </button>
           )}
         </div>
-        <p className="card-sub">Operations cockpit — submit, track, and resolve requests in one calm place.</p>
+        <p className="card-sub">Sign in with your company email</p>
         {notice && (
           <div className="note-info" role="status" style={{ marginBottom: '0.75rem' }}>
             {notice}

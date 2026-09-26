@@ -1,5 +1,5 @@
 /**
- * Week 4 AI evals (v0.4 PROVE): 6 representative cases, one command.
+ * Week 4 AI evals (v0.4 PROVE): representative cases, one command.
  * Runs fully offline against the local provider + a fake catalog mirroring
  * prisma/seed.ts — no API key, no database, fully deterministic.
  *
@@ -13,7 +13,10 @@ import { CatalogDepartment } from '../src/ai/ai.provider';
 const CATALOG: CatalogDepartment[] = [
   {
     code: 'HR', name: 'Human Resources', description: 'Employment letters, benefits, onboarding',
-    types: [{ code: 'EMP_LETTER', name: 'Employment Letter', description: 'Request employment verification letter' }],
+    types: [
+      { code: 'EMP_LETTER', name: 'Employment Letter', description: 'Request employment verification letter' },
+      { code: 'ONBOARDING', name: 'Onboarding Request', description: 'Onboarding checklist for a new joiner' },
+    ],
   },
   {
     code: 'IT', name: 'IT & Technical Support', description: 'Laptop problems, software, account access',
@@ -28,12 +31,21 @@ const CATALOG: CatalogDepartment[] = [
       { code: 'WELLBEING', name: 'Employee Wellbeing', description: 'Wellbeing support, grievances and resources' },
     ],
   },
+  {
+    code: 'FAC', name: 'Facilities & Workplace', description: 'Maintenance and workspace',
+    types: [
+      { code: 'DESK', name: 'Desk & Meeting Room', description: 'Desk issues and workspace moves' },
+    ],
+  },
 ];
 
 const ROWS = [
   {
     id: 'dept-hr', code: 'HR', name: 'Human Resources', description: 'Employment letters',
-    requestTypes: [{ id: 'type-letter', code: 'EMP_LETTER', name: 'Employment Letter', description: 'letter', active: true }],
+    requestTypes: [
+      { id: 'type-letter', code: 'EMP_LETTER', name: 'Employment Letter', description: 'letter', active: true },
+      { id: 'type-onboarding', code: 'ONBOARDING', name: 'Onboarding Request', description: 'onboarding', active: true },
+    ],
   },
   {
     id: 'dept-it', code: 'IT', name: 'IT & Technical Support', description: 'Laptop problems',
@@ -45,6 +57,10 @@ const ROWS = [
   {
     id: 'dept-peo', code: 'PEO', name: 'People Operations', description: 'Wellbeing and training',
     requestTypes: [{ id: 'type-wellbeing', code: 'WELLBEING', name: 'Employee Wellbeing', description: 'Wellbeing support, grievances and resources', active: true }],
+  },
+  {
+    id: 'dept-fac', code: 'FAC', name: 'Facilities & Workplace', description: 'Maintenance and workspace',
+    requestTypes: [{ id: 'type-desk', code: 'DESK', name: 'Desk & Meeting Room', description: 'workspace moves', active: true }],
   },
 ];
 
@@ -166,8 +182,7 @@ const cases: Case[] = [
     },
   },
   {
-    name: 'chat routing: unknown department stays honest via resolve errors',
-    run: async () => {
+    name: 'chat routing: unknown department stays honest via resolve errors',    run: async () => {
       const svc = new AiIntakeService(stubPrisma, new LocalAiProvider(), undefined as any);
       let routed: string | null = null;
       let msg: string;
@@ -183,6 +198,18 @@ const cases: Case[] = [
       // clarification, and failure must say so in plain words.
       if (routed) assert(/clarification/i.test(msg), `forced ticket without clarification: ${routed}`);
       else assert(/workplace requests|clarif|FOOD|food/i.test(msg), `unexpected message: ${msg}`);
+    },
+  },
+  {
+    name: 'multi-department onboarding ask routes high with a two-task workflow',
+    run: async () => {
+      const r = await new LocalAiProvider().extractDraft(
+        'onboarding a new joiner, needs laptop access and a desk badge', CATALOG);
+      assert(r.draft.departmentCode === 'HR' && r.draft.requestTypeCode === 'ONBOARDING', JSON.stringify(r.draft));
+      assert(r.confidence === 'high', JSON.stringify(r));
+      assert(r.macro !== null && r.macro.childTasks.length === 2, JSON.stringify(r.macro));
+      const codes = r.macro.childTasks.map((t) => `${t.departmentCode}/${t.requestTypeCode}`).sort().join(',');
+      assert(codes.includes('FAC/DESK') && /IT\//.test(codes), codes);
     },
   },
 ];

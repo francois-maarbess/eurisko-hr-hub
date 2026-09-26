@@ -87,6 +87,7 @@ export class LocalAiProvider implements AiProvider {
 
     let best: { deptCode: string; typeCode: string; score: number; matched: string[] } | null = null;
     let runnerUpScore = 0;
+    const deptHits = new Set<string>();
 
     for (const dept of catalog) {
       for (const type of dept.types) {
@@ -114,6 +115,7 @@ export class LocalAiProvider implements AiProvider {
         } else if (score > runnerUpScore) {
           runnerUpScore = score;
         }
+        if (score > 0) deptHits.add(dept.code);
       }
     }
 
@@ -156,14 +158,32 @@ export class LocalAiProvider implements AiProvider {
       throw new Error('Empty catalog: no departments with active request types.');
     }
 
-    const picked = best.score > 0
+    const pickedBase = best.score > 0
       ? best
       : { deptCode: fallbackDept.code, typeCode: fallbackType.code, score: 0, matched: [] as string[] };
 
     // Two independent catalog signals with a clear lead are enough to
     // confidently route; a single thin match still asks the employee to clarify.
-    const high = picked.score >= 2 && picked.score - runnerUpScore >= 1;
-    const onboardingIntent = /\bonboard(?:ing)?\b/.test(lowered);
+    // Explicit onboarding words ("onboarding", "joiner", "new hire") name the
+    // category outright: force HR/ONBOARDING when the catalog owns it, so a
+    // multi-department ask ("laptop access and a desk badge") routes high
+    // with a workflow instead of a clarification question. Signals spread
+    // across departments likewise mean a real multi-part ask, not ambiguity.
+    const onboardingIntent = /\bonboard(?:ing|ed)?\b|\bjoiner\b|\bnew hire\b|\bnewcomer\b|\binduction\b/.test(lowered);
+    const onboardingType = onboardingIntent
+      ? catalog.flatMap((d) => d.types.map((t) => ({ dept: d, type: t })))
+          .find(({ type }) => type.code.toUpperCase() === 'ONBOARDING')
+      : undefined;
+    const picked = onboardingType && pickedBase.typeCode.toUpperCase() !== 'ONBOARDING'
+      ? {
+          deptCode: onboardingType.dept.code,
+          typeCode: onboardingType.type.code,
+          score: Math.max(pickedBase.score, 2),
+          matched: [...new Set([...pickedBase.matched, 'onboarding'])],
+        }
+      : pickedBase;
+    const multiDeptAsk = picked.score >= 1 && deptHits.size >= 2;
+    const high = (picked.score >= 2 && picked.score - runnerUpScore >= 1) || multiDeptAsk || !!onboardingType;
     const pickedTypeName =
       catalog.flatMap((d) => d.types).find((t) => t.code === picked.typeCode)?.name || picked.typeCode;
     const firstClause = text.split(/[.?!;\n]/)[0].trim().slice(0, 90) || text.trim().slice(0, 90);

@@ -91,7 +91,10 @@ blockage, time sensitivity, and sensitivity. The target is an internal planning
 estimate, not a contractual or emergency-response guarantee. The bounded call
 has a 2.5-second timeout and runs before the request transaction. On any
 failure, URGENT/STANDARD/LOW use 4/24/48-hour deterministic targets and source
-`RULE`; accepted estimates are stored with source `AI`.
+`RULE`. To be explicit: 4/24/48 is only the *fallback* for missing keys,
+timeouts, and invalid model output — any accepted Groq estimate can be any
+duration in the 15-minute to 30-day range (47 minutes, 3 days, and so on) and
+is stored with source `AI`.
 
 ## Reviewed multi-department workflows
 
@@ -110,6 +113,19 @@ Prisma transaction. The parent cannot complete while any child is not
 than falsely marked complete. Owners and system administrators can inspect
 the complete workflow. Department staff see only child details for requests
 their department is authorized to access.
+
+Worked example: Alice files *"New joiner setup"* — the parent lands in her
+chosen department (HR/ONBOARDING) with reviewed children IT/LAPTOP (laptop
+account) and FAC/BADGE (door badge). Each child is an ordinary ticket owned
+by Alice, claimed and completed by its own department. The parent cannot
+COMPLETE while any child is open; rejecting a child forces rejecting the
+parent rather than faking "done".
+
+Try it now: as Alice, New Request → type `onboarding a new joiner, needs
+laptop access and a desk badge` → **Draft with AI** (expect a high-confidence
+draft plus a two-task workflow) → walk the four steps — the Review step lists
+every task about to be filed — → Submit. Then, as the owning agent, try
+completing the parent before its children: the API refuses.
 
 ## Resolution playbook
 

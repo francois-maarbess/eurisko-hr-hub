@@ -3,6 +3,27 @@
 All instructor-visible changes. SQLite-only, zero new prerequisites — every entry
 preserves the SQLite setup and locked npm dependencies.
 
+## Unreleased (assistant reliability, draft UX, chat persistence, docs sync)
+
+- Assistant proposals queue per session: multi-step jobs ("create two
+  requests") advance one confirmation at a time, auto-presenting the next —
+  saying two no longer files one. Legacy single-object rows still confirm.
+- Draft-with-AI never clobbers: a low-confidence second result keeps the good
+  draft and says so; the offline scorer routes explicit onboarding words and
+  multi-department signals high with a workflow (pinned by an eval using the
+  exact onboarding sentence). Review step lists every cross-department task
+  about to be filed, with a task-counted submit button.
+- Assistant window persists across views and reloads (always-mounted shell +
+  stored session id, cleared on logout); confirming a step picks up the next
+  pending confirmation instead of dropping it.
+- Trace popover shows friendly provider names (Offline/AI assistant);
+  login card is back to "Sign in with your company email".
+- Docs re-synced to the code: 139 backend / 10 frontend / 14 evals with a
+  recomputed per-file breakdown, week-4 fallback emphasis plus a worked
+  parent/child example with test steps, and an Academy scope map in
+  architecture.md so production-target wording (SSO, Firebase, mobile)
+  reads as the defense asset it is.
+
 ## Unreleased (smart assistant, password session revoke, dark mode, docs)
 
 - Assistant brain upgrade: tools are always on (a keyword gate once locked the

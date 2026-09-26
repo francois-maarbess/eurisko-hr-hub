@@ -134,10 +134,14 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
         return;
       }
       if (data.needsClarification === true) {
-        setMacroTasks([]);
-        setMacroSummary('');
         const questions = Array.isArray(data.clarificationQuestions) ? data.clarificationQuestions : [];
-        setAiNote(questions.length ? `Please clarify: ${questions.join(' ')}` : 'AI needs more detail. Select the request category and describe the outcome you need.');
+        const hadGoodDraft = title.trim().length >= 3 || macroTasks.length > 0;
+        // Never let a worse second result clobber a good draft: keep every
+        // field and task, and say so plainly.
+        setAiNote(
+          (questions.length ? `Please clarify: ${questions.join(' ')}` : 'AI needs more detail. Select the request category and describe the outcome you need.') +
+          (hadGoodDraft ? ' Your previous draft below is untouched.' : ''),
+        );
         setAiTrace({
           provider: data.provider || 'local', promptVersion: data.promptVersion || '',
           confidence: data.confidence || 'low',
@@ -396,9 +400,11 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
         )}
         {aiTrace && (
           <details className="muted mt-sm" style={{ fontSize: '0.8rem' }}>
-            <summary style={{ cursor: 'pointer', fontWeight: 700 }}>
-              Why this classification? ({aiTrace.provider}
-              {aiTrace.promptVersion ? ` · ${aiTrace.promptVersion}` : ''})
+            <summary
+              style={{ cursor: 'pointer', fontWeight: 700 }}
+              title={aiTrace.promptVersion ? `Draft rules ${aiTrace.promptVersion}` : undefined}
+            >
+              Why this classification? ({aiTrace.provider === 'local' ? 'Offline assistant' : 'AI assistant'})
             </summary>
             <div style={{ marginTop: '0.35rem' }}>
               {aiTrace.matched.length > 0 && (
@@ -578,9 +584,26 @@ export default function CreateRequestForm({ token, onCreated, catalogVersion }: 
 
         {error && <ErrorBox message={error} />}
 
+        {macroTasks.length > 0 && (
+          <section className="macro-proposal" aria-label="Workflow tasks included in this submission">
+            <strong>
+              {macroTasks.length} cross-department task{macroTasks.length > 1 ? 's' : ''} will be filed with this request
+            </strong>
+            {macroSummary && <p className="muted mt-sm">{macroSummary}</p>}
+            <ul className="plain-list">
+              {macroTasks.map((task) => {
+                const deptName = departments.find((d) => d.id === task.departmentId)?.name || 'Department';
+                const typeName = requestTypes.find((t) => t.id === task.requestTypeId)?.name || 'request';
+                return <li key={task.key}>{task.title} <span className="muted">({deptName} · {typeName})</span></li>;
+              })}
+            </ul>
+            <p className="muted mt-sm" style={{ fontSize: '0.78rem' }}>Edit or remove tasks back in step 1.</p>
+          </section>
+        )}
+
         <div className="submit-wrap">
           <Button type="submit" variant="success" block disabled={loading}>
-            {loading ? 'Creating…' : 'Create request'}
+            {loading ? 'Creating…' : macroTasks.length > 0 ? `Create request + ${macroTasks.length} tasks` : 'Create request'}
           </Button>
         </div>
       </Section>

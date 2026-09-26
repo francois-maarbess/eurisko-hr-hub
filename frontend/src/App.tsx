@@ -76,7 +76,16 @@ interface ChatMessage {
 function ChatbotShell({ token }: { token: string }) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  // Session survives SPA navigation (the shell never unmounts while signed
+  // in) and page reloads (id in session storage; the server rehydrates
+  // context, proposals, and confirmations from the database row).
+  const [sessionId, setSessionId] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem('hub-chat-session');
+    } catch {
+      return null;
+    }
+  });
   const [sending, setSending] = useState(false);
   const [confirmation, setConfirmation] = useState<{ id: string; kind: string; summary: string } | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
@@ -97,7 +106,14 @@ function ChatbotShell({ token }: { token: string }) {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.message || 'Assistant is unavailable.');
-      if (typeof data.sessionId === 'string') setSessionId(data.sessionId);
+      if (typeof data.sessionId === 'string') {
+        setSessionId(data.sessionId);
+        try {
+          sessionStorage.setItem('hub-chat-session', data.sessionId);
+        } catch {
+          // Private mode: the session simply won't survive reloads.
+        }
+      }
       // No auto-retry: transient provider failures already get one
       // server-side backoff, and every assistant turn is explicit — the
       // user resends deliberately instead of the UI doubling traffic.
@@ -122,7 +138,9 @@ function ChatbotShell({ token }: { token: string }) {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.message || 'Confirmation failed.');
       setMessages((current) => [...current, { role: 'assistant', text: data.message || 'No change was made.' }]);
-      setConfirmation(null);
+      // Multi-step jobs: the server attaches the next pending confirmation
+      // here so confirming one step presents the next without re-asking.
+      setConfirmation(data.confirmation || null);
     } catch (error) {
       setMessages((current) => [...current, { role: 'assistant', text: error instanceof Error ? error.message : 'Confirmation failed.' }]);
     } finally {
@@ -246,6 +264,7 @@ export default function App() {
     setRefreshToken(null);
     try {
       sessionStorage.removeItem('hub-refresh-token');
+      sessionStorage.removeItem('hub-chat-session');
     } catch {
       // Nothing stored — nothing to clear.
     }
@@ -733,7 +752,9 @@ export default function App() {
           </ErrorBoundary>
         )}
       </AppShell>
-      {activeView === 'overview' && !focusTicketId && <ChatbotShell token={token} />}
+      {/* Always mounted while signed in: navigating between views must not
+          wipe the conversation. Unmounts on logout with the rest of the shell. */}
+      <ChatbotShell token={token} />
     </>
   );
 }

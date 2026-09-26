@@ -1,5 +1,24 @@
 # Architecture: Internal Operations Service Hub
 
+## 0. Academy scope map (read this first)
+
+This document describes the production-target architecture. The Academy
+build implements every behavior with localhost means — the table below is
+the defense cheat-sheet:
+
+| Production component | Academy implementation | Pointer |
+|---|---|---|
+| Company SSO | Email + password (`bcryptjs`) + TOTP two-factor | ADR-002 |
+| Firebase push | In-app inbox + optional `NOTIFY_WEBHOOK_URL` outbox POST | `notifications.service.ts`, `.env.example` |
+| Mobile client | Responsive web client (mobile bar, stacking toolbars) | `frontend/src` |
+| Managed secret store | Gitignored `.env` (never committed) | `.env.example` |
+| Metrics/traces APM | One-line HTTP logs + `x-request-id` + `/health` + CI | README Operations |
+| Object storage | DB bytea backend behind the S3 swap seam | ADR-003 |
+
+Nothing below contradicts the build: "SSO validation" means credential
+validation (Academy: passwords per ADR-002), and every unavailable-dependency
+rule fires identically for the Academy substitute.
+
 ## 1. Scope and principles
 
 The system routes employee requests to accountable departments and protects employee data and documents. The backend is the trust boundary. The client is untrusted and cannot directly access the database, object storage, or notification credentials.
@@ -15,7 +34,7 @@ Principles:
 ## 2. Components
 
 * **Web/mobile client:** Catalog, request forms, employee history, department queue, and resolution views.
-* **API service:** SSO validation, RBAC, request routing, validation, lifecycle transitions, document brokering, rate limiting, and audit writes.
+* **API service:** credential validation (SSO in production, passwords per ADR-002 in Academy), RBAC, request routing, validation, lifecycle transitions, document brokering, rate limiting, and audit writes.
 * **Relational database:** Users, departments, memberships, catalog, requests, documents, and append-only audit logs.
 * **Private object storage:** Document payloads with encryption, lifecycle rules, checksums, and no public access.
 * **Notification worker:** Sends Firebase notifications from durable events without blocking request transactions.
@@ -26,8 +45,8 @@ Principles:
 
 ```mermaid
 flowchart TD
-    Employee["Employee client"] -->|"HTTPS + SSO token"| API["API service"]
-    Agent["Department staff client"] -->|"HTTPS + SSO token"| API
+    Employee["Employee client"] -->|"HTTPS + credential"| API["API service"]
+    Agent["Department staff client"] -->|"HTTPS + credential"| API
     API -->|"catalog, RBAC, state, audit"| DB[("Relational database")]
     API -->|"private upload/download"| Store[("Private object storage")]
     API -->|"durable notification event"| Events[("Outbox / event table")]
@@ -57,7 +76,7 @@ flowchart TD
 
 ## 5. Resilience and failure handling
 
-* **SSO unavailable:** return `503`; never fail open.
+* **Identity unavailable (SSO in production, credential store in Academy):** return `503`; never fail open.
 * **Database unavailable:** return `503`; do not report a successful mutation.
 * **Storage upload interrupted:** remove partial object, keep request incomplete, and return a clear error.
 * **Storage/database mismatch:** mark the document for reconciliation, alert operations, and never expose a guessed or stale download.
