@@ -109,8 +109,7 @@ cd frontend && npm run dev
 3. Create a request (or draft one with AI — **no API key needed**), manage it as admin/agent, resolve it
 4. Optional: enable **two-factor authentication** — open Security settings, scan the QR with any authenticator app, verify the code. Next sign-in asks for password + code (backup codes cover a lost phone).
 
-The Overview page includes an Operations Assistant. It provides an honest local
-preview without a Groq key; with `GROQ_API_KEY`, it operates everything the
+The Overview page includes an Operations Assistant. The full natural-language Operations Assistant requires `GROQ_API_KEY`; without it, provider failures degrade to a safe “no change made” response. With `GROQ_API_KEY`, it operates everything the
 caller is authorized to touch: queue views and claim history, ticket details
 with workflow children, staff notes, analytics, creation/claim/complete/cancel/
 reject/reroute/takeover/reassign proposals, ratings, membership and user
