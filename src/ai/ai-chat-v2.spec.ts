@@ -152,6 +152,25 @@ describe('assistant V2 — composite workflows, confirmations, reliability', () 
     expect(requests.updateStatus).toHaveBeenCalledWith('t1', expect.objectContaining({ status: 'COMPLETED' }), 'bob');
   });
 
+  it('uses the shared AI resolution draft for pending tickets and strips verification boilerplate', async () => {
+    const { service, prisma, ai, requests } = harness();
+    requests.findOne.mockResolvedValue({
+      id: 't1', status: 'PENDING', title: 'Laptop cannot connect',
+      description: 'The laptop cannot connect to the office Wi-Fi.',
+      department: { name: 'IT' }, requestType: { name: 'Laptop Request' }, claimant: null,
+    });
+    ai.generateResolutionPlaybook = jest.fn(async () => ({
+      resolutionNote: '1. Reproduce the Wi-Fi connection failure.\n2. Reconnect the approved network and verify access.\n\nPlease confirm:\n- [Confirm] The result was independently verified.',
+      assumptions: ['Confirm the result was independently verified.'],
+    }));
+
+    await (service as any).proposeClaimAndResolve({ id: 'bob', platformRole: 'EMPLOYEE' }, 'session-1', { requestId: 't1' });
+    const stored = JSON.parse(prisma.chatSession.update.mock.calls[0][0].data.pendingConfirmation)[0];
+    expect(ai.generateResolutionPlaybook).toHaveBeenCalledWith(expect.objectContaining({ title: 'Laptop cannot connect', department: 'IT' }));
+    expect(stored.payload.resolutionNote).toContain('Reconnect the approved network');
+    expect(stored.payload.resolutionNote).not.toMatch(/please confirm|\[confirm\]/i);
+  });
+
   it('typing "yes" confirms the single pending action without calling the model', async () => {
     const { service, prisma, requests } = harness();
     process.env['GROQ_API_KEY'] = 'test-key';
@@ -345,7 +364,7 @@ describe('assistant V2 — composite workflows, confirmations, reliability', () 
     expect(res.message).toMatch(/confirmed/i);
   });
 
-  it('exposes only the domain tool subset per turn (never the full registry in V2)', async () => {
+  it('exposes the full authorized registry per turn (role-filtered, never domain-narrowed)', async () => {
     const { service, prisma } = harness();
     process.env['GROQ_API_KEY'] = 'test-key';
     prisma.department.findMany.mockResolvedValue(CATALOG);
@@ -359,8 +378,32 @@ describe('assistant V2 — composite workflows, confirmations, reliability', () 
     try {
       await (service as any).runGroq({ id: 'admin', platformRole: 'SYSTEM_ADMIN' }, 'session-1', true);
       expect(sentTools).toContain('propose_make_plain_employee');
-      expect(sentTools.length).toBeLessThanOrEqual(10);
-      expect(sentTools.length).toBeGreaterThanOrEqual(3);
+      expect(sentTools).toContain('breach_view');
+      expect(sentTools).toContain('propose_bulk_resolve');
+      // Full registry: every tool the admin role may use, not a 3-10 subset.
+      expect(sentTools.length).toBeGreaterThan(10);
+    } finally {
+      (global as any).fetch = realFetch;
+    }
+  });
+
+  it('hides admin-only tools from non-admins across the full registry', async () => {
+    const { service, prisma } = harness();
+    process.env['GROQ_API_KEY'] = 'test-key';
+    prisma.department.findMany.mockResolvedValue(CATALOG);
+    prisma.chatMessage.findMany.mockResolvedValue([{ role: 'user', content: 'Show my stats', createdAt: new Date() }]);
+    let sentTools: string[] = [];
+    const realFetch = global.fetch;
+    (global as any).fetch = jest.fn(async (_url: string, init: any) => {
+      sentTools = JSON.parse(init.body).tools.map((t: any) => t.function.name);
+      return { ok: true, headers: new Headers(), json: async () => ({ choices: [{ message: { content: JSON.stringify({ answer: 'Here are your stats.' }) } }] }) };
+    });
+    try {
+      await (service as any).runGroq({ id: 'alice', platformRole: 'EMPLOYEE' }, 'session-1', true);
+      expect(sentTools).not.toContain('propose_create_user');
+      expect(sentTools).not.toContain('audit_search');
+      expect(sentTools).toContain('my_stats');
+      expect(sentTools).toContain('breach_view');
     } finally {
       (global as any).fetch = realFetch;
     }

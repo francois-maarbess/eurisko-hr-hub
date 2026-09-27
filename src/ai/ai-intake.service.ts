@@ -295,12 +295,7 @@ export class AiIntakeService {
       resolutionNote: [
         `Review the reported ${input.requestType.toLowerCase()} issue: ${input.title.trim()}.`,
         'Reproduce the issue using only the information provided.',
-        'Record the verified action taken, the observed result, and any remaining follow-up before completing the request.',
-        '',
-        'Please confirm:',
-        `- The reported details match: ${input.description.trim().slice(0, 360)}.`,
-        `- The ${input.department} team owns this ${input.requestType.toLowerCase()} request.`,
-        '- The issue and outcome were independently verified before completion.',
+        `Record the action taken, observed result, and any remaining follow-up for: ${input.description.trim().slice(0, 360)}.`,
       ].join('\n'),
       assumptions: [
         `[Confirm] The ${input.department} team owns this ${input.requestType.toLowerCase()} request.`,

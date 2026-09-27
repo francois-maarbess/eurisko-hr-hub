@@ -282,7 +282,7 @@ describe('AI operations assistant safety', () => {
     await expect((service as any).proposeComplete({ id: 'alice', platformRole: 'EMPLOYEE' }, 'session-1', { requestId: 't1' })).rejects.toThrow(/currently assigned/);
   });
 
-  it('surfaces partial progress instead of failing when the tool loop caps out', async () => {
+  it('stops immediately at the first mutation proposal instead of re-entering the model loop', async () => {
     const { service, prisma, requests } = harness();
     prisma.department.findMany.mockResolvedValue([]);
     requests.findOne.mockResolvedValue({ id: 't1', status: 'PENDING', title: 'T', department: { name: 'IT' }, requestType: { name: 'L' }, claimant: null });
@@ -293,7 +293,7 @@ describe('AI operations assistant safety', () => {
       .mockImplementation(async () => ({ ok: true, json: async () => ({ choices: [{ message: { role: 'assistant', tool_calls: [mkCall('my_stats', {}, 'c2')] } }] }) }));
     try {
       const result = await (service as any).runGroq({ id: 'alice', platformRole: 'EMPLOYEE' }, 'session-1', true);
-      expect(result.message).toMatch(/first step/i);
+      expect(result.message).toMatch(/prepared/i);
       expect(result.confirmation).toBeTruthy();
     } finally {
       (global as any).fetch = realFetch;
@@ -544,5 +544,168 @@ describe('AI operations assistant safety', () => {
     await expect((service as any).proposeUserStatus({ id: 'admin', platformRole: 'SYSTEM_ADMIN' }, 'session-1', { email: 'admin@acme.com', action: 'deactivate' })).rejects.toThrow(/own account/);
     prisma.user.findUnique.mockResolvedValueOnce(null);
     await expect((service as any).proposeUserStatus({ id: 'admin', platformRole: 'SYSTEM_ADMIN' }, 'session-1', { email: 'ghost@acme.com', action: 'deactivate' })).rejects.toThrow(/not found/i);
+  });
+});
+
+describe('AI deterministic fast-paths (no LLM, no hallucination)', () => {
+  const overdueRow = (id: string, hours: number) => ({
+    id,
+    title: `Overdue ${id}`,
+    status: 'PENDING',
+    priority: 'URGENT',
+    departmentId: 'dept-it',
+    department: { id: 'dept-it', name: 'IT' },
+    requestType: { id: 'type-laptop', name: 'Laptop' },
+    claimant: null,
+    owner: { displayName: 'Bob' },
+    createdAt: new Date(Date.now() - hours * 3600_000 - 86400_000),
+    slaDueAt: new Date(Date.now() - hours * 3600_000),
+  });
+
+  it('lists overdue most-overdue-first without calling the provider', async () => {
+    const { service, requests } = harness();
+    delete process.env['GROQ_API_KEY'];
+    const realFetch = global.fetch;
+    (global as any).fetch = jest.fn(async () => { throw new Error('provider must not be called'); });
+    requests.getBreached = jest.fn(async () => [overdueRow('old1', 9), overdueRow('new1', 2)]);
+    try {
+      const res = await service.chat({ id: 'admin', platformRole: 'SYSTEM_ADMIN' }, { message: "What's overdue?" });
+      expect(res.message).toMatch(/overdue/i);
+      expect(res.message).toContain('Overdue old1');
+      expect(res.message).toContain('sent by Bob');
+      expect(res.message).not.toContain('REQ-');
+      expect((global as any).fetch).not.toHaveBeenCalled();
+    } finally {
+      (global as any).fetch = realFetch;
+    }
+  });
+
+  it('answers greetings locally without exposing the provider or mutation tools', async () => {
+    const { service } = harness();
+    delete process.env['GROQ_API_KEY'];
+    const realFetch = global.fetch;
+    (global as any).fetch = jest.fn(async () => { throw new Error('provider must not be called'); });
+    try {
+      const res = await service.chat({ id: 'alice', platformRole: 'EMPLOYEE' }, { message: 'hi' });
+      expect(res.message).toMatch(/hello/i);
+      expect((global as any).fetch).not.toHaveBeenCalled();
+    } finally {
+      (global as any).fetch = realFetch;
+    }
+  });
+
+  it('does not turn a standalone incident statement into a request mutation', async () => {
+    const { service } = harness();
+    delete process.env['GROQ_API_KEY'];
+    const realFetch = global.fetch;
+    (global as any).fetch = jest.fn(async () => { throw new Error('provider must not be called'); });
+    try {
+      const res = await service.chat({ id: 'alice', platformRole: 'EMPLOYEE' }, { message: 'There is a weird sound coming from the window next to me' });
+      expect(res.message).toMatch(/create a request|danger/i);
+      expect((res as any).confirmation).toBeUndefined();
+      expect((global as any).fetch).not.toHaveBeenCalled();
+    } finally {
+      (global as any).fetch = realFetch;
+    }
+  });
+
+  it('supersedes an older proposal before answering a new standalone statement', async () => {
+    const { service, prisma } = harness();
+    delete process.env['GROQ_API_KEY'];
+    await (service as any).storeProposal('session-1', {
+      kind: 'claim',
+      summary: 'Claim an older request',
+      payload: { requestId: 'old-request' },
+    });
+
+    const res = await service.chat({ id: 'alice', platformRole: 'EMPLOYEE' }, {
+      sessionId: 'session-1',
+      message: 'There is a strange noise near the window',
+    });
+
+    expect(res.message).toMatch(/create a request|danger/i);
+    expect(prisma.chatSession.update).toHaveBeenLastCalledWith({
+      where: { id: 'session-1' },
+      data: { pendingConfirmation: null },
+    });
+  });
+
+  it('proposes the single most overdue ticket deterministically', async () => {
+    const { service, prisma, requests } = harness();
+    delete process.env['GROQ_API_KEY'];
+    prisma.request.findMany.mockResolvedValue([overdueRow('old1', 9), overdueRow('new1', 2)]);
+    requests.findOne.mockResolvedValue({ ...overdueRow('old1', 9), employeeId: 'bob' });
+    const res = await service.chat({ id: 'admin', platformRole: 'SYSTEM_ADMIN' }, { message: 'resolve the most overdue request' });
+    expect((res as any).confirmation).toBeTruthy();
+    expect(res.message).toMatch(/most overdue/i);
+  });
+
+  it('queues the top-N most overdue for bulk wording', async () => {
+    const { service, requests } = harness();
+    delete process.env['GROQ_API_KEY'];
+    requests.getBreached = jest.fn(async () => [overdueRow('a', 9), overdueRow('b', 8), overdueRow('c', 7)]);
+    requests.findOne.mockImplementation(async (id: string) => ({ ...overdueRow(id, 5), employeeId: 'bob' }));
+    const res = await service.chat({ id: 'admin', platformRole: 'SYSTEM_ADMIN' }, { message: 'solve the 3 most overdue tickets' });
+    expect((res as any).confirmation).toBeTruthy();
+    expect(res.message).toMatch(/3 most overdue/i);
+  });
+
+  it('confirms a single pending action on follow-through wording', async () => {
+    const { service, prisma, requests } = harness();
+    delete process.env['GROQ_API_KEY'];
+    requests.findOne.mockResolvedValue({ id: 't1', status: 'IN_PROGRESS', claimedById: 'admin' });
+    requests.updateStatus.mockResolvedValue({ id: 't1', status: 'COMPLETED' });
+    await (service as any).storeProposal('session-1', { kind: 'complete', summary: 'Complete REQ-T1', payload: { requestId: 't1', resolutionNote: 'Verified and fixed.' } });
+    const stored = JSON.parse(prisma.chatSession.update.mock.calls[0][0].data.pendingConfirmation);
+    const head = Array.isArray(stored) ? stored[0] : stored;
+    const session = { id: 'session-1', userId: 'admin', pendingConfirmation: JSON.stringify(head) };
+    prisma.chatSession.findFirst.mockResolvedValue(session);
+    const res = await service.chat({ id: 'admin', platformRole: 'SYSTEM_ADMIN' }, { sessionId: 'session-1', message: 'ok resolve it then' });
+    expect(res.message).toMatch(/confirmed/i);
+    expect(requests.updateStatus).toHaveBeenCalled();
+  });
+
+  it('proposes the latest request deterministically (no provider call)', async () => {
+    const { service, prisma, requests } = harness();
+    delete process.env['GROQ_API_KEY'];
+    const realFetch = global.fetch;
+    (global as any).fetch = jest.fn(async () => { throw new Error('provider must not be called'); });
+    const newest = { ...overdueRow('new9', 1), status: 'PENDING' };
+    prisma.request.findMany.mockResolvedValue([newest]);
+    requests.findOne.mockResolvedValue({ ...newest, employeeId: 'bob' });
+    try {
+      const res = await service.chat({ id: 'admin', platformRole: 'SYSTEM_ADMIN' }, { message: 'resolve the latest request' });
+      expect((res as any).confirmation).toBeTruthy();
+      expect(res.message).toMatch(/latest/i);
+      expect((global as any).fetch).not.toHaveBeenCalled();
+    } finally {
+      (global as any).fetch = realFetch;
+    }
+  });
+
+  it('treats a bare latest follow-up as the same latest resolve', async () => {
+    const { service, prisma, requests } = harness();
+    delete process.env['GROQ_API_KEY'];
+    const newest = { ...overdueRow('new9', 1), status: 'PENDING' };
+    prisma.request.findMany.mockResolvedValue([newest]);
+    requests.findOne.mockResolvedValue({ ...newest, employeeId: 'bob' });
+    const res = await service.chat({ id: 'admin', platformRole: 'SYSTEM_ADMIN' }, { message: 'the latest. the last one sent' });
+    expect((res as any).confirmation).toBeTruthy();
+    expect(res.message).toMatch(/latest/i);
+  });
+
+  it('upgrades explicit search with latest wording to latest-created', async () => {
+    const { service, prisma } = harness();
+    prisma.departmentMember.findMany.mockResolvedValue([]);
+    prisma.request.findMany.mockImplementation(async (args: any) => {
+      expect(JSON.stringify(args.where)).toMatch(/PENDING/);
+      return [{ id: 'x'.repeat(25), title: 'T', status: 'PENDING', priority: 'STANDARD', department: { name: 'IT' }, requestType: { name: 'L' }, claimant: null, owner: { displayName: 'B' }, createdAt: new Date(), slaDueAt: new Date() }];
+    });
+    const out = await (service as any).resolveRequestContext(
+      { id: 'admin', platformRole: 'SYSTEM_ADMIN' },
+      { reference: 'resolve the latest request', relation: 'search', limit: 5 },
+    );
+    expect(out.relation).toBe('latest-created');
+    expect(out.selected).toBeTruthy();
   });
 });

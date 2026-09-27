@@ -218,7 +218,7 @@ describe('Service Request Flow (E2E)', () => {
     expect(agentDraft.status).toBe(200);
     expect(agentDraft.body.provider).toBe('local-template');
     expect(agentDraft.body.confidence).toBe('low');
-    expect(agentDraft.body.resolutionNote).toContain('Please confirm:');
+    expect(agentDraft.body.resolutionNote).not.toMatch(/please confirm:/i);
     expect(agentDraft.body.degraded).toBe(true);
   });
 

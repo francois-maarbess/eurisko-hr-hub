@@ -88,12 +88,23 @@ function normalize(text: string): string {
 /** Deterministic confirmation layer: never let the model reinterpret yes/no. */
 export function confirmationDirective(text: string): 'confirm' | 'cancel' | null {
   const clean = normalize(text);
-  if (!clean || clean.length > 40) return null;
+  if (!clean || clean.length > 60) return null;
   if ((CONFIRM_PHRASES as string[]).includes(clean)) return 'confirm';
   if ((CANCEL_PHRASES as string[]).includes(clean)) return 'cancel';
   // "yes, do it" / "no, cancel it" — short prefix forms only.
   if (/^(yes|yeah|yep|yup|ok|okay|sure)[, ]+(do it|confirm|go ahead|proceed|please).*$/i.test(clean)) return 'confirm';
   if (/^(no|nope)[, ]+(don't|do not|cancel|stop).*$/i.test(clean)) return 'cancel';
+  // Follow-through confirms with exactly one pending action: "ok resolve it
+  // then", "yes do it then", "ok, do that". Only when short, carrying an
+  // explicit go-ahead verb (do it/do that/resolve it/confirm/go ahead),
+  // no new entities (no emails, no REQ- refs) and naming no new target so
+  // "yes, change the title to Laptop first" and "ok resolve the most
+  // overdue" are never mistaken for a yes.
+  if (/^(ok|okay|yes|yeah|yep|yup|sure)\b.{0,40}$/i.test(clean)
+    && /(do it|do that|resolve it|confirm|go ahead|proceed)/i.test(clean)
+    && !/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i.test(clean)
+    && !/req[-\s]?[a-z0-9]{6}/i.test(clean)
+    && !/\b(tickets?|requests?|overdue|breach|department|account|users?|members?|latest|most|new|title|change|create|add|remove|show|list|find|draft)\b/i.test(clean)) return 'confirm';
   return null;
 }
 
@@ -157,6 +168,12 @@ export const ALL_TOOL_NAMES = [
   // V2 composite workflows (additive — nothing removed).
   'propose_make_plain_employee',
   'propose_claim_and_resolve',
+  'propose_update_department',
+  'propose_set_department_active',
+  'propose_update_request_type',
+  'propose_set_request_type_active',
+  'breach_view',
+  'propose_bulk_resolve',
 ] as const;
 
 /**
@@ -183,36 +200,43 @@ export const DOMAIN_TOOL_MAP: Record<RouterDomain, string[]> = {
     'propose_reassign',
     'propose_reroute',
     'propose_claim_and_resolve',
+    'propose_bulk_resolve',
     'queue_view',
+    'breach_view',
     'my_work',
-    'ticket_detail',
   ],
   request_resolution: [
     'resolve_request_context',
+    'breach_view',
     'propose_complete',
     'propose_claim_and_resolve',
+    'propose_bulk_resolve',
     'propose_reject',
     'propose_cancel',
     'propose_note',
     'propose_rating',
     'ticket_detail',
-    'my_work',
   ],
   departments_catalog: [
     'propose_department',
     'propose_request_type',
+    'propose_update_department',
+    'propose_set_department_active',
+    'propose_update_request_type',
+    'propose_set_request_type_active',
     'propose_membership',
   ],
   reporting: [
     'department_stats',
     'analytics_report',
+    'breach_view',
     'propose_export',
     'audit_search',
     'my_stats',
   ],
   readonly_lookup: [
     'resolve_request_context',
-    'my_stats',
+    'breach_view',
     'my_tickets',
     'search_tickets',
     'ticket_detail',
@@ -243,6 +267,10 @@ export function toolsForDomain(domain: RouterDomain, platformRole?: string): str
       'propose_make_plain_employee',
       'propose_department',
       'propose_request_type',
+      'propose_update_department',
+      'propose_set_department_active',
+      'propose_update_request_type',
+      'propose_set_request_type_active',
       'propose_export',
       'audit_search',
       'analytics_report',
@@ -267,6 +295,10 @@ export function toolsForGeneralAction(platformRole?: string): string[] {
     'propose_make_plain_employee',
     'propose_department',
     'propose_request_type',
+    'propose_update_department',
+    'propose_set_department_active',
+    'propose_update_request_type',
+    'propose_set_request_type_active',
     'propose_export',
     'audit_search',
     'analytics_report',
@@ -316,9 +348,10 @@ export function routeIntent(rawText: string): RouteResult {
     intent = 'empty';
   } else if (
     wantsUserAdminComposite ||
-    /(make|set|change|demote|promote|deactivate|activate|remove|add|create).*(admin|employee|plain|simple|regular|user|member|membership)/.test(text) ||
+    /(make|set|change|demote|promote|deactivate|activate|remove|add|create).*(admin|employee|plain|simple|regular|user|member|membership|account)/.test(text) ||
     (/(deactivat|activat)/.test(text) && emailPresent) ||
-    (/(admin|employee|membership|deactivat|activat)/.test(text) && /(user|member|role|department|@[a-z])/i.test(rawText) && /(make|set|remove|add|create|deactivat|activat|change)/.test(text)) ||
+    (emailPresent && /(create|add|new).*(account|user|login|access)/.test(text)) ||
+    (/(admin|employee|membership|deactivat|activat|account)/.test(text) && /(user|member|role|department|account|@[a-z])/i.test(rawText) && /(make|set|remove|add|create|deactivat|activat|change)/.test(text)) ||
     (/remove\s+\S+\s+from\s+(every|all)/.test(text) && /(department|membership)/.test(text))
   ) {
     // User/admin — must come before request Claiming/Resolution so
@@ -330,7 +363,7 @@ export function routeIntent(rawText: string): RouteResult {
     else if (/activat/.test(text)) intent = 'activate_user';
     else if (/make.*admin|promote.*admin|admin/.test(text) && /make|set|promote/.test(text)) intent = 'make_admin';
     else if (/make.*employee|demote|regular employee/.test(text)) intent = 'make_employee';
-    else if (/create.*user|new user|add.*user/.test(text)) intent = 'create_user';
+    else if (/create.*(user|account)|new (user|account)|add.*(user|account)/.test(text)) intent = 'create_user';
     else if (/membership|member of|add to|remove from/.test(text)) intent = 'membership_change';
     else intent = 'user_admin';
   } else if (/(create|draft|file|send|submit|report|open).*(request|ticket|workflow|onboarding)/.test(text) ||
@@ -350,7 +383,8 @@ export function routeIntent(rawText: string): RouteResult {
       else if (/reroute/.test(text)) intent = 'reroute';
       else intent = 'claim';
     }
-  } else if (/(resolv|complet|resolution|done|fix|close).*(ticket|request|it\b)/.test(text) ||
+  } else if (/(resolv|complet|resolution|done|fix|close|handle|tackle|work on).*(ticket|request|it\b|overdue|breach)/.test(text) ||
+    /(solve).*(ticket|request|overdue|breach|it\b)/.test(text) ||
     /(cancel|reject|rate|feedback|note)/.test(text) && /(ticket|request|it\b)/.test(text) ||
     /use the ai.*resolution|ai-generated resolution|draft.*resolution/.test(text)) {
     domain = 'request_resolution';
@@ -358,29 +392,37 @@ export function routeIntent(rawText: string): RouteResult {
     else if (/reject/.test(text)) intent = 'reject_request';
     else if (/rate|feedback|\bstars?\b/.test(text)) intent = 'rate_request';
     else if (/note/.test(text) && !/resolution/.test(text)) intent = 'staff_note';
+    else if (/overdue|breach/.test(text)) intent = /(\d+|five|three|two|several|top|first \d+).*overdue|overdue.*(\d+|five|three|two|several|top)|solve.*overdue/i.test(text) ? 'resolve_overdue_bulk' : 'resolve_most_overdue';
     else if (exactResolutionNote) intent = 'resolve_exact_note';
     else if (/ai.*resolv|resolv.*draft|generated resolution/.test(text)) intent = 'resolve_drafted_note';
     else intent = 'resolve_request';
-  } else if (/(department|request type|category|catalog|legal|facilities|add.*type|new department)/.test(text) &&
-    /(create|add|new|update|edit|rename|deactivat|department|request type|category)/.test(text)) {
+  } else if (/(department|request type|category|catalog|legal|facilities|add.*type|new department|rename|deactivat|activat|remove.*department|remove.*type)/.test(text) &&
+    /(create|add|new|update|edit|rename|deactivat|activat|remove|delete|disable|enable|department|request type|category)/.test(text)) {
     domain = 'departments_catalog';
-    if (/request type|category/.test(text)) intent = 'manage_request_type';
-    else intent = 'manage_department';
+    if (/request type|category/.test(text)) intent = /deactiv|activ|remove|disable|enable/.test(text) ? 'toggle_request_type' : /renam|update|edit/.test(text) ? 'rename_request_type' : 'manage_request_type';
+    else intent = /deactiv|activ|remove|disable|enable/.test(text) ? 'toggle_department' : /renam|update|edit/.test(text) ? 'rename_department' : 'manage_department';
   } else if (/(report|stats|statistics|analytics|export|csat|audit|overdue|workload)/.test(text)) {
     domain = 'reporting';
     if (/export|csv/.test(text)) intent = 'export';
     else if (/audit/.test(text)) intent = 'audit_search';
     else if (/analytic|csat|workload/.test(text)) intent = 'analytics';
     else intent = 'stats';
-  } else if (/(show|list|find|search|what|which|my |queue|inbox|notif|ticket|request|pending|today|claimed|history|detail|children|notes?)/.test(text)) {
+  } else if (/(show|list|find|search|what|which|my |queue|inbox|notif|ticket|request|pending|today|claimed|history|detail|children|notes?|overdue|breach)/.test(text)) {
     domain = 'readonly_lookup';
-    if (/queue|unassigned|mywork|my work/.test(text)) intent = 'queue_view';
+    if (/overdue|breach/.test(text) && !/(resolv|complet|solve|fix|close|handle|claim)/.test(text)) intent = 'breach_view';
+    else if (/queue|unassigned|mywork|my work/.test(text)) intent = 'queue_view';
     else if (/notif|inbox/.test(text)) intent = 'notifications';
     else if (/child|workflow|progress/.test(text)) intent = 'ticket_children';
     else if (/staff note|internal note/.test(text)) intent = 'staff_notes';
     else if (/search|find/.test(text)) intent = 'search';
     else if (/stat|today|pending/.test(text)) intent = 'stats_lookup';
     else intent = 'lookup';
+  } else if (/(latest|most recent|newest|last one|just sent)\b/.test(text) && text.trim().length < 80) {
+    // Verbless follow-ups ("the latest", "the last one sent", "that one"):
+    // never dead-end in general help. Resolve-verbs are claimed above, so
+    // this is a latest lookup; the deterministic fast-path answers it.
+    domain = 'readonly_lookup';
+    intent = 'latest_view';
   } else if (hasWord(text, /(hi|hello|hey|thanks|thank|bye|hungry|joke|help|password|2fa|mfa|authenticator|health)/)) {
     domain = 'general_help';
     intent = /password|2fa|mfa|authenticator/.test(text) ? 'security_help' : /health/.test(text) ? 'health' : 'chit_chat_help';
@@ -414,12 +456,16 @@ function fallbackSummaryFor(domain: RouterDomain, intent: string, rawText: strin
     case 'request_claiming':
       return intent === 'claim_and_resolve' ? `claim and resolve the ticket ("${snippet}")` : `claim the ticket ("${snippet}")`;
     case 'request_resolution':
+      if (intent === 'resolve_most_overdue') return `resolve the most overdue ticket ("${snippet}")`;
+      if (intent === 'resolve_overdue_bulk') return `resolve the top overdue tickets ("${snippet}")`;
       return `resolve the ticket ("${snippet}")`;
     case 'departments_catalog':
       return `update the department catalog ("${snippet}")`;
     case 'reporting':
       return `produce the report ("${snippet}")`;
     case 'readonly_lookup':
+      if (intent === 'breach_view') return `look up overdue tickets ("${snippet}")`;
+      if (intent === 'latest_view') return `look up the latest request ("${snippet}")`;
       return `look up ("${snippet}")`;
     default:
       return `help with ("${snippet}")`;
@@ -485,13 +531,13 @@ export function domainGuidance(domain: RouterDomain): string {
     case 'request_claiming':
       return 'Claiming: claim pending tickets; takeover needs a reason and manager/admin rights; reassign needs target email + reason. Claim-then-resolve is one composite confirmation.';
     case 'request_resolution':
-      return 'Resolution: exact user notes are used verbatim; otherwise draft one note the user reviews. Confirm once, resolve exactly once. Never resolve someone else’s claimed work without takeover first.';
+      return 'Resolution: exact user notes are used verbatim; otherwise draft one note the user reviews. Most-overdue/overdue means breach_view or resolve most-overdue (oldest slaDueAt first, overdue hours shown) then claim-and-resolve; "solve 5 overdue" means propose_bulk_resolve count=5 (one confirmation per ticket, confirm one-by-one). Confirm once, resolve exactly once. Never resolve someone else’s claimed work without takeover first.';
     case 'departments_catalog':
-      return 'Catalog: departments and request types by human name (codes resolved server-side). Admin only, confirm once.';
+      return 'Catalog: departments and request types by human name (codes resolved server-side). Create, rename/describe, and activate/deactivate all supported — deactivation hides from filing but keeps history. Admin only, confirm once.';
     case 'reporting':
       return 'Reporting: admin cross-department numbers; staff see own departments; employees see personal wording. Exports summarize + confirm.';
     case 'readonly_lookup':
-      return 'Lookup: read-only, caller-scoped. Pronouns ("it", "that ticket", "her") mean the department/request already discussed — resolve from history, never ask for IDs.';
+      return 'Lookup: read-only, caller-scoped. Overdue/breach questions use breach_view most-overdue-first (never guess). Pronouns ("it", "that ticket", "her") mean the department/request already discussed — resolve from history, never ask for IDs.';
     default:
       return 'Help: warm, direct, plain words. Small talk stays small talk (no tools). Sensitive topics get empathy + one confidential URGENT filing proposal, never auto-file.';
   }

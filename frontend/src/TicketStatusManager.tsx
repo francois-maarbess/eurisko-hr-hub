@@ -807,7 +807,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
       }));
       return;
     }
-    await mutate(
+    const succeeded = await mutate(
       ticket,
       () =>
         fetch(apiUrl(`/requests/${ticket.id}/reroute`), {
@@ -821,7 +821,15 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
         }),
       'Ticket re-routed and reopened as PENDING.',
     );
-    setRerouteFor(null);
+    // Keep the dialog open after a rejected request so the user can see the
+    // server reason and correct the destination/reason instead of seeing a
+    // button that appears to do nothing.
+    if (succeeded) {
+      setRerouteFor(null);
+      setRerouteDept('');
+      setRerouteType('');
+      setRerouteReason('');
+    }
   };
 
   // Staff Notes handlers
@@ -1765,7 +1773,7 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                           </button>
                         )}
                         {canReroute && (
-                          <button role="menuitem" onClick={() => { setMoreOpen((c) => ({ ...c, [ticket.id]: false })); openReroute(ticket); }}>
+                          <button type="button" role="menuitem" onClick={() => { setMoreOpen((c) => ({ ...c, [ticket.id]: false })); openReroute(ticket); }}>
                             Re-route…
                           </button>
                         )}
@@ -1799,6 +1807,9 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                       Retry
                     </button>
                   </div>
+                )}
+                {!catalogLoading && !catalogError && departments.filter((d) => d.id !== ticket.departmentId).length === 0 && (
+                  <div className="alert-error" role="alert">No other active department is available for this request.</div>
                 )}
                 <div className="row" style={{ gap: '0.5rem' }}>
                   <select
@@ -1840,10 +1851,10 @@ export default function TicketStatusManager({ token, userId, platformRole, focus
                   placeholder="Reason for re-routing (required for audit log)"
                 />
                 <div className="row" style={{ gap: '0.5rem' }}>
-                  <Button variant="primary" small onClick={() => submitReroute(ticket)} disabled={loading || !rerouteDept || !rerouteType || !rerouteReason.trim()}>
+                  <Button type="button" variant="primary" small onClick={() => void submitReroute(ticket)} disabled={loading || !rerouteDept || !rerouteType || !rerouteReason.trim()}>
                     {loading ? '...' : 'Confirm Move'}
                   </Button>
-                  <Button variant="ghost" small onClick={() => setRerouteFor(null)}>
+                  <Button type="button" variant="ghost" small onClick={() => setRerouteFor(null)}>
                     Cancel
                   </Button>
                 </div>

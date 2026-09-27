@@ -96,7 +96,7 @@ describe('GroqAiProvider confidence (Week 4 follow-up)', () => {
     expect(draft.assumptions).toHaveLength(1);
     expect(JSON.stringify(fetchMock.mock.calls[0][1].body)).toBeDefined();
     const sent = JSON.parse(fetchMock.mock.calls[0][1].body as string);
-    expect(sent.messages[0].content).toContain('Do not say or imply any action was already taken');
+    expect(sent.messages[0].content).toContain('Do not claim an action was already taken');
     expect(sent.messages[0].content).toContain('untrusted data');
     expect(sent.messages[0].content).toContain('valid JSON');
     expect(fetchMock.mock.calls[0][1].signal).toBeDefined();

@@ -1010,20 +1010,28 @@ export class RequestsService {
       _count: { rating: true },
     });
     // Org-wide creation volume, last 7 days inclusive, zero-filled so
-    // charts always receive exactly 7 points.
+    // charts always receive exactly 7 points. Portable across SQLite and
+    // Postgres: Prisma stores SQLite DateTimes as millis ints, where
+    // date("createdAt") returns NULL, so group in JS instead of raw SQL.
     const dayKeys: string[] = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       dayKeys.push(d.toISOString().slice(0, 10));
     }
-    const rawVolume = await this.prisma.$queryRaw<{ day: string; count: bigint }[]>`
-      SELECT date("createdAt") AS day, COUNT(*) AS count
-      FROM "Request"
-      WHERE date("createdAt") >= date('now', '-6 days')
-      GROUP BY day ORDER BY day ASC
-    `;
-    const volumeMap = new Map(rawVolume.map((r) => [r.day, Number(r.count)]));
+    const sixDaysAgo = new Date();
+    sixDaysAgo.setDate(sixDaysAgo.getDate() - 6);
+    sixDaysAgo.setHours(0, 0, 0, 0);
+    const recentCreated = await this.prisma.request.findMany({
+      select: { createdAt: true },
+      where: { createdAt: { gte: sixDaysAgo } },
+    });
+    const volumeCounts = new Map<string, number>();
+    for (const row of recentCreated) {
+      const day = new Date(row.createdAt as any).toISOString().slice(0, 10);
+      volumeCounts.set(day, (volumeCounts.get(day) ?? 0) + 1);
+    }
+    const volumeMap = volumeCounts;
     return {
       byStatus: Object.fromEntries(byStatus.map((r) => [r.status, r._count])),
       volume: dayKeys.map((day) => ({ day, count: volumeMap.get(day) ?? 0 })),

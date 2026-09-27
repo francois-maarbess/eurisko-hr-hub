@@ -104,6 +104,13 @@ describe('assistant router V2 — deterministic intent + tool subsets', () => {
     }
     expect(confirmationDirective('yes, change the title to Laptop first')).toBeNull();
     expect(confirmationDirective('please draft a request for me')).toBeNull();
+    // Follow-through confirms on a single pending action.
+    expect(confirmationDirective('ok resolve it then')).toBe('confirm');
+    expect(confirmationDirective('yes do it then')).toBe('confirm');
+    expect(confirmationDirective('ok, do that')).toBe('confirm');
+    // Fresh commands are never confirms.
+    expect(confirmationDirective('ok resolve the most overdue')).toBeNull();
+    expect(confirmationDirective('yes, change the title to Laptop first')).toBeNull();
   });
 
   it('extracts user mentions (email or name) for server-side resolution', () => {
@@ -137,5 +144,14 @@ describe('assistant router V2 — deterministic intent + tool subsets', () => {
     expect(r.fallbackSummary).toMatch(/plain employee/i);
     const c = routeIntent('claim this ticket and resolve it');
     expect(c.fallbackSummary).toMatch(/claim and resolve/i);
+  });
+
+  it('routes verbless latest follow-ups to readonly_lookup/latest_view', () => {
+    const r = routeIntent('the latest. the last one sent');
+    expect(r.domain).toBe('readonly_lookup');
+    expect(r.intent).toBe('latest_view');
+    expect(r.fallbackSummary).toMatch(/latest request/i);
+    const resolve = routeIntent('resolve the latest request');
+    expect(resolve.domain).toBe('request_resolution');
   });
 });

@@ -11,7 +11,7 @@ afterEach(() => cleanup());
 // Opening the chat panel exercises that exact mount path.
 describe('ChatbotShell mount', () => {
   it('opens the panel and renders the greeting without throwing', () => {
-    render(<ChatbotShell token="test-token" />);
+    render(<ChatbotShell token="test-token" userId="alice" />);
     fireEvent.click(screen.getByRole('button', { name: 'Open Operations Assistant' }));
     expect(
       screen.getByText(/Ask me anything/, { exact: false }),
@@ -23,7 +23,7 @@ describe('ChatbotShell mount', () => {
     // @ts-expect-error intentionally removed for the test
     delete window.matchMedia;
     try {
-      render(<ChatbotShell token="test-token" />);
+      render(<ChatbotShell token="test-token" userId="alice" />);
       fireEvent.click(screen.getByRole('button', { name: 'Open Operations Assistant' }));
       expect(document.body.textContent).toContain('Operations Assistant');
     } finally {

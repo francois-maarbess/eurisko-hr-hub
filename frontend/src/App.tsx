@@ -73,15 +73,16 @@ interface ChatMessage {
   text: string;
 }
 
-export function ChatbotShell({ token }: { token: string }) {
+export function ChatbotShell({ token, userId }: { token: string; userId: string }) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   // Session survives SPA navigation (the shell never unmounts while signed
   // in) and page reloads (id in session storage; the server rehydrates
   // context, proposals, and confirmations from the database row).
+  const chatStorageKey = `hub-chat-session:${userId}`;
   const [sessionId, setSessionId] = useState<string | null>(() => {
     try {
-      return sessionStorage.getItem('hub-chat-session');
+      return sessionStorage.getItem(chatStorageKey);
     } catch {
       return null;
     }
@@ -92,6 +93,9 @@ export function ChatbotShell({ token }: { token: string }) {
   // visible countdown. Hammering resend is what causes 429 storms, so the
   // UI enforces the pause the message asks for.
   const [cooldownSecs, setCooldownSecs] = useState(0);
+  // Last provider-failed message: one-tap Retry so a hiccup/timeout never
+  // forces retyping. Cleared on the next successful answer.
+  const [lastFailed, setLastFailed] = useState<string | null>(null);
   useEffect(() => {
     if (cooldownSecs <= 0) return;
     const timer = window.setTimeout(() => setCooldownSecs((s) => Math.max(0, s - 1)), 1000);
@@ -151,7 +155,7 @@ export function ChatbotShell({ token }: { token: string }) {
       if (typeof data.sessionId === 'string') {
         setSessionId(data.sessionId);
         try {
-          sessionStorage.setItem('hub-chat-session', data.sessionId);
+          sessionStorage.setItem(chatStorageKey, data.sessionId);
         } catch {
           // Private mode: the session simply won't survive reloads.
         }
@@ -159,18 +163,41 @@ export function ChatbotShell({ token }: { token: string }) {
       // No auto-retry: transient provider failures already get one
       // server-side backoff, and every assistant turn is explicit — the
       // user resends deliberately instead of the UI doubling traffic.
-      setMessages((current) => [...current, { role: 'assistant', text: data.message || 'I could not produce an answer.' }]);
+      const replyText = data.message || 'I could not produce an answer.';
+      setMessages((current) => [...current, { role: 'assistant', text: replyText }]);
       setConfirmation(data.confirmation || null);
+      // Provider hiccups keep a one-tap Retry; successes clear it.
+      if (/hiccup|timed out|too fast|slow down|rate limit|429|temporarily unavailable|please try again|send it again/i.test(replyText)) {
+        setLastFailed(clean);
+      } else {
+        setLastFailed(null);
+      }
       // Rate-limit replies start the visible cooldown so the next send
       // waits out the provider instead of stacking another 429.
       if (typeof data.message === 'string' && /too fast|slow down|rate limit|429/i.test(data.message)) {
         setCooldownSecs(20);
       }
     } catch (error) {
-      setMessages((current) => [...current, { role: 'assistant', text: error instanceof Error ? error.message : 'Assistant is unavailable.' }]);
+      const message = error instanceof Error ? error.message : 'Assistant is unavailable.';
+      if (/chat session not found|session not found|not valid for this session/i.test(message)) {
+        setSessionId(null);
+        setConfirmation(null);
+        try { sessionStorage.removeItem(chatStorageKey); } catch { /* private mode */ }
+        setMessages((current) => [...current, { role: 'assistant', text: 'This chat session was stale after the account changed. I reset it safely; send your message again.' }]);
+      } else {
+        setMessages((current) => [...current, { role: 'assistant', text: message }]);
+      }
+      setLastFailed(clean);
     } finally {
       setSending(false);
     }
+  };
+
+  const retryLast = () => {
+    if (!lastFailed || sending || cooldownSecs > 0) return;
+    const text = lastFailed;
+    setLastFailed(null);
+    void sendMessage(text);
   };
 
   const confirmAction = async (action: 'confirm' | 'cancel') => {
@@ -191,7 +218,15 @@ export function ChatbotShell({ token }: { token: string }) {
       // here so confirming one step presents the next without re-asking.
       setConfirmation(data.confirmation || null);
     } catch (error) {
-      setMessages((current) => [...current, { role: 'assistant', text: error instanceof Error ? error.message : 'Confirmation failed.' }]);
+      const message = error instanceof Error ? error.message : 'Confirmation failed.';
+      if (/chat session not found|session not found|not valid for this session/i.test(message)) {
+        setSessionId(null);
+        setConfirmation(null);
+        try { sessionStorage.removeItem(chatStorageKey); } catch { /* private mode */ }
+        setMessages((current) => [...current, { role: 'assistant', text: 'This chat session was stale after the account changed. I reset it safely; send your request again.' }]);
+      } else {
+        setMessages((current) => [...current, { role: 'assistant', text: message }]);
+      }
     } finally {
       confirmInFlight.current = null;
       setSending(false);
@@ -238,6 +273,11 @@ export function ChatbotShell({ token }: { token: string }) {
               <input className="input" value={input} onChange={(event) => setInput(event.target.value)} placeholder={cooldownSecs > 0 ? `Cooling down… ${cooldownSecs}s` : 'Ask me anything about your work…'} aria-label="Message Operations Assistant" disabled={sending || cooldownSecs > 0} />
               <Button type="submit" small disabled={sending || cooldownSecs > 0}>{sending ? 'Sending…' : cooldownSecs > 0 ? `Wait ${cooldownSecs}s` : 'Send'}</Button>
             </form>
+            {lastFailed && !sending && cooldownSecs <= 0 && (
+              <div className="row" style={{ marginTop: 8 }}>
+                <Button small variant="ghost" onClick={retryLast}>Retry last message</Button>
+              </div>
+            )}
           </div>
         </Modal>
       )}
@@ -316,6 +356,7 @@ export default function App() {
     try {
       sessionStorage.removeItem('hub-refresh-token');
       sessionStorage.removeItem('hub-chat-session');
+      if (user?.id) sessionStorage.removeItem(`hub-chat-session:${user.id}`);
     } catch {
       // Nothing stored — nothing to clear.
     }
@@ -805,7 +846,7 @@ export default function App() {
       </AppShell>
       {/* Always mounted while signed in: navigating between views must not
           wipe the conversation. Unmounts on logout with the rest of the shell. */}
-      <ChatbotShell token={token} />
+      <ChatbotShell key={user.id} token={token} userId={user.id} />
     </>
   );
 }

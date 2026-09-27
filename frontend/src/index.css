@@ -1258,7 +1258,9 @@ kbd {
   right: 0;
   top: calc(100% + 6px);
   min-width: 200px;
-  z-index: 30;
+  /* The click-away backdrop is z-index 40. Keep the actual menu above it so
+     menu items receive pointer events instead of merely closing the menu. */
+  z-index: 41;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 10px;
