@@ -5,6 +5,7 @@ import {
   parseRetryAfterMs,
   routeIntent,
   routerMode,
+  toolsForGeneralAction,
   toolsForDomain,
 } from './assistant-router';
 
@@ -70,9 +71,20 @@ describe('assistant router V2 — deterministic intent + tool subsets', () => {
       expect(tools.length).toBeLessThanOrEqual(10);
     }
     const covered = new Set(Object.values(DOMAIN_TOOL_MAP).flat());
-    for (const must of ['propose_create_request', 'propose_claim', 'propose_complete', 'propose_membership', 'propose_user_status', 'propose_department', 'propose_request_type', 'my_stats', 'search_tickets', 'propose_make_plain_employee', 'propose_claim_and_resolve']) {
+    for (const must of ['propose_create_request', 'propose_claim', 'propose_complete', 'propose_membership', 'propose_user_status', 'propose_department', 'propose_request_type', 'my_stats', 'search_tickets', 'resolve_request_context', 'propose_make_plain_employee', 'propose_claim_and_resolve']) {
       expect(covered.has(must)).toBe(true);
     }
+  });
+
+  it('gives unknown action wording the complete authorized capability registry', () => {
+    const admin = toolsForGeneralAction('SYSTEM_ADMIN');
+    expect(admin.length).toBeGreaterThan(10);
+    expect(admin).toContain('propose_request_type');
+    expect(admin).toContain('resolve_request_context');
+    const employee = toolsForGeneralAction('EMPLOYEE');
+    expect(employee).not.toContain('propose_create_user');
+    expect(employee).not.toContain('propose_request_type');
+    expect(employee).toContain('propose_create_request');
   });
 
   it('hides admin-only tools from non-admins without emptying the subset', () => {

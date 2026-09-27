@@ -8,6 +8,11 @@ preserves the SQLite setup and locked npm dependencies.
 - Plain greetings no longer fail when a tool-capable model invents a malformed
   tool call: the assistant now requests normal message text and retries once
   without tools. Added a regression test for the exact production failure.
+- Natural commands can now resolve authorized requests by latest activity,
+  department, requester, or the caller’s latest claimed work; new commands
+  supersede stale proposals, unknown action wording can access the full
+  authorized capability registry, and physical-danger wording receives safety
+  guidance before any filing suggestion.
 - Assistant proposals queue per session: multi-step jobs ("create two
   requests") advance one confirmation at a time, auto-presenting the next —
   saying two no longer files one. Legacy single-object rows still confirm.

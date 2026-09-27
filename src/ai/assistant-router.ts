@@ -124,6 +124,7 @@ export const ALL_TOOL_NAMES = [
   'my_tickets',
   'search_tickets',
   'ticket_detail',
+  'resolve_request_context',
   'ai_health',
   'start_mfa_setup',
   'propose_create_request',
@@ -176,6 +177,7 @@ export const DOMAIN_TOOL_MAP: Record<RouterDomain, string[]> = {
     'search_tickets',
   ],
   request_claiming: [
+    'resolve_request_context',
     'propose_claim',
     'propose_takeover',
     'propose_reassign',
@@ -186,6 +188,7 @@ export const DOMAIN_TOOL_MAP: Record<RouterDomain, string[]> = {
     'ticket_detail',
   ],
   request_resolution: [
+    'resolve_request_context',
     'propose_complete',
     'propose_claim_and_resolve',
     'propose_reject',
@@ -208,6 +211,7 @@ export const DOMAIN_TOOL_MAP: Record<RouterDomain, string[]> = {
     'my_stats',
   ],
   readonly_lookup: [
+    'resolve_request_context',
     'my_stats',
     'my_tickets',
     'search_tickets',
@@ -216,7 +220,6 @@ export const DOMAIN_TOOL_MAP: Record<RouterDomain, string[]> = {
     'my_work',
     'claimed_history',
     'ticket_children',
-    'staff_notes',
     'notifications_summary',
   ],
   general_help: [
@@ -249,6 +252,27 @@ export function toolsForDomain(domain: RouterDomain, platformRole?: string): str
     if (filtered.length > 0) tools = filtered;
   }
   return tools.slice(0, 10);
+}
+
+/**
+ * Unknown action language is intentionally allowed to see the complete
+ * authorized capability registry. Known domains still use small subsets for
+ * accuracy, but "do whatever I can do" must not be trapped in general-help
+ * tools merely because the wording is novel.
+ */
+export function toolsForGeneralAction(platformRole?: string): string[] {
+  const adminOnly = new Set([
+    'propose_create_user',
+    'propose_user_status',
+    'propose_make_plain_employee',
+    'propose_department',
+    'propose_request_type',
+    'propose_export',
+    'audit_search',
+    'analytics_report',
+  ]);
+  const tools = platformRole === 'SYSTEM_ADMIN' ? [...ALL_TOOL_NAMES] : ALL_TOOL_NAMES.filter((name) => !adminOnly.has(name));
+  return [...tools];
 }
 
 function hasWord(text: string, re: RegExp): boolean {

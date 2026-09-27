@@ -207,6 +207,50 @@ describe('assistant V2 — composite workflows, confirmations, reliability', () 
     await expect((service as any).resolveUserByRef('ghostperson')).rejects.toThrow(/not found/i);
   });
 
+  it('resolves latest, department, requester, and claimed-ticket references server-side', async () => {
+    const { service, prisma } = harness();
+    const ticket = {
+      id: 'req-laptop-12345678901234567890', title: 'Laptop is on fire', status: 'PENDING', priority: 'URGENT',
+      createdAt: new Date(), department: { name: 'IT' }, requestType: { name: 'Laptop' }, claimant: null,
+      owner: { displayName: 'Alice' },
+    };
+    prisma.request.findMany.mockResolvedValueOnce([ticket]);
+    const resolved: any = await (service as any).resolveRequestContext(
+      { id: 'admin', platformRole: 'SYSTEM_ADMIN' },
+      { relation: 'latest-created', reference: 'Alice just sent the latest request to the IT department', requester: 'Alice', department: 'IT' },
+    );
+    expect(resolved.selected.title).toBe('Laptop is on fire');
+    expect(resolved.candidates).toHaveLength(1);
+    expect(prisma.request.findMany).toHaveBeenCalledWith(expect.objectContaining({ orderBy: { createdAt: 'desc' } }));
+
+    prisma.request.findMany.mockResolvedValueOnce([ticket]);
+    const hinted: any = await (service as any).requestContextHint(
+      { id: 'admin', platformRole: 'SYSTEM_ADMIN' },
+      'resolve the ticket I just claimed',
+    );
+    expect(hinted.selected.title).toBe('Laptop is on fire');
+  });
+
+  it('switches topics without retaining an old unconfirmed proposal and handles physical danger safely', async () => {
+    const { service, prisma } = harness();
+    await (service as any).storeProposal('session-1', { kind: 'create-request', summary: 'Create the old request', payload: {} });
+    const stored = JSON.parse(prisma.chatSession.update.mock.calls[0][0].data.pendingConfirmation);
+    prisma.chatSession.findFirst.mockResolvedValue({ id: 'session-1', userId: 'alice', pendingConfirmation: JSON.stringify(stored) });
+    await (service as any).supersedePendingOnNewTask('session-1', 'nevermind, add a new request type to HR called money letter');
+    expect(prisma.chatSession.update).toHaveBeenLastCalledWith({ where: { id: 'session-1' }, data: { pendingConfirmation: null } });
+
+    const realFetch = global.fetch;
+    process.env['GROQ_API_KEY'] = 'test-key';
+    (global as any).fetch = jest.fn();
+    try {
+      const result = await service.chat({ id: 'alice', platformRole: 'EMPLOYEE' }, { sessionId: 'session-1', message: 'laptop is on fire' });
+      expect(result.message).toMatch(/move away|emergency services/i);
+      expect((global as any).fetch).not.toHaveBeenCalled();
+    } finally {
+      (global as any).fetch = realFetch;
+    }
+  });
+
   it('refuses unauthorized admin actions server-side (never a chat message)', async () => {
     const { service } = harness();
     await expect((service as any).proposeMakePlainEmployee({ id: 'bob', platformRole: 'EMPLOYEE' }, 'session-1', { user: 'alice@acme.com' })).rejects.toBeInstanceOf(ForbiddenException);
