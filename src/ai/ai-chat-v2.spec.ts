@@ -231,6 +231,25 @@ describe('assistant V2 — composite workflows, confirmations, reliability', () 
     expect(hinted.selected.title).toBe('Laptop is on fire');
   });
 
+  it('filters a named department queue and resolves the short references shown in the UI', async () => {
+    const { service, prisma, requests } = harness();
+    prisma.department.findMany.mockResolvedValueOnce([
+      { id: 'dept-peo', code: 'PEO', name: 'People Operations', requestTypes: [{ id: 'type-peo', code: 'FEEDBACK', name: 'Feedback', active: true }] },
+      { id: 'dept-hr', code: 'HR', name: 'Human Resources', requestTypes: [{ id: 'type-hr', code: 'LETTER', name: 'Letter', active: true }] },
+    ]);
+    const peo = { id: 'abcdefghijklmnopqrstuv123456', departmentId: 'dept-peo', title: 'Coworker complaint', status: 'PENDING', priority: 'STANDARD', createdAt: new Date(), department: { id: 'dept-peo', name: 'People Operations' }, requestType: { name: 'Feedback' }, claimant: null };
+    const hr = { id: 'abcdefghijklmnopqrstuv654321', departmentId: 'dept-hr', title: 'Employment letter', status: 'PENDING', priority: 'STANDARD', createdAt: new Date(), department: { id: 'dept-hr', name: 'Human Resources' }, requestType: { name: 'Letter' }, claimant: null };
+    requests.findAll.mockResolvedValueOnce([peo, hr]);
+    const queue: any = await (service as any).queueView({ id: 'admin', platformRole: 'SYSTEM_ADMIN' }, { view: 'queue', department: 'PEO' });
+    expect(queue.department).toMatch(/PEO|People Operations/);
+    expect(queue.tickets).toHaveLength(1);
+    expect(queue.tickets[0].title).toBe('Coworker complaint');
+
+    prisma.request.findMany.mockResolvedValueOnce([peo]);
+    const resolvedId = await (service as any).resolveRequestId({ id: 'admin', platformRole: 'SYSTEM_ADMIN' }, 'REQ-123456');
+    expect(resolvedId).toBe(peo.id);
+  });
+
   it('switches topics without retaining an old unconfirmed proposal and handles physical danger safely', async () => {
     const { service, prisma } = harness();
     await (service as any).storeProposal('session-1', { kind: 'create-request', summary: 'Create the old request', payload: {} });

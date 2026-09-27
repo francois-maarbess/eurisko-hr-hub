@@ -13,6 +13,8 @@ preserves the SQLite setup and locked npm dependencies.
   supersede stale proposals, unknown action wording can access the full
   authorized capability registry, and physical-danger wording receives safety
   guidance before any filing suggestion.
+- Department queue commands now enforce the named department server-side, and
+  every request action accepts the short REQ- references shown in the UI.
 - Assistant proposals queue per session: multi-step jobs ("create two
   requests") advance one confirmation at a time, auto-presenting the next —
   saying two no longer files one. Legacy single-object rows still confirm.
