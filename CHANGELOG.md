@@ -5,6 +5,9 @@ preserves the SQLite setup and locked npm dependencies.
 
 ## Unreleased (assistant reliability, draft UX, chat persistence, docs sync)
 
+- Plain greetings no longer fail when a tool-capable model invents a malformed
+  tool call: the assistant now requests normal message text and retries once
+  without tools. Added a regression test for the exact production failure.
 - Assistant proposals queue per session: multi-step jobs ("create two
   requests") advance one confirmation at a time, auto-presenting the next —
   saying two no longer files one. Legacy single-object rows still confirm.

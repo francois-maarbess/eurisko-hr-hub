@@ -240,6 +240,37 @@ describe('assistant V2 — composite workflows, confirmations, reliability', () 
     }
   });
 
+  it('answers plain chat when Groq first invents a malformed tool call', async () => {
+    const { service, prisma } = harness();
+    process.env['GROQ_API_KEY'] = 'test-key';
+    prisma.chatMessage.findMany.mockResolvedValue([{ role: 'user', content: 'hi', createdAt: new Date() }]);
+    const realFetch = global.fetch;
+    const calls: any[] = [];
+    (global as any).fetch = jest.fn(async (_url: string, init: any) => {
+      const body = JSON.parse(init.body);
+      calls.push(body);
+      if (calls.length === 1) {
+        return {
+          ok: false,
+          status: 400,
+          text: async () => '{"error":{"code":"tool_use_failed","message":"attempted to call tool response which was not in request.tools"}}',
+        };
+      }
+      return { ok: true, json: async () => ({ choices: [{ message: { role: 'assistant', content: 'Hello! How can I help today?' } }] }) };
+    });
+    try {
+      const result = await (service as any).runGroq({ id: 'alice', platformRole: 'EMPLOYEE' }, 'session-1', true);
+      expect(result.message).toMatch(/Hello/);
+      expect(calls).toHaveLength(2);
+      expect(calls[0].tools).toBeDefined();
+      expect(calls[0].messages[0].content).not.toMatch(/compact object|JSON only/i);
+      expect(calls[1].tools).toBeUndefined();
+      expect(calls[1].tool_choice).toBeUndefined();
+    } finally {
+      (global as any).fetch = realFetch;
+    }
+  });
+
   it('rehydrates confirmations from the database after a restart (interrupted conversations)', async () => {
     const { service, prisma, requests } = harness();
     await (service as any).storeProposal('session-1', { kind: 'claim', summary: 'Claim REQ-T1', payload: { requestId: 't1' } });
