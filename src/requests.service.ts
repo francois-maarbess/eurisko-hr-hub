@@ -235,6 +235,7 @@ export class RequestsService {
           include: { department: true, requestType: true, claimant: true },
           orderBy: { createdAt: 'asc' },
         },
+        _count: { select: { documents: true, staffNotes: true } },
       },
     });
     if (!request) throw new NotFoundException('Request not found');
@@ -470,6 +471,8 @@ export class RequestsService {
       description: request.description,
       department: request.department.name,
       requestType: request.requestType.name,
+      requestTypeCode: request.requestType.code,
+      documentCount: request._count?.documents || 0,
     });
   }
 

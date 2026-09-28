@@ -141,6 +141,10 @@ export function ChatbotShell({ token, userId }: { token: string; userId: string 
       await confirmAction(isConfirmText(clean) ? 'confirm' : 'cancel');
       return;
     }
+    // A non-confirmation message starts a new task. Clear the visible card
+    // immediately so an old proposal cannot look current while the server
+    // supersedes it and resolves the new command.
+    if (confirmation) setConfirmation(null);
     setMessages((current) => [...current, { role: 'user', text: clean }]);
     setInput('');
     setSending(true);

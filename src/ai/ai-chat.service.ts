@@ -21,8 +21,42 @@ import {
 type ChatUser = { id: string; platformRole: string };
 type PendingAction = { id: string; kind: string; summary: string; payload: Record<string, unknown> };
 
+// Human phrases are resolved to the live catalog on the server. The model may
+// suggest a phrase, but it must never be the source of truth for whether a
+// department or request type exists.
+const DEPARTMENT_ALIASES: Record<string, string[]> = {
+  HR: ['human resources', 'people resources', 'personnel'],
+  IT: ['technology', 'technical support', 'tech support', 'information technology'],
+  FAC: ['facilities', 'facilities and workplace', 'workplace', 'office services'],
+  FIN: ['finance', 'financial'],
+  PEO: ['people operations', 'people ops'],
+};
+
+const REQUEST_TYPE_ALIASES: Record<string, string[]> = {
+  EMP_LETTER: ['proof of income', 'income proof', 'salary certificate', 'employment verification', 'employment certificate'],
+  PAYROLL: ['payslip', 'pay slip', 'salary slip', 'pay statement', 'pay stub', 'proof of salary'],
+  LAPTOP: ['laptop update', 'computer update', 'device update', 'laptop problem', 'computer problem'],
+  SOFTWARE: ['software update', 'application update', 'program update', 'install software'],
+  DESK: ['change my desk', 'desk change', 'move desk', 'workspace move', 'change workspace', 'meeting room'],
+  MAINTENANCE: ['repair', 'facility repair', 'workplace repair'],
+  BENEFITS: ['insurance', 'health coverage', 'benefits question'],
+};
+
+const RESOLUTION_HINTS: Record<string, string[]> = {
+  LAPTOP: ['laptop', 'computer', 'device', 'update', 'patch', 'software', 'system', 'restart', 'reboot', 'boot', 'login', 'screen', 'display', 'wifi', 'network', 'connect', 'connection'],
+  SOFTWARE: ['software', 'application', 'program', 'install', 'update', 'license', 'version'],
+  EMP_LETTER: ['employment', 'letter', 'document', 'verification', 'income', 'salary', 'certificate', 'attach'],
+  PAYROLL: ['payroll', 'payslip', 'salary', 'wage', 'payment', 'pay', 'income'],
+  DESK: ['desk', 'workspace', 'office', 'room', 'move', 'meeting'],
+  MAINTENANCE: ['repair', 'maintenance', 'facility', 'plumbing', 'electrical', 'cleaning', 'fixed'],
+};
+
+const RESOLUTION_STOPWORDS = new Set(
+  'a,an,and,are,as,at,be,been,by,for,from,has,have,how,in,into,is,it,its,of,on,or,that,the,this,to,was,were,with,request,issue,reported,review,record,action,result,remaining,follow,up'.split(','),
+);
+
 const TOOL_DEFINITIONS = [
-  { type: 'function', function: { name: 'my_stats', description: 'Read the caller’s own request counts and urgent tickets created today.', parameters: { type: 'object', properties: {}, additionalProperties: false } } },
+  { type: 'function', function: { name: 'my_stats', description: 'Read clearly labeled caller statistics: requests submitted by the caller plus requests handled/claimed by the caller. Never confuse owned work with handled work.', parameters: { type: 'object', properties: {}, additionalProperties: false } } },
   { type: 'function', function: { name: 'my_tickets', description: 'List requests owned by the caller.', parameters: { type: 'object', properties: { status: { type: 'string' }, limit: { type: 'integer' } }, additionalProperties: false } } },
   { type: 'function', function: { name: 'search_tickets', description: 'Search tickets visible to the caller by title, description, status, or department.', parameters: { type: 'object', properties: { query: { type: 'string' }, status: { type: 'string' }, limit: { type: 'integer' } }, required: ['query'], additionalProperties: false } } },
   { type: 'function', function: { name: 'ticket_detail', description: 'Read one ticket only if the caller is authorized to see it.', parameters: { type: 'object', properties: { requestId: { type: 'string' } }, required: ['requestId'], additionalProperties: false } } },
@@ -33,7 +67,7 @@ const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'classify_text', description: 'Guess department, type, and priority from vague free text (e.g. "my laptop is on fire"). Use it to pre-fill a proposal, then ask the user only about genuinely missing or low-confidence slots.', parameters: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'], additionalProperties: false } } },
   { type: 'function', function: { name: 'department_stats', description: 'Totals, open/closed counts, urgent-today, and overdue per department. Admins see every department; others see only their own departments (employees: their own stats wording).', parameters: { type: 'object', properties: {}, additionalProperties: false } } },
   { type: 'function', function: { name: 'propose_claim', description: 'Propose claiming a visible pending request. Never execute without confirmation.', parameters: { type: 'object', properties: { requestId: { type: 'string' } }, required: ['requestId'], additionalProperties: false } } },
-  { type: 'function', function: { name: 'propose_complete', description: 'Propose completing an in-progress request you claimed, using an AI-drafted resolution note the user will review. Only for requests claimed by the caller. Never execute without confirmation.', parameters: { type: 'object', properties: { requestId: { type: 'string' } }, required: ['requestId'], additionalProperties: false } } },
+  { type: 'function', function: { name: 'propose_complete', description: 'Propose completing an in-progress request you claimed. If the caller supplied a resolution note, preserve it exactly; otherwise draft a concise ticket-specific note and show it for review. Only for requests claimed by the caller. Never execute without confirmation.', parameters: { type: 'object', properties: { requestId: { type: 'string' }, resolutionNote: { type: 'string' } }, required: ['requestId'], additionalProperties: false } } },
   { type: 'function', function: { name: 'propose_reroute', description: 'Propose rerouting a visible request to another catalog department/type given as human words or codes. Never execute without confirmation.', parameters: { type: 'object', properties: { requestId: { type: 'string' }, newDepartment: { type: 'string' }, newRequestType: { type: 'string' }, reason: { type: 'string' } }, required: ['requestId', 'newDepartment', 'newRequestType', 'reason'], additionalProperties: false } } },
   { type: 'function', function: { name: 'propose_create_user', description: 'Propose creating a user with email and full name only. Never ask for, accept, or repeat a password — new accounts always use the default password and the user changes it in Security settings. Pass department and department role as human words (e.g. "IT", "manager") or omit department for no membership. Admin only and never execute without confirmation.', parameters: { type: 'object', properties: { email: { type: 'string' }, displayName: { type: 'string' }, platformRole: { type: 'string', enum: ['EMPLOYEE', 'SYSTEM_ADMIN'] }, department: { type: 'string' }, departmentRole: { type: 'string', enum: ['AGENT', 'MANAGER'] } }, required: ['email'], additionalProperties: false } } },
   { type: 'function', function: { name: 'propose_cancel', description: 'Propose cancelling a pending request owned by the caller. Only the requester can cancel, and only while PENDING. Never execute without confirmation.', parameters: { type: 'object', properties: { requestId: { type: 'string' } }, required: ['requestId'], additionalProperties: false } } },
@@ -63,7 +97,7 @@ const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'analytics_report', description: 'Cross-department counts and workload for admins: status breakdown, per-department open/total, CSAT. Admin only.', parameters: { type: 'object', properties: {}, additionalProperties: false } } },
   { type: 'function', function: { name: 'notifications_summary', description: 'Summarize the caller’s inbox: unread count plus the latest notifications.', parameters: { type: 'object', properties: {}, additionalProperties: false } } },
   { type: 'function', function: { name: 'propose_make_plain_employee', description: 'Propose making a user a plain employee: set role EMPLOYEE and remove ALL department memberships in one confirmation (or remove-all only). Pass user as email or name (e.g. "alice@acme.com" or "Alice"). Never ask for a department when the user said no departments. Admin only. Never execute without confirmation.', parameters: { type: 'object', properties: { user: { type: 'string' }, email: { type: 'string' }, mode: { type: 'string', enum: ['plain', 'remove-all'] } }, additionalProperties: false } } },
-  { type: 'function', function: { name: 'propose_claim_and_resolve', description: 'Propose claiming a pending ticket AND completing it with a resolution note in one confirmation. Pass resolutionNote verbatim when the user supplied exact wording, otherwise omit it and a draft is prepared for review. Never execute without confirmation.', parameters: { type: 'object', properties: { requestId: { type: 'string' }, resolutionNote: { type: 'string' } }, required: ['requestId'], additionalProperties: false } } },
+  { type: 'function', function: { name: 'propose_claim_and_resolve', description: 'Propose claiming a pending ticket AND completing it in one confirmation. Pass resolutionNote verbatim when the caller supplied exact wording; otherwise prepare a concise, ticket-specific draft for review. Never execute without confirmation.', parameters: { type: 'object', properties: { requestId: { type: 'string' }, resolutionNote: { type: 'string' } }, required: ['requestId'], additionalProperties: false } } },
 ] as const;
 
 /** Local intent read: a deterministic hint for routing, never a gate.
@@ -268,18 +302,12 @@ export class AiChatService {
         if (!top) return this.answer(sessionId, 'Nothing overdue matches. Nothing was changed.');
         const full = await this.requests.findOne(String((top as any).id), { id: user.id, platformRole: user.platformRole }).catch(() => null);
         if (!full) return this.answer(sessionId, 'I could not open the most overdue ticket. Nothing was changed.');
-        const note = [
-          `Review the reported issue: ${(top as any).label || this.ticketLabel(full)} (overdue ${(top as any).overdueHours ?? '?'}h).`,
-          'Verify the reported details against the ticket.',
-          'Record the verified action taken and the observed result before completing.',
-          '',
-          'Please confirm:',
-          '- The reported details were independently verified.',
-          '- The outcome was confirmed with the requester where needed.',
-        ].join('\n');
+        const explicitNote = this.extractExplicitResolutionNote(message);
+        this.validateExplicitResolutionNote(explicitNote);
+        const note = explicitNote || await this.draftChatResolutionNote(full, user.id);
         const stored = await this.storeProposal(sessionId, {
           kind: 'claim-and-resolve',
-          summary: `Claim and resolve ${(top as any).label || this.ticketLabel(full)} (most overdue, ${(top as any).overdueHours ?? '?'}h) with the drafted note (one confirmation)`,
+          summary: `Claim and resolve ${(top as any).label || this.ticketLabel(full)} (most overdue, ${(top as any).overdueHours ?? '?'}h)${explicitNote ? ' with your exact note' : ' with the drafted note'} (one confirmation)${this.resolutionArtifactWarning(full)}`,
           payload: { requestId: (full as any).id, resolutionNote: note },
         });
         const conf = (stored as any).confirmation;
@@ -332,18 +360,12 @@ export class AiChatService {
           const conf = (stored as any).confirmation;
           return this.answer(sessionId, `The latest is ${(top as any).label || this.ticketLabel(full)}. I prepared the claim for your confirmation.`, conf ? { confirmation: conf } : {});
         }
-        const note = [
-          `Review the reported issue: ${(top as any).label || this.ticketLabel(full)}.`,
-          'Verify the reported details against the ticket.',
-          'Record the verified action taken and the observed result before completing.',
-          '',
-          'Please confirm:',
-          '- The reported details were independently verified.',
-          '- The outcome was confirmed with the requester where needed.',
-        ].join('\n');
+        const explicitNote = this.extractExplicitResolutionNote(message);
+        this.validateExplicitResolutionNote(explicitNote);
+        const note = explicitNote || await this.draftChatResolutionNote(full, user.id);
         const stored = await this.storeProposal(sessionId, {
           kind: 'claim-and-resolve',
-        summary: `Claim and resolve ${(top as any).label || this.ticketLabel(full)} (latest${latestDept ? ` in ${latestDept}` : ''}) with the drafted note (one confirmation)`,
+        summary: `Claim and resolve ${(top as any).label || this.ticketLabel(full)} (latest${latestDept ? ` in ${latestDept}` : ''})${explicitNote ? ' with your exact note' : ' with the drafted note'} (one confirmation)${this.resolutionArtifactWarning(full)}`,
           payload: { requestId: (full as any).id, resolutionNote: note },
         });
         const conf = (stored as any).confirmation;
@@ -385,7 +407,10 @@ export class AiChatService {
 
     if (/^(show|what).*(my\s+)?stats|show\s+my\s+stats|my\s+stats/.test(lower) && lower.length < 60) {
       const stats = await this.myStats(user.id);
-      return this.answer(sessionId, `Your requests: ${stats.total} total, ${stats.open} open, ${stats.completed} completed, ${stats.urgentToday} urgent today.`);
+      return this.answer(sessionId,
+        `Submitted by you: ${stats.total} total, ${stats.open} open, ${stats.completed} completed, ${stats.urgentToday} urgent today. ` +
+        `Handled by you: ${stats.handledTotal} total, ${stats.handledOpen} open, ${stats.handledCompleted} completed, ${stats.handledUrgentToday} urgent today.`,
+      );
     }
     return null;
   }
@@ -409,10 +434,11 @@ export class AiChatService {
     const explicitAction = /\b(create|add|remove|change|make|set|deactivate|activate|claim|resolve|complete|cancel|reject|reroute|reassign|send|file|submit|report|show|find|search|list|update|rename|disable|enable)\b/i.test(message);
     const explicitSwitch = /^(?:nevermind|never mind|cancel that|forget that)\b/i.test(message);
     const continuation = !explicitAction && /\b(that|it|this|same|above|the request|the ticket|confirm|confirmed|cancel|use|with|note|resolution|proceed|go ahead)\b/i.test(message);
+    const startsNewTask = /^(?:i\s+(?:need|want|have|would like)|can you|could you|please|send|create|draft|show|tell me|what|how|where)\b/i.test(message.trim());
     // A new command owns the turn.  Keeping an old proposal in the queue is
     // what lets later model turns accidentally resurrect an old target.
     // Continuations and explicit confirmations are handled before this method.
-    if (explicitSwitch || explicitAction || !continuation) {
+    if (explicitSwitch || explicitAction || startsNewTask || !continuation) {
       this.pendingActions.delete(sessionId);
       await this.prisma.chatSession.update({ where: { id: sessionId }, data: { pendingConfirmation: null } }).catch(() => undefined);
     }
@@ -873,9 +899,26 @@ Rules: refer to departments and types by NAME with users, codes only inside tool
   }
 
   private async myStats(userId: string) {
-    const rows = await this.requests.findAll(userId, 'mine') as Array<{ status: string; priority: string; createdAt: Date | string }>;
     const start = new Date(); start.setHours(0, 0, 0, 0);
-    return { total: rows.length, open: rows.filter((r) => !['COMPLETED', 'CANCELLED', 'REJECTED'].includes(r.status)).length, completed: rows.filter((r) => r.status === 'COMPLETED').length, urgentToday: rows.filter((r) => r.priority === 'URGENT' && new Date(r.createdAt) >= start).length };
+    const [submitted, handled] = await Promise.all([
+      this.prisma.request.findMany({
+        where: { employeeId: userId },
+        select: { status: true, priority: true, createdAt: true },
+      }),
+      this.prisma.request.findMany({
+        where: { claimedById: userId },
+        select: { status: true, priority: true, createdAt: true },
+      }),
+    ]) as [Array<{ status: string; priority: string; createdAt: Date | string }>, Array<{ status: string; priority: string; createdAt: Date | string }>];
+    const summarize = (rows: Array<{ status: string; priority: string; createdAt: Date | string }>) => ({
+      total: rows.length,
+      open: rows.filter((r) => !['COMPLETED', 'CANCELLED', 'REJECTED'].includes(r.status)).length,
+      completed: rows.filter((r) => r.status === 'COMPLETED').length,
+      urgentToday: rows.filter((r) => r.priority === 'URGENT' && new Date(r.createdAt) >= start).length,
+    });
+    const own = summarize(submitted);
+    const work = summarize(handled);
+    return { ...own, handledTotal: work.total, handledOpen: work.open, handledCompleted: work.completed, handledUrgentToday: work.urgentToday, submitted: own, handled: work };
   }
 
   private async myTickets(userId: string, args: Record<string, unknown>) {
@@ -1155,6 +1198,7 @@ Rules: refer to departments and types by NAME with users, codes only inside tool
       reference: this.shortRef(ticket.id), label: this.ticketLabel(ticket), id: ticket.id, title: ticket.title, status: ticket.status, priority: ticket.priority,
       department: ticket.department?.name, requestType: ticket.requestType?.name,
       claimedBy: ticket.claimant?.displayName || null, owner: (ticket as any).owner?.displayName || null,
+      documentCount: Number(ticket?._count?.documents || ticket?.documentCount || 0),
       createdAt: ticket.createdAt, slaDueAt,
       isOverdue: overdueMs > 0, overdueMs,
       overdueHours: overdueMs > 0 ? Math.round((overdueMs / 3600000) * 10) / 10 : 0,
@@ -1177,18 +1221,31 @@ Rules: refer to departments and types by NAME with users, codes only inside tool
     const departments = await this.prisma.department.findMany({
       where: { active: true },
       orderBy: { code: 'asc' },
-      include: { requestTypes: { where: { active: true }, select: { id: true, code: true, name: true, active: true }, orderBy: { code: 'asc' } } },
+      include: { requestTypes: { where: { active: true }, select: { id: true, code: true, name: true, description: true, active: true }, orderBy: { code: 'asc' } } },
     });
     return departments.filter((d) => d.requestTypes.length > 0);
+  }
+
+  private normalizedCatalogText(value: string) {
+    return (value || '').trim().toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  private matchesCatalogPhrase(text: string, phrase: string) {
+    const cleanText = this.normalizedCatalogText(text);
+    const cleanPhrase = this.normalizedCatalogText(phrase);
+    return !!cleanPhrase && (cleanText === cleanPhrase || cleanText.includes(cleanPhrase) || cleanPhrase.includes(cleanText));
   }
 
   /** Match free text ("hr", "Human Resources", "laptop") to a catalog entry.
    * Throws one helpful error listing valid options instead of failing late. */
   private resolveDept(departments: Awaited<ReturnType<AiChatService['catalogList']>>, text: string) {
-    const clean = (text || '').trim().toLowerCase();
-    const byCode = departments.find((d) => d.code.toLowerCase() === clean);
+    const clean = this.normalizedCatalogText(text);
+    const byCode = departments.find((d) => this.normalizedCatalogText(d.code) === clean);
     if (byCode) return byCode;
-    const byName = departments.filter((d) => d.name.toLowerCase().includes(clean) || clean.includes(d.code.toLowerCase()));
+    const byName = departments.filter((d) =>
+      this.matchesCatalogPhrase(d.name, clean) ||
+      (DEPARTMENT_ALIASES[d.code.toUpperCase()] || []).some((alias) => this.matchesCatalogPhrase(clean, alias)),
+    );
     if (byName.length === 1) return byName[0];
     throw new BadRequestException(
       `I don't recognize "${text || 'that'}" as a department. Valid options: ${departments.map((d) => `${d.code} (${d.name})`).join(', ')}.`,
@@ -1196,10 +1253,14 @@ Rules: refer to departments and types by NAME with users, codes only inside tool
   }
 
   private resolveType(dept: Awaited<ReturnType<AiChatService['catalogList']>>[number], text: string) {
-    const clean = (text || '').trim().toLowerCase();
-    const byCode = dept.requestTypes.find((t) => t.code.toLowerCase() === clean);
+    const clean = this.normalizedCatalogText(text);
+    const byCode = dept.requestTypes.find((t) => this.normalizedCatalogText(t.code) === clean);
     if (byCode) return byCode;
-    const byName = dept.requestTypes.filter((t) => t.name.toLowerCase().includes(clean));
+    const byName = dept.requestTypes.filter((t) =>
+      this.matchesCatalogPhrase(t.name, clean) ||
+      this.matchesCatalogPhrase(t.description || '', clean) ||
+      (REQUEST_TYPE_ALIASES[t.code.toUpperCase()] || []).some((alias) => this.matchesCatalogPhrase(clean, alias)),
+    );
     if (byName.length === 1) return byName[0];
     throw new BadRequestException(
       `I don't recognize "${text || 'that'}" in ${dept.code}. Valid options: ${dept.requestTypes.map((t) => `${t.code} (${t.name})`).join(', ')}.`,
@@ -1252,6 +1313,75 @@ Rules: refer to departments and types by NAME with users, codes only inside tool
    * slow provider never becomes a user-visible hiccup. Confirming means the
    * human verified the note — exactly like confirming the pre-filled
    * textarea in the UI. */
+  private extractExplicitResolutionNote(message: string): string {
+    const match = message.match(/\b(?:resolution\s+note|note)\s*[:=]\s*(.+)$/i);
+    return match?.[1]?.trim() || '';
+  }
+
+  private validateExplicitResolutionNote(note: string) {
+    if (!note) return;
+    if (note.length < 10) throw new BadRequestException('The resolution note needs at least a sentence.');
+    if (note.length > 2000) throw new BadRequestException('The resolution note is too long (max 2000 characters).');
+  }
+
+  private resolutionArtifactWarning(ticket: any): string {
+    const code = String(ticket?.requestType?.code || '').toUpperCase();
+    const name = String(ticket?.requestType?.name || '').toLowerCase();
+    const requiresDocument = code === 'EMP_LETTER' || /employment letter|income proof|certificate|document/.test(name);
+    const documentCount = Number(ticket?._count?.documents || ticket?.documentCount || 0);
+    return requiresDocument && documentCount === 0
+      ? ' — no attachment is recorded; verify the document before confirming'
+      : '';
+  }
+
+  private resolutionTokens(value: unknown): string[] {
+    return String(value || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .split(/\s+/)
+      .map((token) => token.replace(/(ing|ed|es|s)$/i, ''))
+      .filter((token) => token.length >= 3 && !RESOLUTION_STOPWORDS.has(token));
+  }
+
+  private resolutionDraftIsRelevant(note: string, ticket: any): boolean {
+    const context = [
+      ticket?.title,
+      ticket?.description,
+      ticket?.department?.name,
+      ticket?.requestType?.name,
+      ticket?.requestType?.code,
+    ].flatMap((value) => this.resolutionTokens(value));
+    const contextSet = new Set(context);
+    const code = String(ticket?.requestType?.code || '').toUpperCase();
+    const requestTypeText = `${code} ${String(ticket?.requestType?.name || '').toLowerCase()}`;
+    const hintCodes = Object.keys(RESOLUTION_HINTS).filter((key) => requestTypeText.includes(key.toLowerCase()) ||
+      (key === 'LAPTOP' && /laptop|computer|device/.test(requestTypeText)) ||
+      (key === 'SOFTWARE' && /software|application|program/.test(requestTypeText)) ||
+      (key === 'EMP_LETTER' && /employment|letter|certificate/.test(requestTypeText)) ||
+      (key === 'PAYROLL' && /payroll|payslip|salary/.test(requestTypeText)) ||
+      (key === 'DESK' && /desk|workspace|meeting/.test(requestTypeText)) ||
+      (key === 'MAINTENANCE' && /maintenance|repair|facility/.test(requestTypeText)));
+    const hintSet = new Set(hintCodes.flatMap((key) => (RESOLUTION_HINTS[key] || []).flatMap((value) => this.resolutionTokens(value))));
+    const noteSet = new Set(this.resolutionTokens(note));
+    const specificContextHits = [...noteSet].filter((token) => contextSet.has(token) || hintSet.has(token));
+    return specificContextHits.length >= 1;
+  }
+
+  private fallbackResolutionNote(ticket: any): string {
+    const title = String(ticket?.title || 'the request').trim();
+    const code = String(ticket?.requestType?.code || '').toUpperCase();
+    if (code === 'LAPTOP' || code === 'SOFTWARE') {
+      return `Apply the required update described in “${title}”, then restart or validate the affected device or software and record the observed result.`;
+    }
+    if (code === 'EMP_LETTER') {
+      return `Prepare the requested employment letter for “${title}”, attach the completed document to this request, and verify that it is ready for the requester.`;
+    }
+    if (code === 'DESK') {
+      return `Complete the workspace change described in “${title}” and record the new desk or room assignment and the observed result.`;
+    }
+    return `Investigate “${title}”, record the specific action taken and observed result, and include any remaining follow-up in this resolution note.`;
+  }
+
   private cleanResolutionNote(note: unknown, ticket: any): string {
     const raw = String(note || '').replace(/\r/g, '').trim();
     const withoutChecklist = raw.split(/\n\s*(?:please\s+confirm|confirmation checklist)\s*:/i)[0];
@@ -1263,11 +1393,10 @@ Rules: refer to departments and types by NAME with users, codes only inside tool
       .replace(/\[[^\]]{1,120}\]/g, '')
       .replace(/\s{2,}/g, ' ')
       .trim();
-    if (withoutPlaceholders.length >= 30) return withoutPlaceholders.slice(0, 2000);
-    return [
-      `Investigate the reported issue: ${String(ticket?.title || 'the request').trim()}.`,
-      'Record the specific action taken, the observed result, and any remaining follow-up in this note.',
-    ].join(' ');
+    if (withoutPlaceholders.length >= 30 && this.resolutionDraftIsRelevant(withoutPlaceholders, ticket)) {
+      return withoutPlaceholders.slice(0, 1200);
+    }
+    return this.fallbackResolutionNote(ticket);
   }
 
   private async draftChatResolutionNote(ticket: any, userId: string): Promise<string> {
@@ -1276,14 +1405,26 @@ Rules: refer to departments and types by NAME with users, codes only inside tool
       description: String(ticket?.description || ticket?.title || 'No additional description was provided.'),
       department: String(ticket?.department?.name || 'the assigned department'),
       requestType: String(ticket?.requestType?.name || 'service request'),
+      requestTypeCode: String(ticket?.requestType?.code || ''),
+      documentCount: Number(ticket?._count?.documents || ticket?.documentCount || 0),
     };
     // Use the same AI draft pipeline exposed by the resolution UI. The
     // RequestsService wrapper intentionally rejects pending/unassigned tickets;
     // claim-and-resolve needs the shared drafting service before the claim.
-    const draft = typeof (this.ai as any).generateResolutionPlaybook === 'function'
-      ? await (this.ai as any).generateResolutionPlaybook(input)
-      : await this.requests.generateResolutionPlaybook(String(ticket.id), userId);
-    return this.cleanResolutionNote((draft as any)?.resolutionNote, ticket);
+    try {
+      const draft = typeof (this.ai as any).generateResolutionPlaybook === 'function'
+        ? await (this.ai as any).generateResolutionPlaybook(input)
+        : typeof (this.requests as any).generateResolutionPlaybook === 'function'
+          ? await (this.requests as any).generateResolutionPlaybook(String(ticket.id), userId)
+          : { resolutionNote: '' };
+      return this.cleanResolutionNote((draft as any)?.resolutionNote, ticket);
+    } catch (error) {
+      // A provider hiccup must not turn a deterministic latest/overdue action
+      // into a chat hiccup. Authorization errors still propagate; all other
+      // drafting failures get the same local, ticket-aware fallback.
+      if (error instanceof ForbiddenException) throw error;
+      return this.fallbackResolutionNote(ticket);
+    }
   }
 
   private async proposeComplete(user: ChatUser, sessionId: string, args: Record<string, unknown>) {
@@ -1295,7 +1436,7 @@ Rules: refer to departments and types by NAME with users, codes only inside tool
       if (exact.length > 2000) throw new BadRequestException('The resolution note is too long (max 2000 characters).');
       return this.storeProposal(sessionId, {
         kind: 'complete',
-        summary: `Complete ${this.safeTicket(ticket).label} with your exact note (review it first)`,
+        summary: `Complete ${this.safeTicket(ticket).label} with your exact note (review it first)${this.resolutionArtifactWarning(ticket)}`,
         payload: { requestId: ticket.id, resolutionNote: exact, exactNote: true },
       });
     }
@@ -1313,7 +1454,7 @@ Rules: refer to departments and types by NAME with users, codes only inside tool
     }
     return this.storeProposal(sessionId, {
       kind: 'complete',
-      summary: `Complete ${this.safeTicket(ticket).label} with the drafted resolution note (review it first)`,
+      summary: `Complete ${this.safeTicket(ticket).label} with the drafted resolution note (review it first)${this.resolutionArtifactWarning(ticket)}`,
       payload: { requestId: ticket.id, resolutionNote: note },
     });
   }
@@ -1379,7 +1520,7 @@ Rules: refer to departments and types by NAME with users, codes only inside tool
     }
     return this.storeProposal(sessionId, {
       kind: 'claim-and-resolve',
-      summary: `Claim and resolve ${this.safeTicket(ticket).label}${exactNote ? ' with your exact note' : ' with the drafted note'} (one confirmation)`,
+      summary: `Claim and resolve ${this.safeTicket(ticket).label}${exactNote ? ' with your exact note' : ' with the drafted note'} (one confirmation)${this.resolutionArtifactWarning(ticket)}`,
       payload: { requestId: ticket.id, resolutionNote: note, ...(exactNote ? { exactNote: true } : {}) },
     });
   }
@@ -1832,22 +1973,17 @@ Rules: refer to departments and types by NAME with users, codes only inside tool
     const picked = tickets.slice(0, count);
     let first: any = null;
     for (const t of picked) {
-      const note = exact || [
-        `Review the reported issue: ${(t as any).label || this.ticketLabel(t)} (overdue ${(t as any).overdueHours ?? '?'}h).`,
-        'Verify the reported details against the ticket.',
-        'Record the verified action taken and the observed result before completing.',
-        '',
-        'Please confirm:',
-        '- The reported details were independently verified.',
-        '- The outcome was confirmed with the requester where needed.',
-      ].join('\n');
-      // Direct store (not proposeClaimAndResolve) so N proposals queue fast
-      // without N playbook LLM calls. Permission enforced at confirm time.
       const full = await this.requests.findOne(String((t as any).id), { id: user.id, platformRole: user.platformRole }).catch(() => null);
       if (!full || ['COMPLETED', 'CANCELLED', 'REJECTED'].includes((full as any).status)) continue;
+      // Keep bulk resolution fast: an explicit shared note is exact; without
+      // one use the same concise, type-aware local fallback as the single
+      // flow rather than issuing N provider calls or inserting a checklist.
+      const note = exact || this.cleanResolutionNote('', full);
+      // Direct store (not proposeClaimAndResolve) so N proposals queue fast.
+      // Permission is enforced at confirm time.
       const stored = await this.storeProposal(sessionId, {
         kind: 'claim-and-resolve',
-        summary: `Claim and resolve ${(t as any).label || this.ticketLabel(t)} (overdue ${(t as any).overdueHours ?? '?'}h)${exact ? ' with your exact note' : ' with the drafted note'} (${picked.indexOf(t) + 1}/${picked.length})`,
+        summary: `Claim and resolve ${(t as any).label || this.ticketLabel(t)} (overdue ${(t as any).overdueHours ?? '?'}h)${exact ? ' with your exact note' : ' with the drafted note'} (${picked.indexOf(t) + 1}/${picked.length})${this.resolutionArtifactWarning(full)}`,
         payload: { requestId: (full as any).id, resolutionNote: note, ...(exact ? { exactNote: true } : {}) },
       });
       if (!first) first = stored;
@@ -2158,6 +2294,7 @@ Rules: refer to departments and types by NAME with users, codes only inside tool
       if ((action.payload as any).description !== undefined) data.description = String((action.payload as any).description || '').trim() || null;
       const updated = await this.prisma.department.update({ where: { id: String(action.payload.departmentId) }, data });
       await this.audit.append({ actorId: user.id, action: 'CATALOG_DEPARTMENT_UPDATED', newValue: String((action.payload as any).code || updated.code) });
+      this.catalogCache = null;
       return updated;
     }
     if (action.kind === 'set-department-active') {

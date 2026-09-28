@@ -290,6 +290,8 @@ export class AiIntakeService {
     description: string;
     department: string;
     requestType: string;
+    requestTypeCode?: string;
+    documentCount?: number;
   }) {
     const localTemplate = () => ({
       resolutionNote: [

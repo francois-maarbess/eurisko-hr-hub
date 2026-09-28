@@ -64,12 +64,25 @@ describe('AI operations assistant safety', () => {
     else process.env['GROQ_API_KEY'] = oldKey;
   });
 
-  it('reports accurate caller-owned stats through the existing request scope', async () => {
-    const { service, requests } = harness();
+  it('reports clearly separated submitted and handled stats', async () => {
+    const { service, prisma, requests } = harness();
     delete process.env['GROQ_API_KEY'];
+    prisma.request.findMany
+      .mockResolvedValueOnce([
+        { status: 'PENDING', priority: 'URGENT', createdAt: new Date() },
+        { status: 'COMPLETED', priority: 'STANDARD', createdAt: new Date() },
+      ])
+      .mockResolvedValueOnce([
+        { status: 'COMPLETED', priority: 'STANDARD', createdAt: new Date() },
+      ]);
     const stats = await (service as any).myStats('alice');
-    expect(requests.findAll).toHaveBeenCalledWith('alice', 'mine');
-    expect(stats).toEqual({ total: 2, open: 1, completed: 1, urgentToday: 1 });
+    expect(requests.findAll).not.toHaveBeenCalled();
+    expect(stats).toMatchObject({
+      total: 2, open: 1, completed: 1, urgentToday: 1,
+      handledTotal: 1, handledOpen: 0, handledCompleted: 1, handledUrgentToday: 0,
+    });
+    expect(stats.submitted).toEqual({ total: 2, open: 1, completed: 1, urgentToday: 1 });
+    expect(stats.handled).toEqual({ total: 1, open: 0, completed: 1, urgentToday: 0 });
   });
 
   it('refuses prompt injection and records a warning audit event', async () => {
@@ -162,6 +175,31 @@ describe('AI operations assistant safety', () => {
     expect(result.requestType).toContain('LAPTOP');
   });
 
+  it('resolves human catalog aliases against the live request types', async () => {
+    const { service } = harness();
+    const type = (service as any).resolveType({
+      code: 'HR',
+      requestTypes: [
+        { code: 'EMP_LETTER', name: 'Employment Letter', description: 'Request employment verification letter' },
+        { code: 'PAYROLL', name: 'Payroll & Payslip', description: 'Payroll questions and payslip copies' },
+      ],
+    }, 'proof of income');
+    expect(type.code).toBe('EMP_LETTER');
+  });
+
+  it('rejects an off-topic resolution draft and keeps the fallback tied to the ticket', () => {
+    const { service } = harness();
+    const ticket = {
+      title: 'Laptop needs an update',
+      description: 'The office laptop needs the latest approved update.',
+      department: { name: 'IT' },
+      requestType: { code: 'LAPTOP', name: 'Laptop Request' },
+    };
+    const note = (service as any).cleanResolutionNote('The employment letter has been generated and sent.', ticket);
+    expect(note).toMatch(/laptop|update|device|software/i);
+    expect(note).not.toMatch(/employment letter/i);
+  });
+
   it('scopes department stats by role', async () => {
     const adminHarness = harness();
     adminHarness.prisma.user.findUnique.mockResolvedValue({ id: 'admin', email: 'a@a.com', displayName: 'Admin', platformRole: 'SYSTEM_ADMIN', departmentMemberships: [] });
@@ -171,7 +209,13 @@ describe('AI operations assistant safety', () => {
     expect(adminStats.scope).toBe('all');
     expect(adminStats.departments).toHaveLength(2);
 
-    const { service } = harness();
+    const { service, prisma } = harness();
+    prisma.request.findMany
+      .mockResolvedValueOnce([
+        { status: 'PENDING', priority: 'STANDARD', createdAt: new Date() },
+        { status: 'COMPLETED', priority: 'STANDARD', createdAt: new Date() },
+      ])
+      .mockResolvedValueOnce([]);
     const empStats = await (service as any).departmentStats({ id: 'alice', platformRole: 'EMPLOYEE' });
     expect(empStats.scope).toBe('own');
     expect(empStats.personal.total).toBe(2);
@@ -266,13 +310,13 @@ describe('AI operations assistant safety', () => {
     const { service, prisma, requests } = harness();
     const ticket = { id: 't1', status: 'IN_PROGRESS', title: 'Broken screen', department: { name: 'IT' }, requestType: { name: 'Laptop' }, claimant: null };
     requests.findOne.mockResolvedValue(ticket);
-    requests.generateResolutionPlaybook = jest.fn(async () => ({ resolutionNote: 'Verified fix applied and tested OK today.', assumptions: [] }));
+    requests.generateResolutionPlaybook = jest.fn(async () => ({ resolutionNote: 'Fixed the broken screen and verified the laptop display works.', assumptions: [] }));
     const result = await (service as any).proposeComplete({ id: 'alice', platformRole: 'EMPLOYEE' }, 'session-1', { requestId: 't1' });
     expect(result.requiresConfirmation).toBe(true);
     const stored = JSON.parse(prisma.chatSession.update.mock.calls[0][0].data.pendingConfirmation);
     const head = Array.isArray(stored) ? stored[0] : stored;
     expect(head.kind).toBe('complete');
-    expect(head.payload.resolutionNote).toContain('Verified fix');
+    expect(head.payload.resolutionNote).toContain('Fixed the broken screen');
   });
 
   it('refuses completion proposals for tickets the caller did not claim', async () => {
