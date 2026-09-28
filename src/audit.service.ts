@@ -93,7 +93,7 @@ export class AuditService {
         take: 50,
       });
       actorIds = users.map((u) => u.id);
-      if (actorIds.length === 0) return [];
+      if (!actorIds || actorIds.length === 0) return [];
       where['actorId'] = { in: actorIds };
     }
     const limit = Math.min(Math.max(1, filters.limit || 100), 200);
