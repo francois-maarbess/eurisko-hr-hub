@@ -20,8 +20,7 @@ export class RequestLoggerMiddleware implements NestMiddleware {
     const started = Date.now();
     res.on('finish', () => {
       const ms = Date.now() - started;
-      // Slow-query/route signal: one WARN line over the threshold so
-      // instructors see perf issues without a metrics stack.
+      // Slow-query/route signal: one WARN line over the threshold
       const slowThreshold = Number(process.env['SLOW_LOG_MS'] || 1000);
       if (ms >= slowThreshold) {
         this.logger.warn(`[${requestId}] SLOW ${req.method} ${req.path} ${res.statusCode} ${ms}ms (>= ${slowThreshold}ms)`);
