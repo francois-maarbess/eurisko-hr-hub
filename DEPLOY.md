@@ -36,7 +36,7 @@ or it can boot against a stale schema. Check `/health`
 Frontend static site: root directory `frontend`, build
 `npm install; npm run build`, publish directory `dist`, env `VITE_API_BASE`.
 
-## Honest caveats (tell evaluators this upfront)
+## Honest caveats
 
 - **Cold starts:** free instances sleep after ~15 idle minutes; the first
   request after sleep takes ~50s. Refresh once. Active use never sleeps.
