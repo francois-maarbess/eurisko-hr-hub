@@ -22,7 +22,7 @@ exists and is verified — not aspirations.
 |---|---|---|---|
 | `DATABASE_URL` | backend env | yes | `file:./dev.db`-style SQLite path on the instance |
 | `JWT_SECRET` | backend env | yes | Generated random value. The `week3-dev-secret` fallback exists for local clones only; production refuses to boot without a real secret (`src/main.ts`, `NODE_ENV=production` guard) |
-| `GROQ_API_KEY` | backend env | no | Free key. Absent = offline extractor + template drafts; documented in `docs/week4-production-ai.md` |
+| `GROQ_API_KEY` | backend env | no | Free key. Absent = offline extractor, deterministic assistant fast paths, and template drafts; full free-form assistant routing requires it. See `docs/week4-production-ai.md` |
 | `GROQ_MODEL` | backend env | no | Defaults to a pinned model id; override without a code change if Groq retires it |
 | `CORS_ORIGINS` | backend env | yes | Comma-separated frontend URL(s). Empty reflects any origin — local-dev only |
 | `TRUST_PROXY` | backend env | yes | `1` behind Render/Nginx so throttling sees real client IPs |
@@ -38,7 +38,7 @@ all env-overridable with safe local defaults (see `.env.example`).
 ## 3. Release gate (must ALL pass before any submit or deploy)
 
 1. `npm run verify` exits 0 (typecheck, both lints with zero warnings,
-    147 backend tests, 14 AI evals, both builds).
+    203 backend tests, 14 AI evals, both builds).
 2. `cd frontend && npm test` — 10 vitest suites green.
 3. `npm run test:count -- --check` passes with README counts synced.
 4. CI on the pushed branch is green (typecheck, lint ×2, tests, evals,

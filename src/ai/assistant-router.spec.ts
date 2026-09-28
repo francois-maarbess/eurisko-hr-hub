@@ -64,6 +64,13 @@ describe('assistant router V2 — deterministic intent + tool subsets', () => {
     expect(routeIntent('show my queue').domain).toBe('readonly_lookup');
   });
 
+  it('routes claim-history questions to the history tool instead of ticket resolution', () => {
+    const r = routeIntent('What is my claim history?');
+    expect(r.domain).toBe('readonly_lookup');
+    expect(r.intent).toBe('claimed_history');
+    expect(r.tools).toContain('claimed_history');
+  });
+
   it('keeps every tool subset at 3–10 tools and every registry tool covered', () => {
     for (const [domain, tools] of Object.entries(DOMAIN_TOOL_MAP)) {
       expect(domain).toBeTruthy();

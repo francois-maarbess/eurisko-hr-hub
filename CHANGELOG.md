@@ -1,5 +1,9 @@
 # Changelog
 
+Historical entries below preserve the evidence and counts from the commits
+that introduced them. For the current tree, use `README.md`,
+`npm run test:count -- --check`, and the Week 5 release gate.
+
 All instructor-visible changes. SQLite-only, zero new prerequisites — every entry
 preserves the SQLite setup and locked npm dependencies.
 

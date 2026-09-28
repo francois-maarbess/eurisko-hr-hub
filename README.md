@@ -6,14 +6,14 @@
 
 An internal service hub for submitting, routing, tracking, and resolving employee requests.
 
-**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 197 backend tests + 12 frontend tests, 14 offline AI evals (`npm run test:count`).
+**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 203 backend tests + 12 frontend tests, 14 offline AI evals (`npm run test:count`).
 
 ## Live App
 
 
 - **App:** `https://eurisko-hr-hub-frontend.onrender.com`
 - **API health:** `https://eurisko-hr-hub-1.onrender.com/health` (expect `"status":"ok"`)
-- **What it does:** employees submit requests (IT, HR, Finance, Facilities, People Ops) through one intake; department staff claim, resolve, and attach documents; everything is audit-logged and notification-driven, with an AI assistant that drafts (never decides).
+- **What it does:** employees submit requests (IT, HR, Finance, Facilities, People Ops) through one intake; department staff claim, resolve, and attach documents; everything is audit-logged and notification-driven, with an AI assistant that proposes authorized actions and executes them only after explicit confirmation.
 - **Demo access** (password for all three: `Password123!`):
   - `alice@acme.com` — Employee: submits, tracks, rates, cancels own pending requests
   - `bob@acme.com` — IT Agent: claims and resolves from the IT queue
@@ -85,8 +85,10 @@ npm run db:reset
 > The real `.env` is gitignored and not tracked — only `.env.example`
 > is in the repo. (One early commit briefly contained a local-only `.env`
 > holding nothing but a SQLite path; no secret was ever committed.) Optional: set `GROQ_API_KEY` in `.env` (free key from
-> https://console.groq.com) to enable the LLM provider for AI intake.
-> Without it, the built-in offline extractor handles everything.
+> https://console.groq.com) to enable the LLM provider for AI intake and
+> free-form Operations Assistant routing. Without it, the built-in offline
+> extractor, deterministic chat fast paths, and local fallback drafts still
+> work; full natural-language tool routing is unavailable.
 
 ### 2. Start the app
 
@@ -109,18 +111,25 @@ cd frontend && npm run dev
 3. Create a request (or draft one with AI — **no API key needed**), manage it as admin/agent, resolve it
 4. Optional: enable **two-factor authentication** — open Security settings, scan the QR with any authenticator app, verify the code. Next sign-in asks for password + code (backup codes cover a lost phone).
 
-The Overview page includes an Operations Assistant. The full natural-language Operations Assistant requires `GROQ_API_KEY`; without it, provider failures degrade to a safe “no change made” response. With `GROQ_API_KEY`, it operates everything the
-caller is authorized to touch: queue views and claim history, ticket details
-with workflow children, staff notes, analytics, creation/claim/complete/cancel/
+The Overview page includes an Operations Assistant. Deterministic fast paths
+cover common greetings, safety guidance, statistics, overdue work, claim
+history, and caller-owned ratings without spending provider quota. Full
+free-form natural-language routing requires `GROQ_API_KEY`; with it, the
+assistant can use the caller-authorized tools for queue views, ticket details
+and workflow children, staff notes, analytics, creation/claim/complete/cancel/
 reject/reroute/takeover/reassign proposals, ratings, membership and user
-management, exports, audit search, and multi-department workflow creation —
-every write proposed first and executed only on explicit confirmation. It never
-bypasses normal authorization or completion rules.
+management, exports, audit search, and multi-department workflow creation.
+Every write is proposed first and executed only on explicit confirmation, and
+the server remains authoritative for permissions, catalog state, and workflow
+rules. This is a supported capability surface, not a guarantee that every
+ambiguous paraphrase is understood without clarification; provider outages,
+quotas, and live deployment state still require the named fallback behavior
+and a live smoke test.
 
 ## Running Tests
 
 ```bash
-npm test      # 197 backend tests (all deterministic, SQLite)
+npm test      # 203 backend tests (all deterministic, SQLite)
 npm run eval:ai  # 14 AI eval cases (offline, no key, no DB)
 cd frontend && npm test  # 12 frontend unit tests (vitest)
 npm run test:count      # verify README counts match reality
@@ -129,10 +138,13 @@ npm run test:count      # verify README counts match reality
 The exact test counts are checked by `npm run test:count -- --check` and are
 kept synchronized here automatically.
 
-197 backend tests covering:
-- **Unit (103)**: Status transitions (10) + AI intake/extractor/validation/fallback/sensitive/off-topic/SLA/provider (21) + password accounts incl. session revoke (9) + purge & duplicate scoring (3) + production secret guard (4) + chat assistant safety incl. cancel/work/inbox/queue/ownership/lifecycle/membership/workflow/catalog (37) + assistant router V2 intent/tool-subset/confirmations (13) + assistant V2 composites/exactly-once/fallbacks (14)
-- **Integration (3)**: Prisma ↔ SQLite database lifecycle (3)
-- **E2E (63)**: Full HTTP flow with auth, scoped views, create, claim, takeover, complete, concurrent-completion race, documents lifecycle, notifications, overdue inbox dedupe, duplicates (scoped), report + analytics, manager memberships, owner-cancel/admin-claim rules, validation, regression + AI draft/correction/health/chat-confirm/complete/takeover/workflow endpoints + catalog + admin user lifecycle + audit search + filtered export + SLA deadlines + breach center + rate limiting + TOTP two-factor + logout revocation + deactivation + correlation IDs + queue pagination/claimedBy filters + timeline privacy
+203 backend tests covering the unit, integration, and HTTP E2E suites. The
+repository’s `scripts/test-count.ts` is the source of truth for the exact
+total; it is checked in CI so README drift fails the gate. Coverage includes
+status transitions, authorization, catalog and membership lifecycle, chat
+routing and confirmation safety, caller-scoped reads, workflow invariants,
+documents, notifications, audit/search/export, rate limiting, MFA, recovery,
+and the full HTTP request lifecycle.
 
 ## Operations
 
@@ -262,7 +274,7 @@ completes the ticket, and existing completion evidence rules still apply.
     ├── week2-agentic-workflow.md
     ├── week3-full-stack-delivery.md
     ├── week4-production-ai.md     # Week 4 AI intake, evals, assistant
-    └── week5-release-operations.md# Week 5 release gate, health, recovery, smoke
+    └── week5-release-operations.md # Week 5 release gate, health, recovery, smoke
 ```
 
 ## Documentation
@@ -276,7 +288,7 @@ completes the ticket, and existing completion evidence rules still apply.
     ├── week2-agentic-workflow.md  # Week 2: agent workflow evidence
     ├── week3-full-stack-delivery.md
     ├── week4-production-ai.md     # Week 4: AI intake, evals, assistant
-    ├── week5-release-operations.md# Week 5: release gate, health, recovery, smoke
+    ├── week5-release-operations.md # Week 5: release gate, health, recovery, smoke
     ├── security-notes.md          # Known dependency risks and mitigations
     └── decisions/
         ├── ADR-001.md

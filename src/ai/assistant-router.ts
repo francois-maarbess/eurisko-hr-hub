@@ -371,7 +371,7 @@ export function routeIntent(rawText: string): RouteResult {
     /my laptop|need.*(laptop|vpn|access|letter|desk|badge)/.test(text) && /(draft|create|file|send|request)/.test(text)) {
     domain = 'request_creation';
     intent = exactRequestDetails ? 'create_request_exact' : /draft/.test(text) ? 'create_request_draft' : /workflow|onboard/.test(text) ? 'create_workflow' : 'create_request';
-  } else if (/(claim|take over|takeover|reassign|reroute|assign)/.test(text)) {
+  } else if (/(claim|take over|takeover|reassign|reroute|assign)/.test(text) && !(/(claim|claimed|handled|worked|work)\b/.test(text) && /history|what have|which|what/.test(text))) {
     // Claim-and-resolve composite: Claiming verb + resolution verb together.
     if (/(claim|take).*(resolv|complet)/.test(text) || /(resolv|complet).*(claim|take)/.test(text)) {
       domain = 'request_claiming';
@@ -410,6 +410,7 @@ export function routeIntent(rawText: string): RouteResult {
   } else if (/(show|list|find|search|what|which|my |queue|inbox|notif|ticket|request|pending|today|claimed|history|detail|children|notes?|overdue|breach)/.test(text)) {
     domain = 'readonly_lookup';
     if (/overdue|breach/.test(text) && !/(resolv|complet|solve|fix|close|handle|claim)/.test(text)) intent = 'breach_view';
+    else if (/(claim|claimed|handled|worked|work)\b/.test(text) && /history|what have|which|what/.test(text)) intent = 'claimed_history';
     else if (/queue|unassigned|mywork|my work/.test(text)) intent = 'queue_view';
     else if (/notif|inbox/.test(text)) intent = 'notifications';
     else if (/child|workflow|progress/.test(text)) intent = 'ticket_children';
@@ -465,6 +466,7 @@ function fallbackSummaryFor(domain: RouterDomain, intent: string, rawText: strin
       return `produce the report ("${snippet}")`;
     case 'readonly_lookup':
       if (intent === 'breach_view') return `look up overdue tickets ("${snippet}")`;
+      if (intent === 'claimed_history') return `look up your claim history ("${snippet}")`;
       if (intent === 'latest_view') return `look up the latest request ("${snippet}")`;
       return `look up ("${snippet}")`;
     default:

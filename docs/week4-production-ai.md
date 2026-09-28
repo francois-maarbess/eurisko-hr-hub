@@ -42,9 +42,11 @@ a generic hiccup.
 Tool results shown to the model carry no confirmation or database IDs, and
 assistant messages render as plain text (no markdown, no raw ids).
 
-With no `GROQ_API_KEY`, the same window returns an honest local capability
-message and performs no model-backed tool actions. With a key, Groq is called
-through the existing raw `fetch` provider, with bounded structured-answer
+Without `GROQ_API_KEY`, deterministic chat fast paths still answer supported
+common reads and prepare supported proposals such as caller-owned ratings, but
+the assistant cannot interpret arbitrary free-form commands through the model;
+the UI/API reports that capability boundary honestly. With a key, Groq is
+called through the existing raw `fetch` provider, with bounded structured-answer
 parsing, a bounded six-step tool loop that surfaces partial progress instead of
 failing when multi-step jobs (claim then resolve) need another turn, a twenty-second
 timeout with one retry on network failure and one backoff retry on rate limits,

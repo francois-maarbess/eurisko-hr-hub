@@ -32,7 +32,7 @@ function harness() {
     claim: jest.fn(async (id: string) => ({ id })),
     getReport: jest.fn(async () => ({ byStatus: { PENDING: 1 }, departments: [], csatAverage: null, csatCount: 0 })),
   };
-  const audit = { append: jest.fn(async () => undefined) } as any;
+  const audit = { append: jest.fn(async () => undefined), search: jest.fn(async () => []) } as any;
   const ai = {
     providerStatus: () => ({ provider: 'local' }),
     reportChatError: jest.fn(),
@@ -83,6 +83,76 @@ describe('AI operations assistant safety', () => {
     });
     expect(stats.submitted).toEqual({ total: 2, open: 1, completed: 1, urgentToday: 1 });
     expect(stats.handled).toEqual({ total: 1, open: 0, completed: 1, urgentToday: 0 });
+  });
+
+  it('answers claim-history questions from handled work without calling the model', async () => {
+    const { service, requests, ai } = harness();
+    delete process.env['GROQ_API_KEY'];
+    requests.findAll.mockResolvedValueOnce([{
+      id: 'claimed-1', title: 'Laptop update', status: 'COMPLETED', priority: 'STANDARD',
+      department: { name: 'IT' }, owner: { displayName: 'Alice Employee' }, createdAt: new Date(),
+    }]);
+    const result = await service.chat({ id: 'alice', platformRole: 'EMPLOYEE' }, { message: 'What is my claim history?' });
+    expect(result.message).toMatch(/Laptop update.*Alice Employee.*IT.*COMPLETED/i);
+    expect(result.message).not.toMatch(/assistant preview|hiccup/i);
+    expect(ai.draft).not.toHaveBeenCalled();
+  });
+
+  it('routes latest-star ratings to the caller-owned completed request', async () => {
+    const { service, prisma, requests } = harness();
+    delete process.env['GROQ_API_KEY'];
+    prisma.departmentMember.findMany.mockResolvedValue([]);
+    prisma.request.findMany.mockResolvedValueOnce([{
+      id: 'completed-1', title: 'Laptop update', status: 'COMPLETED', priority: 'STANDARD',
+      employeeId: 'alice', department: { name: 'IT' }, requestType: { name: 'Laptop Request' },
+      owner: { displayName: 'Alice Employee' }, claimant: { displayName: 'Bob Agent' }, createdAt: new Date(),
+    }]);
+    requests.findOne.mockResolvedValueOnce({
+      id: 'completed-1', title: 'Laptop update', status: 'COMPLETED', priority: 'STANDARD', employeeId: 'alice', rating: null,
+      department: { name: 'IT' }, requestType: { name: 'Laptop Request' }, owner: { displayName: 'Alice Employee' },
+    });
+    const result = await service.chat({ id: 'alice', platformRole: 'EMPLOYEE' }, { message: 'Rate the latest request a 3 star' });
+    expect(result.message).toMatch(/prepared.*3\/5|prepared.*rating/i);
+    expect((result as any).confirmation?.kind).toBe('rating');
+    expect((result as any).confirmation?.summary).toMatch(/3\/5/);
+    expect(prisma.chatSession.update).toHaveBeenCalled();
+  });
+
+  it('preserves an explicit short request reference in a rating command', async () => {
+    const { service, prisma, requests } = harness();
+    delete process.env['GROQ_API_KEY'];
+    prisma.request.findMany.mockResolvedValueOnce([{
+      id: 'request-abc123', title: 'Employment letter', status: 'COMPLETED', priority: 'STANDARD',
+      employeeId: 'alice', department: { name: 'HR' }, requestType: { name: 'Employment Letter' },
+      owner: { displayName: 'Alice Employee' }, createdAt: new Date(),
+    }]);
+    requests.findOne.mockResolvedValueOnce({
+      id: 'request-abc123', title: 'Employment letter', status: 'COMPLETED', priority: 'STANDARD', employeeId: 'alice', rating: null,
+      department: { name: 'HR' }, requestType: { name: 'Employment Letter' }, owner: { displayName: 'Alice Employee' },
+    });
+    const result = await service.chat({ id: 'alice', platformRole: 'EMPLOYEE' }, { message: 'Rate REQ-ABC123 3 stars' });
+    expect((result as any).confirmation?.summary).toMatch(/Employment letter/);
+    expect((result as any).confirmation?.summary).toMatch(/3\/5/);
+  });
+
+  it('passes an audit request reference through to the audit query', async () => {
+    const { service, prisma, audit } = harness();
+    prisma.request.findMany.mockResolvedValueOnce([{
+      id: 'request-1', title: 'Laptop update', status: 'COMPLETED', priority: 'STANDARD',
+      department: { name: 'IT' }, requestType: { name: 'Laptop Request' }, owner: { displayName: 'Alice' }, createdAt: new Date(),
+    }]);
+    audit.search.mockResolvedValueOnce([{ action: 'REQUEST_COMPLETED', requestId: 'request-1', actorName: 'Bob', createdAt: new Date() }]);
+    const result = await (service as any).auditSearch({ id: 'admin', platformRole: 'SYSTEM_ADMIN' }, { requestRef: 'Laptop update', limit: 10 });
+    expect(audit.search).toHaveBeenCalledWith(expect.objectContaining({ requestId: 'request-1', limit: 10 }));
+    expect(result[0].requestRef).toMatch(/^REQ-/);
+  });
+
+  it('denies admin-only chat actions before the provider for an employee', async () => {
+    const { service, ai } = harness();
+    delete process.env['GROQ_API_KEY'];
+    const result = await service.chat({ id: 'alice', platformRole: 'EMPLOYEE' }, { message: 'Search the audit trail for completed requests' });
+    expect(result.message).toMatch(/only to a system administrator/i);
+    expect(ai.draft).not.toHaveBeenCalled();
   });
 
   it('refuses prompt injection and records a warning audit event', async () => {

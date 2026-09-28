@@ -1,4 +1,9 @@
-# Release evidence — recovery and final smoke
+# Historical release evidence — recovery and final smoke
+
+This is a dated evidence snapshot, not a substitute for the current release
+gate. Re-run the commands in `docs/week5-release-operations.md` against the
+submitted SHA because later commits can change counts, behavior, or deployment
+state.
 
 Run date (UTC): 2026-09-26. App version 1.0.0. Procedure: `docs/week5-release-operations.md` §5.
 Commands below ran against a local build (`nest build` + `node dist/main.js`).
@@ -31,5 +36,6 @@ Commands below ran against a local build (`nest build` + `node dist/main.js`).
 ## 4. Post-run state
 
 - Smoke ticket removed; `npm run db:reset` + `db:doctor` → 0 requests,
-  3 users. Working tree clean. Full `npm run verify` exit 0 separately
-  (132 backend, 10 frontend, 9 evals; see CI on the pushed branch).
+  3 users. Working tree clean. The full `npm run verify` result for that
+  historical commit was 132 backend tests, 10 frontend tests, and 9 evals;
+  those numbers do not describe the current tree.

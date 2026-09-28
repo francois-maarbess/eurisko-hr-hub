@@ -9,7 +9,8 @@ both describe the same configuration.
 1. Dashboard → Blueprints → New Blueprint Instance → select this repo.
 2. When prompted, fill the `sync: false` values:
    - `GROQ_API_KEY` — free key from https://console.groq.com (optional;
-     without it AI runs fully offline, nothing breaks).
+     intake, deterministic fast paths, and local fallback drafts still work
+     without it; full free-form Operations Assistant routing requires it).
    - `CORS_ORIGINS` — leave blank for the first deploy; set to the frontend
      URL (step 4) afterwards.
    - `VITE_API_BASE` — leave blank for the first deploy (see step 3).

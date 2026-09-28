@@ -47,9 +47,10 @@ Store a storage key, not a public URL. A soft-deleted database row may remain fo
 plus a nullable, non-sensitive pending-confirmation summary. `chat_messages`
 stores the session, role, content, optional tool name, and creation timestamp.
 Sessions are user-scoped: an authenticated caller cannot load another user's
-session. Executable confirmation payloads are intentionally held in process
-memory only and expire when the API restarts; secrets such as passwords are not
-stored in chat history or pending-confirmation metadata.
+session. The pending confirmation queue is persisted in the session row so a
+restart can rehydrate a proposal; the in-process map is only a fast path.
+Secrets such as passwords are not stored in chat history or pending-confirmation
+metadata, and confirmation IDs remain scoped to their own session.
 
 ## 2. Invariants
 

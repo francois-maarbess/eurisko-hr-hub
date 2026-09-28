@@ -1,5 +1,10 @@
 # Week 3 — Full-Stack Delivery
 
+> Preserved Week 3 evidence. The seeded request IDs in the final table are
+> historical demo fixtures from that milestone; the current Prisma seed creates
+> the three demo users and catalog with zero requests. Use `DEMO.md` or the
+> current E2E/demo-scenario scripts for the shipped request storyline.
+
 ## What was built
 
 A narrow, end-to-end **Service Request** flow: an employee creates an IT support request, a department agent claims it, and the agent resolves it with a resolution note.
