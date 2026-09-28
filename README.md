@@ -62,8 +62,13 @@ Install the exact locked dependencies and initialize a clean local database:
 ```bash
 npm ci
 cd frontend && npm ci && cd ..
+npx prisma generate   # also runs automatically after npm ci; safe to repeat
 npm run db:reset
 ```
+
+`npm ci` generates Prisma Client automatically. The explicit `npx prisma
+generate` line is included as a visible recovery step for clones installed
+with an older checkout or after a deleted `node_modules` directory.
 
 Need a pristine demo database any time (tests and experiments pollute
 `dev.db`, which is local-only and gitignored):
