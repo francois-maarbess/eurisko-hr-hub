@@ -6,7 +6,7 @@
 
 An internal service hub for submitting, routing, tracking, and resolving employee requests.
 
-**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 203 backend tests + 12 frontend tests, 14 offline AI evals (`npm run test:count`).
+**Stack:** NestJS 11 API · React + Vite frontend · Prisma 6 + SQLite · bcrypt password auth + TOTP two-factor, throttling + helmet · 208 backend tests + 12 frontend tests, 14 offline AI evals (`npm run test:count`).
 
 ## Live App
 
@@ -134,7 +134,7 @@ and a live smoke test.
 ## Running Tests
 
 ```bash
-npm test      # 203 backend tests (all deterministic, SQLite)
+npm test      # 208 backend tests (all deterministic, SQLite)
 npm run eval:ai  # 14 AI eval cases (offline, no key, no DB)
 cd frontend && npm test  # 12 frontend unit tests (vitest)
 npm run test:count      # verify README counts match reality
@@ -143,7 +143,7 @@ npm run test:count      # verify README counts match reality
 The exact test counts are checked by `npm run test:count -- --check` and are
 kept synchronized here automatically.
 
-203 backend tests covering the unit, integration, and HTTP E2E suites. The
+208 backend tests covering the unit, integration, and HTTP E2E suites. The
 repository’s `scripts/test-count.ts` is the source of truth for the exact
 total; it is checked in CI so README drift fails the gate. Coverage includes
 status transitions, authorization, catalog and membership lifecycle, chat

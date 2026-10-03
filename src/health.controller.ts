@@ -1,4 +1,5 @@
 import { Controller, Get, Inject, Optional, Res } from '@nestjs/common';
+import { ApiOperation } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { promises as fs } from 'fs';
 import { join } from 'path';
@@ -25,6 +26,7 @@ export class HealthController {
   ) {}
 
   @Get()
+  @ApiOperation({ security: [] })
   async check(@Res({ passthrough: true }) res: Response) {
     const base = {
       version,

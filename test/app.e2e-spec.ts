@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { SwaggerModule } from '@nestjs/swagger';
 import { PrismaClient } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
 import { join } from 'path';
@@ -7,6 +8,7 @@ import request from 'supertest';
 import { randomUUID } from 'crypto';
 import * as OTPAuth from 'otpauth';
 import { AppModule } from '../src/app.module';
+import { buildSwaggerConfig } from '../src/swagger.config';
 import { NotificationsService } from '../src/notifications.service';
 
 const JWT_SECRET = 'e2e-test-secret';
@@ -32,6 +34,7 @@ describe('Service Request Flow (E2E)', () => {
 
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
+    SwaggerModule.setup('api-docs', app, SwaggerModule.createDocument(app, buildSwaggerConfig()));
     await app.init();
 
     // Deterministic AI path: e2e must not depend on network or a real key.
@@ -89,6 +92,21 @@ describe('Service Request Flow (E2E)', () => {
   it('should return 401 without a token', async () => {
     const res = await request(app.getHttpServer()).get('/requests');
     expect(res.status).toBe(401);
+  });
+
+  it('serves the real Swagger contract with bearer auth on protected routes', async () => {
+    const { body } = await request(app.getHttpServer()).get('/api-docs-json').expect(200);
+
+    expect(body.security).toEqual([{ bearer: [] }]);
+    expect(body.paths['/auth/login'].post.security).toEqual([]);
+    expect(body.paths['/health'].get.security).toEqual([]);
+    expect(body.paths['/requests'].post.security).toBeUndefined();
+    expect(body.paths['/requests/{id}/claim'].patch.security).toBeUndefined();
+    expect(body.components.schemas.CreateRequestDto.properties.title).toMatchObject({
+      minLength: 3,
+      maxLength: 200,
+    });
+    expect(body.components.schemas.CreateRequestDto.required).toContain('title');
   });
 
   it('should return requests for authenticated user', async () => {

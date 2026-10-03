@@ -20,6 +20,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { Throttle } from '@nestjs/throttler';
 import { PrismaClient } from '@prisma/client';
+import { ApiOperation, ApiProperty } from '@nestjs/swagger';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { Roles, RolesGuard } from './roles.guard';
 import { PRISMA_CLIENT_TOKEN } from '../prisma.service';
@@ -27,10 +28,12 @@ import { AuthService } from './auth.service';
 import { MfaService } from './mfa.service';
 
 class LoginDto {
+  @ApiProperty({ example: 'admin@acme.com' })
   @IsString()
   @IsNotEmpty()
   email!: string;
 
+  @ApiProperty({ format: 'password', writeOnly: true, example: 'Password123!' })
   @IsString()
   @IsNotEmpty()
   password!: string;
@@ -136,12 +139,14 @@ export class AuthController {
    * return the same 401 so accounts can't be enumerated.
    */
   @Post('login')
+  @ApiOperation({ security: [] })
   @Throttle({ default: { limit: Number(process.env['LOGIN_THROTTLE_LIMIT'] || 20), ttl: 60000 } })
   async login(@Body() dto: LoginDto) {
     return this.authService.login(dto.email, dto.password);
   }
 
   @Post('refresh')
+  @ApiOperation({ security: [] })
   @Throttle({ default: { limit: Number(process.env['LOGIN_THROTTLE_LIMIT'] || 20), ttl: 60000 } })
   async refresh(@Body() dto: RefreshDto) {
     return this.authService.refresh(dto.refreshToken);
@@ -159,6 +164,7 @@ export class AuthController {
    * codes must not be brute-forceable.
    */
   @Post('mfa/challenge')
+  @ApiOperation({ security: [] })
   @Throttle({ default: { limit: Number(process.env['MFA_THROTTLE_LIMIT'] || 5), ttl: 60000 } })
   async mfaChallenge(@Body() dto: MfaChallengeDto) {
     return this.mfa.challenge(dto.mfaToken, dto.code);

@@ -77,6 +77,28 @@ describe('GroqAiProvider confidence (Week 4 follow-up)', () => {
     await expect(new GroqAiProvider().estimateSlaMs('ticket', 'URGENT')).rejects.toThrow(/out-of-policy/i);
   });
 
+  it('includes the JSON-mode requirement in the SLA prompt sent to Groq', async () => {
+    let requestBody: any;
+    const fetchMock = jest.fn(async (_url: string, init: any) => {
+      requestBody = JSON.parse(init.body);
+      return {
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: JSON.stringify({
+          durationMs: 90 * 60 * 1000,
+          rationale: 'Several employees are blocked from core work.',
+        }) } }] }),
+      };
+    });
+    (global as any).fetch = fetchMock;
+
+    await new GroqAiProvider().estimateSlaMs('Team cannot access the system.', 'URGENT');
+
+    const request = requestBody;
+    expect(request.response_format).toEqual({ type: 'json_object' });
+    expect(request.messages[0].content).toMatch(/json/i);
+    expect(request.messages[0].content).toContain('durationMs');
+  });
+
   it('generates a strict resolution-note draft that requires verification', async () => {
     const payload = {
       resolutionNote: 'Updated the laptop display software and verified that the screen remained stable after restart.',
